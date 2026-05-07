@@ -20,7 +20,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.0.1",
     "express": "^5.1.0",
-    "express-rate-limit": "^8.2.1",
+    "express-rate-limit": "^8.5.1",
     "firebase-admin": "^13.4.0",
     "google-auth-library": "^10.1.0",
     "googleapis": "^150.0.1",
