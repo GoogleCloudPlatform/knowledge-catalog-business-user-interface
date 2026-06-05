@@ -15,7 +15,7 @@
     "@google-cloud/dataplex": "^4.1.0",
     "@google-cloud/lineage": "^2.1.0",
     "@google-cloud/resource-manager": "^6.2.0",
-    "axios": "^1.12.2",
+    "axios": "^1.16.0",
     "cookie-session": "^2.1.0",
     "cors": "^2.8.5",
     "dotenv": "^17.0.1",
