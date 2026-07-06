@@ -9,11 +9,7 @@ interface LayoutProps {
   searchNavigate?: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({
-  children,
-  searchBar = false,
-  searchNavigate = true,
-}) => {
+const Layout: React.FC<LayoutProps> = ({ children, searchBar = false, searchNavigate = true }) => {
   return (
     <div className="app-layout">
       <GlobalSidebar />

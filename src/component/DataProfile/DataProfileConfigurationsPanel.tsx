@@ -381,7 +381,7 @@ const DataProfileConfigurationsPanel: React.FC<DataProfileConfigurationsPanelPro
               <Typography sx={{
                 fontSize: '14px',
                 fontWeight: 400,
-                color: '#0E4DCA',
+                color: '#022FCD',
                 lineHeight: '1.43em',
                 // textDecoration: 'underline'
               }}>

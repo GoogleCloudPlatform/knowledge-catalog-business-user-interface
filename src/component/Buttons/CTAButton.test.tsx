@@ -62,7 +62,7 @@ describe('CTAButton', () => {
       render(<CTAButton handleClick={mockHandleClick} text="Styled Button" />);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveStyle({ background: '#0E4DCA' });
+      expect(button).toHaveStyle({ background: '#022FCD' });
     });
 
     it('should have white text color by default', () => {
@@ -128,14 +128,14 @@ describe('CTAButton', () => {
       render(<CTAButton handleClick={mockHandleClick} text="No CSS" />);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveStyle({ background: '#0E4DCA' });
+      expect(button).toHaveStyle({ background: '#022FCD' });
     });
 
     it('should handle empty css object', () => {
       render(<CTAButton handleClick={mockHandleClick} text="Empty CSS" css={{}} />);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveStyle({ background: '#0E4DCA' });
+      expect(button).toHaveStyle({ background: '#022FCD' });
     });
   });
 

@@ -604,8 +604,8 @@ describe('Glossaries', () => {
 
       await waitFor(() => {
         expect(screen.getByRole('tab', { name: 'Linked Assets' })).toBeInTheDocument();
-        expect(screen.getByRole('tab', { name: 'Synonyms & Related Terms' })).toBeInTheDocument();
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Synonyms & Related Terms/ })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
     });
 
@@ -626,10 +626,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [mockTermItem] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Synonyms & Related Terms' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Synonyms & Related Terms/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Synonyms & Related Terms' }));
+      await user.click(screen.getByRole('tab', { name: /Synonyms & Related Terms/ }));
       expect(screen.getByTestId('glossaries-synonyms')).toBeInTheDocument();
     });
 
@@ -639,10 +639,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termNoAspects] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
       expect(screen.getByText('No aspects available for this term')).toBeInTheDocument();
     });
 
@@ -651,10 +651,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [mockTermItem] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Synonyms & Related Terms' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Synonyms & Related Terms/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Synonyms & Related Terms' }));
+      await user.click(screen.getByRole('tab', { name: /Synonyms & Related Terms/ }));
       await user.selectOptions(screen.getByTestId('relation-filter'), 'synonym');
       expect(screen.getByTestId('relation-filter')).toHaveValue('synonym');
     });
@@ -904,10 +904,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithAspects] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
       // Should show annotation filter since hasValidAnnotationData returns true for valid aspects
       await waitFor(() => {
         expect(screen.getByTestId('annotation-filter')).toBeInTheDocument();
@@ -926,10 +926,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithValidAspects] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
 
       await waitFor(() => {
         expect(screen.getByTestId('collapse-all')).toBeInTheDocument();
@@ -1089,11 +1089,13 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithSystemAspects] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
-      expect(screen.getByText('No aspects available for this term')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
+      await waitFor(() => {
+        expect(screen.getByText('No aspects available for this term')).toBeInTheDocument();
+      });
     });
   });
 
@@ -1121,10 +1123,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithRelations] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Synonyms & Related Terms' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Synonyms & Related Terms/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Synonyms & Related Terms' }));
+      await user.click(screen.getByRole('tab', { name: /Synonyms & Related Terms/ }));
 
       // Change filter to synonym only
       await user.selectOptions(screen.getByTestId('relation-filter'), 'synonym');
@@ -1204,10 +1206,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithValidAspects] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
 
       // Should show annotation filter since hasValidAnnotationData returns true for this aspect
       await waitFor(() => {
@@ -1238,10 +1240,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithValidAspects] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
 
       await waitFor(() => {
         expect(screen.getByTestId('expand-all')).toBeInTheDocument();
@@ -1274,10 +1276,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithValidAspects] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
 
       await waitFor(() => {
         expect(screen.getByTestId('collapse-all')).toBeInTheDocument();
@@ -1614,10 +1616,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termNoRelations] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Synonyms & Related Terms' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Synonyms & Related Terms/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Synonyms & Related Terms' }));
+      await user.click(screen.getByRole('tab', { name: /Synonyms & Related Terms/ }));
       expect(screen.getByTestId('relations-count')).toHaveTextContent('0');
     });
   });
@@ -1703,10 +1705,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithFilterableAspects] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
 
       await waitFor(() => {
         expect(screen.getByTestId('preview-annotation')).toBeInTheDocument();
@@ -1964,10 +1966,10 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithSynonyms] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Synonyms & Related Terms' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Synonyms & Related Terms/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Synonyms & Related Terms' }));
+      await user.click(screen.getByRole('tab', { name: /Synonyms & Related Terms/ }));
       expect(screen.getByTestId('glossaries-synonyms')).toBeInTheDocument();
     });
   });
@@ -2179,11 +2181,13 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithSchema] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
-      expect(screen.getByText('No aspects available for this term')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
+      await waitFor(() => {
+        expect(screen.getByText('No aspects available for this term')).toBeInTheDocument();
+      });
     });
 
     it('excludes usage aspect from visible aspects', async () => {
@@ -2202,11 +2206,13 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [termWithUsage] } });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Aspects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Aspects/ })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Aspects' }));
-      expect(screen.getByText('No aspects available for this term')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: /Aspects/ }));
+      await waitFor(() => {
+        expect(screen.getByText('No aspects available for this term')).toBeInTheDocument();
+      });
     });
   });
 

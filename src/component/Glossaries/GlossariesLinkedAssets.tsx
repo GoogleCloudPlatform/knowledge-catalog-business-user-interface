@@ -15,6 +15,7 @@ interface GlossariesLinkedAssetsProps {
   onAssetPreviewChange: (data: any | null) => void;
   isSidebarOpen?: boolean;
   onSidebarToggle?: (open: boolean) => void;
+  isLoading?: boolean;
 }
 
 const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
@@ -25,6 +26,7 @@ const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
   onAssetPreviewChange,
   isSidebarOpen,
   onSidebarToggle,
+  isLoading = false,
 }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<any[]>([]);
@@ -165,7 +167,7 @@ const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
     if (data) setIsFilterOpen(false);
   };
 
-  if (!linkedAssets || linkedAssets.length === 0) {
+  if (!isLoading && (!linkedAssets || linkedAssets.length === 0)) {
     return (
       <Box
         sx={{
@@ -179,7 +181,7 @@ const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
           gap: 2,
         }}
       >
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body1" color="#0C1226CC">
           No linked assets available for this term
         </Typography>
       </Box>
@@ -194,7 +196,7 @@ const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
           width: "100%",
           borderRadius: "16px",
           overflow: "visible",
-          bgcolor: "#fff",
+          bgcolor: "transparent",
           display: "flex",
           flexDirection: "row",
           gap: isFilterOpen ? "16px" : "0px",
@@ -215,7 +217,7 @@ const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
             padding: isFilterOpen ? "20px" : "0px",
             marginTop: "8px",
             gap: "20px",
-            backgroundColor: "#F8FAFD",
+            backgroundColor: "#F4F5FA",
             border: isFilterOpen ? "1px solid #DADCE0" : "none",
             borderRadius: "20px",
             height: "100%",
@@ -249,8 +251,9 @@ const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
           {/* Resource Viewer Content */}
           <Box sx={{ flex: 1, minHeight: 0 }}>
             <ResourceViewer
+              isGlossary={true}
               resources={filteredLinkedAssets}
-              resourcesStatus="succeeded"
+              resourcesStatus={isLoading ? "loading" : "succeeded"}
               resourcesTotalSize={filteredLinkedAssets.length}
               previewData={assetPreviewData}
               onPreviewDataChange={handlePreviewDataChange}
@@ -281,10 +284,10 @@ const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
                       gap: "8px",
                       width: "85px",
                       height: "32px",
-                      border: isFilterOpen ? "none" : "1px solid #0E4DCA",
+                      border: isFilterOpen ? "none" : "1px solid #022FCD",
                       borderRadius: "59px",
-                      background: isFilterOpen ? "#0E4DCA" : "none",
-                      color: isFilterOpen ? "#EDF2FC" : "#0E4DCA",
+                      background: isFilterOpen ? "#022FCD" : "none",
+                      color: isFilterOpen ? "#EDF2FC" : "#022FCD",
                       cursor: "pointer",
                       transition: "all 0.2s ease",
                       flexShrink: 0,
@@ -342,7 +345,7 @@ const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
                 height: "100%",
                 border: "none",
                 margin: 0,
-                backgroundColor: "#fff",
+                backgroundColor: "transparent",
                 width: "100%",
               }}
               contentStyle={{

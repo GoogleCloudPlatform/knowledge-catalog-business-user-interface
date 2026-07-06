@@ -86,7 +86,7 @@ const createTestStore = (preloadedState?: Partial<UserState>) => {
   });
 };
 
-const getInitialState = () => ({
+const getInitialState = (): { token: null; userData: null; mode: "light" | "dark" } => ({
   token: null,
   userData: null,
   mode: "light",
@@ -128,11 +128,12 @@ describe("userSlice", () => {
       expect(typeof userReducer).toBe("function");
     });
 
-    it("initializes mode from localStorage when available", () => {
-      localStorageMock.setItem("mode", "dark");
+    it("initializes mode to light by default (redux-persist handles rehydration)", () => {
+      const store = createTestStore();
+      const state = store.getState().user;
 
-      // Re-import would be needed to test this properly, but we can verify the logic
-      expect(localStorageMock.getItem("mode")).toBe("dark");
+      // Default mode is 'light', redux-persist rehydrates the persisted value at runtime
+      expect(state.mode).toBe("light");
     });
 
     it("defaults mode to light when localStorage is empty", () => {
@@ -308,24 +309,24 @@ describe("userSlice", () => {
       expect(state.mode).toBe("light");
     });
 
-    it("persists dark mode to localStorage", () => {
+    it("updates mode to dark in Redux state (persisted via redux-persist)", () => {
       const store = createTestStore({
         mode: "light",
       });
 
       store.dispatch(changeMode());
 
-      expect(localStorageMock.setItem).toHaveBeenCalledWith("mode", "dark");
+      expect(store.getState().user.mode).toBe("dark");
     });
 
-    it("persists light mode to localStorage", () => {
+    it("updates mode to light in Redux state (persisted via redux-persist)", () => {
       const store = createTestStore({
         mode: "dark",
       });
 
       store.dispatch(changeMode());
 
-      expect(localStorageMock.setItem).toHaveBeenCalledWith("mode", "light");
+      expect(store.getState().user.mode).toBe("light");
     });
 
     it("toggles mode multiple times", () => {
@@ -638,41 +639,43 @@ describe("userSlice", () => {
   // localStorage Mock Tests
   // ==========================================================================
 
-  describe("localStorage Interactions", () => {
-    it("setItem is called when changing to dark mode", () => {
+  describe("Redux State Persistence (via redux-persist)", () => {
+    it("mode is updated in Redux state when changing to dark mode", () => {
       const store = createTestStore({ mode: "light" });
 
       store.dispatch(changeMode());
 
-      expect(localStorageMock.setItem).toHaveBeenCalledWith("mode", "dark");
+      expect(store.getState().user.mode).toBe("dark");
     });
 
-    it("setItem is called when changing to light mode", () => {
+    it("mode is updated in Redux state when changing to light mode", () => {
       const store = createTestStore({ mode: "dark" });
 
       store.dispatch(changeMode());
 
-      expect(localStorageMock.setItem).toHaveBeenCalledWith("mode", "light");
+      expect(store.getState().user.mode).toBe("light");
     });
 
-    it("setItem is called correct number of times on multiple toggles", () => {
+    it("mode toggles correctly on multiple dispatches", () => {
       const store = createTestStore({ mode: "light" });
 
       store.dispatch(changeMode());
-      store.dispatch(changeMode());
-      store.dispatch(changeMode());
+      expect(store.getState().user.mode).toBe("dark");
 
-      expect(localStorageMock.setItem).toHaveBeenCalledTimes(3);
+      store.dispatch(changeMode());
+      expect(store.getState().user.mode).toBe("light");
+
+      store.dispatch(changeMode());
+      expect(store.getState().user.mode).toBe("dark");
     });
 
-    it("localStorage values are persisted correctly", () => {
+    it("changeMode does not call localStorage directly", () => {
       const store = createTestStore({ mode: "light" });
 
       store.dispatch(changeMode());
-      expect(localStorageMock.getItem("mode")).toBe("dark");
 
-      store.dispatch(changeMode());
-      expect(localStorageMock.getItem("mode")).toBe("light");
+      // localStorage is no longer called directly - persistence is handled by redux-persist
+      expect(localStorageMock.setItem).not.toHaveBeenCalledWith("mode", expect.any(String));
     });
   });
 
@@ -839,25 +842,25 @@ describe("userSlice", () => {
     });
 
     it("reducer handles setCredentials action", () => {
-      const state = { token: null, userData: null, mode: "light" };
+      const state = { token: null, userData: null, mode: "light" as const };
       const newState = userSlice.reducer(state, setCredentials(mockCredentials));
       expect(newState.token).toBe(mockToken);
     });
 
     it("reducer handles setToken action", () => {
-      const state = { token: null, userData: null, mode: "light" };
+      const state = { token: null, userData: null, mode: "light" as const };
       const newState = userSlice.reducer(state, setToken("test-token"));
       expect(newState.token).toBe("test-token");
     });
 
     it("reducer handles changeMode action - light to dark", () => {
-      const state = { token: null, userData: null, mode: "light" };
+      const state = { token: null, userData: null, mode: "light" as const };
       const newState = userSlice.reducer(state, changeMode());
       expect(newState.mode).toBe("dark");
     });
 
     it("reducer handles changeMode action - dark to light", () => {
-      const state = { token: null, userData: null, mode: "dark" };
+      const state = { token: null, userData: null, mode: "dark" as const };
       const newState = userSlice.reducer(state, changeMode());
       expect(newState.mode).toBe("light");
     });

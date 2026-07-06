@@ -52,6 +52,21 @@ vi.mock("../services/urlPreservationService", () => ({
   saveCurrentLocationForRedirect: vi.fn(),
 }));
 
+// Mock Redux store and userSlice for testHelpers
+const mockDispatch = vi.fn();
+let mockUserData: any = null;
+vi.mock("../app/store", () => ({
+  default: {
+    getState: () => ({ user: { userData: mockUserData } }),
+    dispatch: (...args: any[]) => mockDispatch(...args),
+  },
+}));
+
+const mockSetCredentials = vi.fn((payload: any) => ({ type: "user/setCredentials", payload }));
+vi.mock("../features/user/userSlice", () => ({
+  setCredentials: (payload: any) => mockSetCredentials(payload),
+}));
+
 // ==========================================================================
 // Import utilities after mocks
 // ==========================================================================
@@ -1091,7 +1106,7 @@ describe("sessionUtils", () => {
 
 describe("testHelpers", () => {
   beforeEach(() => {
-    localStorageMock.clear();
+    mockUserData = null;
     vi.clearAllMocks();
   });
 
@@ -1102,9 +1117,12 @@ describe("testHelpers", () => {
     });
 
     it("should set token expiry to the past", () => {
-      localStorageMock.setItem("sessionUserData", JSON.stringify(mockSessionUserData));
+      mockUserData = { ...mockSessionUserData };
       expireToken();
-      expect(localStorageMock.setItem).toHaveBeenCalled();
+      expect(mockDispatch).toHaveBeenCalled();
+      expect(mockSetCredentials).toHaveBeenCalledWith(
+        expect.objectContaining({ user: expect.objectContaining({ tokenExpiry: expect.any(Number) }) })
+      );
       expect(consoleLogSpy).toHaveBeenCalled();
     });
   });
@@ -1116,14 +1134,14 @@ describe("testHelpers", () => {
     });
 
     it("should set token expiry to specified minutes", () => {
-      localStorageMock.setItem("sessionUserData", JSON.stringify(mockSessionUserData));
+      mockUserData = { ...mockSessionUserData };
       setTokenExpiry(10);
-      expect(localStorageMock.setItem).toHaveBeenCalled();
+      expect(mockDispatch).toHaveBeenCalled();
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("10 minutes"));
     });
 
     it("should show warning message for short expiry", () => {
-      localStorageMock.setItem("sessionUserData", JSON.stringify(mockSessionUserData));
+      mockUserData = { ...mockSessionUserData };
       setTokenExpiry(3);
       expect(consoleLogSpy).toHaveBeenCalledWith(
         expect.stringContaining("Warning modal should appear")
@@ -1138,7 +1156,7 @@ describe("testHelpers", () => {
     });
 
     it("should set expiry to 4 minutes", () => {
-      localStorageMock.setItem("sessionUserData", JSON.stringify(mockSessionUserData));
+      mockUserData = { ...mockSessionUserData };
       triggerWarning();
       expect(consoleLogSpy).toHaveBeenCalledWith(
         expect.stringContaining("Warning modal will appear")
@@ -1153,28 +1171,25 @@ describe("testHelpers", () => {
     });
 
     it("should display session status", () => {
-      localStorageMock.setItem("sessionUserData", JSON.stringify(mockSessionUserData));
+      mockUserData = { ...mockSessionUserData };
       showSessionStatus();
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("SESSION STATUS"));
     });
 
     it("should warn about expired token", () => {
-      const expiredData = { ...mockSessionUserData, tokenExpiry: Math.floor(Date.now() / 1000) - 100 };
-      localStorageMock.setItem("sessionUserData", JSON.stringify(expiredData));
+      mockUserData = { ...mockSessionUserData, tokenExpiry: Math.floor(Date.now() / 1000) - 100 };
       showSessionStatus();
       expect(consoleWarnSpy).toHaveBeenCalledWith("TOKEN EXPIRED!");
     });
 
     it("should warn about expiring soon", () => {
-      const expiringData = { ...mockSessionUserData, tokenExpiry: Math.floor(Date.now() / 1000) + 180 };
-      localStorageMock.setItem("sessionUserData", JSON.stringify(expiringData));
+      mockUserData = { ...mockSessionUserData, tokenExpiry: Math.floor(Date.now() / 1000) + 180 };
       showSessionStatus();
       expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining("Warning modal should be visible"));
     });
 
     it("should log message for token expiring within 10 minutes", () => {
-      const expiringData = { ...mockSessionUserData, tokenExpiry: Math.floor(Date.now() / 1000) + 420 };
-      localStorageMock.setItem("sessionUserData", JSON.stringify(expiringData));
+      mockUserData = { ...mockSessionUserData, tokenExpiry: Math.floor(Date.now() / 1000) + 420 };
       showSessionStatus();
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("Warning modal will appear at 5 min mark"));
     });
@@ -1187,9 +1202,9 @@ describe("testHelpers", () => {
     });
 
     it("should reset session to 1 hour from now", () => {
-      localStorageMock.setItem("sessionUserData", JSON.stringify(mockSessionUserData));
+      mockUserData = { ...mockSessionUserData };
       resetSession();
-      expect(localStorageMock.setItem).toHaveBeenCalled();
+      expect(mockDispatch).toHaveBeenCalled();
       expect(consoleLogSpy).toHaveBeenCalledWith("Session reset to fresh state");
     });
   });

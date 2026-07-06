@@ -185,7 +185,9 @@ vi.mock('../../features/entry/entrySlice', () => ({
 // Mock MUI icons
 vi.mock('@mui/icons-material', () => ({
   Close: () => <div data-testid="CloseIcon">Close</div>,
-  LockOutlined: () => <div data-testid="LockOutlinedIcon">Lock</div>
+  LockOutlined: () => <div data-testid="LockOutlinedIcon">Lock</div>,
+  DashboardOutlined: () => <div data-testid="DashboardOutlinedIcon">Dashboard</div>,
+  ViewListOutlined: () => <div data-testid="ViewListOutlinedIcon">ViewList</div>
 }));
 
 describe('ResourcePreview', () => {

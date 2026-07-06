@@ -1,31 +1,19 @@
 import React from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogActions,
-  Typography,
-  Button,
-  Box,
-  Avatar,
-  Zoom,
-  Fade,
-} from '@mui/material';
-import { GppBad, Login } from '@mui/icons-material';
+import { Dialog, Box, Typography, Button } from '@mui/material';
 
-// Material Design red color palette (matching SessionWarningModal)
-const redTheme = {
-  main: '#D32F2F',
-  light: '#EF5350',
-  dark: '#C62828',
-  lighter: '#FFEBEE',
-  contrastText: '#FFFFFF',
-};
-
-const shadows = {
-  card: '0 4px 24px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04)',
-  button: '0 2px 8px rgba(0, 0, 0, 0.1)',
-  buttonHover: '0 4px 12px rgba(0, 0, 0, 0.15)',
-  avatar: '0 2px 12px rgba(0, 0, 0, 0.1)',
+// M3 design tokens (shared with SessionExpired)
+const m3 = {
+  cardBg: '#FFFFFF',
+  cardShadow:
+    '0px 1px 2px rgba(0, 0, 0, 0.3), 0px 2px 6px 2px rgba(0, 0, 0, 0.15)',
+  iconBg: 'rgba(179, 38, 30, 0.16)',
+  iconColor: '#B3261E',
+  titleColor: '#1F1F1F',
+  bodyColor: '#5F6367',
+  buttonBg: '#022FCD',
+  buttonText: '#FFFFFF',
+  dividerColor: '#E9EEF6',
+  footerColor: '#5F6367',
 };
 
 const googleFonts = {
@@ -57,137 +45,134 @@ export const NoAccessModal: React.FC<NoAccessModalProps> = ({
         }
       }}
       disableEscapeKeyDown
-      maxWidth="xs"
-      fullWidth
+      maxWidth={false}
       PaperProps={{
         sx: {
-          borderRadius: 4,
-          overflow: 'hidden',
-          boxShadow: shadows.card,
+          width: 580,
+          maxWidth: '100%',
+          borderRadius: '24px',
+          boxShadow: m3.cardShadow,
+          py: '40px',
+          backgroundColor: m3.cardBg,
         },
       }}
     >
-      {/* Top accent bar */}
+      {/* Content area */}
       <Box
         sx={{
-          height: 4,
-          background: `linear-gradient(90deg, ${redTheme.dark} 0%, ${redTheme.light} 100%)`,
-        }}
-      />
-
-      <DialogContent sx={{ textAlign: 'center', pt: 4, pb: 3 }}>
-        {/* Icon with Avatar and Zoom animation */}
-        <Zoom in={open} timeout={400}>
-          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
-            <Avatar
-              sx={{
-                width: 72,
-                height: 72,
-                bgcolor: redTheme.main,
-                boxShadow: shadows.avatar,
-              }}
-            >
-              <GppBad sx={{ fontSize: 36, color: redTheme.contrastText }} />
-            </Avatar>
-          </Box>
-        </Zoom>
-
-        {/* Title */}
-        <Fade in={open} timeout={500} style={{ transitionDelay: '100ms' }}>
-          <Typography
-            variant="h5"
-            component="h2"
-            sx={{
-              fontFamily: googleFonts.display,
-              fontWeight: 600,
-              color: redTheme.dark,
-              mb: 1.5,
-            }}
-          >
-            Access Denied
-          </Typography>
-        </Fade>
-
-        {/* Message */}
-        <Fade in={open} timeout={500} style={{ transitionDelay: '200ms' }}>
-          <Typography
-            variant="body1"
-            sx={{
-              fontFamily: googleFonts.body,
-              color: 'text.secondary',
-              lineHeight: 1.6,
-            }}
-          >
-            {displayMessage}
-          </Typography>
-        </Fade>
-      </DialogContent>
-
-      <DialogActions
-        sx={{
-          justifyContent: 'center',
-          gap: 2,
-          px: 3,
-          pb: 3,
-          pt: 0,
+          px: '40px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          gap: '20px',
         }}
       >
-        <Fade in={open} timeout={500} style={{ transitionDelay: '300ms' }}>
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Button
-              variant="contained"
-              onClick={onSignIn}
-              startIcon={<Login />}
-              sx={{
-                fontFamily: googleFonts.display,
-                bgcolor: redTheme.main,
-                color: redTheme.contrastText,
-                px: 3,
-                py: 1.25,
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.95rem',
-                boxShadow: shadows.button,
-                transition: 'all 0.2s ease-in-out',
-                '&:hover': {
-                  bgcolor: redTheme.dark,
-                  boxShadow: shadows.buttonHover,
-                  transform: 'translateY(-1px)',
-                },
-                '&:active': {
-                  transform: 'translateY(0)',
-                },
-              }}
-            >
-              Sign In Again
-            </Button>
-          </Box>
-        </Fade>
-      </DialogActions>
-
-      {/* Footer text */}
-      <Fade in={open} timeout={500} style={{ transitionDelay: '400ms' }}>
+        {/* Icon circle */}
         <Box
           sx={{
-            textAlign: 'center',
-            px: 3,
-            pb: 3,
-            pt: 0,
+            width: 64,
+            height: 64,
+            borderRadius: '50%',
+            backgroundColor: m3.iconBg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          <Typography
-            variant="body2"
+          <span
+            className="material-symbols-outlined"
+            style={{ fontSize: 36, color: m3.iconColor }}
+          >
+            cancel
+          </span>
+        </Box>
+
+        {/* Title */}
+        <Typography
+          component="h2"
+          sx={{
+            fontFamily: googleFonts.display,
+            fontSize: 36,
+            fontWeight: 500,
+            lineHeight: '44px',
+            color: m3.titleColor,
+          }}
+        >
+          Access Denied
+        </Typography>
+
+        {/* Message */}
+        <Typography
+          sx={{
+            fontFamily: googleFonts.body,
+            fontSize: 16,
+            fontWeight: 400,
+            lineHeight: '24px',
+            letterSpacing: '0.5px',
+            color: m3.bodyColor,
+          }}
+        >
+          {displayMessage}
+        </Typography>
+
+        {/* Button row */}
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            width: '100%',
+          }}
+        >
+          <Button
+            variant="contained"
+            onClick={onSignIn}
             sx={{
-              fontFamily: googleFonts.body,
-              color: 'text.disabled',
-              fontSize: '0.8rem',
+              fontFamily: googleFonts.display,
+              backgroundColor: m3.buttonBg,
+              color: m3.buttonText,
+              borderRadius: '100px',
+              height: 56,
+              minWidth: 99,
+              textTransform: 'none',
+              fontWeight: 500,
+              fontSize: 16,
+              letterSpacing: '0.15px',
+              boxShadow: 'none',
+              '&:hover': {
+                backgroundColor: '#0B3DA2',
+                boxShadow: 'none',
+              },
             }}
           >
-            If you continue to experience issues, please contact your system administrator.
-          </Typography>
+              Sign In Again
+          </Button>
         </Box>
-      </Fade>
+      </Box>
+
+      {/* Divider + Footer */}
+      <Box
+        sx={{
+          mt: '20px',
+          pt: '20px',
+          mx: '40px',
+          borderTop: `1px solid ${m3.dividerColor}`,
+        }}
+      >
+        <Typography
+          sx={{
+            fontFamily: googleFonts.body,
+            fontSize: 12,
+            fontWeight: 400,
+            lineHeight: '16px',
+            letterSpacing: '0.4px',
+            textAlign: 'center',
+            color: m3.footerColor,
+          }}
+        >
+          If you continue to experience issues, please contact your system
+          administrator.
+        </Typography>
+      </Box>
     </Dialog>
   );
 };

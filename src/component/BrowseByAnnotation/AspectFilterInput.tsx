@@ -189,14 +189,14 @@ const AspectFilterInput: React.FC<AspectFilterInputProps> = ({
             alignItems: "center",
             padding: "8px 12px",
             gap: "8px",
-            border: isFocused || hasFilters || selectedField ? "1px solid #0E4DCA" : "1px solid #DADCE0",
+            border: isFocused || hasFilters || selectedField ? "1px solid #022FCD" : "1px solid #DADCE0",
             borderRadius: "54px",
             backgroundColor: "#FFFFFF",
             height: "32px",
             boxSizing: "border-box",
             cursor: "text",
             transition: "border-color 0.2s ease",
-            "&:hover": { borderColor: "#0E4DCA" },
+            "&:hover": { borderColor: "#022FCD" },
           }}
           onClick={() => inputRef.current?.focus()}
         >

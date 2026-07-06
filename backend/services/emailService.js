@@ -3,6 +3,7 @@ const { GoogleAuth, OAuth2Client } = require('google-auth-library');
 
 // Initialize Gmail API client
 let gmailClient = null; 
+const axios = require('axios');
 
 class CustomGoogleAuth extends GoogleAuth {
     constructor(token) {
@@ -68,12 +69,12 @@ const createAccessRequestEmail = (assetName, message, requesterEmail, projectId,
           box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         .header {
-          border-bottom: 2px solid #0E4DCA;
+          border-bottom: 2px solid #022FCD;
           padding-bottom: 20px;
           margin-bottom: 30px;
         }
         .header h1 {
-          color: #0E4DCA;
+          color: #022FCD;
           margin: 0;
           font-size: 24px;
         }
@@ -96,7 +97,7 @@ const createAccessRequestEmail = (assetName, message, requesterEmail, projectId,
           background-color: #f8f9fa;
           padding: 15px;
           border-radius: 6px;
-          border-left: 4px solid #0E4DCA;
+          border-left: 4px solid #022FCD;
         }
         .info-label {
           font-size: 12px;
@@ -114,7 +115,7 @@ const createAccessRequestEmail = (assetName, message, requesterEmail, projectId,
           background-color: #f8f9fa;
           padding: 20px;
           border-radius: 6px;
-          border-left: 4px solid #0E4DCA;
+          border-left: 4px solid #022FCD;
         }
         .message-text {
           font-style: italic;
@@ -136,7 +137,7 @@ const createAccessRequestEmail = (assetName, message, requesterEmail, projectId,
           transition: background-color 0.3s;
         }
         .btn-primary {
-          background-color: #0E4DCA;
+          background-color: #022FCD;
           color: white;
         }
         .btn-primary:hover {
@@ -158,7 +159,7 @@ const createAccessRequestEmail = (assetName, message, requesterEmail, projectId,
           font-size: 12px;
         }
         .console-link {
-          color: #0E4DCA;
+          color: #022FCD;
           text-decoration: none;
         }
         .console-link:hover {
@@ -270,12 +271,12 @@ const createFeedbackEmail = ( message, requesterEmail, projectId) => {
           box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         .header {
-          border-bottom: 2px solid #0E4DCA;
+          border-bottom: 2px solid #022FCD;
           padding-bottom: 20px;
           margin-bottom: 30px;
         }
         .header h1 {
-          color: #0E4DCA;
+          color: #022FCD;
           margin: 0;
           font-size: 24px;
         }
@@ -298,7 +299,7 @@ const createFeedbackEmail = ( message, requesterEmail, projectId) => {
           background-color: #f8f9fa;
           padding: 15px;
           border-radius: 6px;
-          border-left: 4px solid #0E4DCA;
+          border-left: 4px solid #022FCD;
         }
         .info-label {
           font-size: 12px;
@@ -316,7 +317,7 @@ const createFeedbackEmail = ( message, requesterEmail, projectId) => {
           background-color: #f8f9fa;
           padding: 20px;
           border-radius: 6px;
-          border-left: 4px solid #0E4DCA;
+          border-left: 4px solid #022FCD;
         }
         .message-text {
           font-style: italic;
@@ -338,7 +339,7 @@ const createFeedbackEmail = ( message, requesterEmail, projectId) => {
           transition: background-color 0.3s;
         }
         .btn-primary {
-          background-color: #0E4DCA;
+          background-color: #022FCD;
           color: white;
         }
         .btn-primary:hover {
@@ -360,7 +361,7 @@ const createFeedbackEmail = ( message, requesterEmail, projectId) => {
           font-size: 12px;
         }
         .console-link {
-          color: #0E4DCA;
+          color: #022FCD;
           text-decoration: none;
         }
         .console-link:hover {
@@ -434,6 +435,47 @@ const createGmailMessage = (to, subject, htmlContent, fromEmail) => {
   const base64Email = Buffer.from(email).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
 
   return base64Email;
+};
+
+// Function to send access request to Dataplex API
+const sendDataplexAccessRequest = async (accessToken, projectNumber, locationId, dataProductId, accessGroupId, requesterEmail, justificationMsg) => {
+  try {
+    const parentResource = `projects/${projectNumber}/locations/${locationId}/dataProducts/${dataProductId}`;
+
+    // Explicitly add the prefix IAM expects
+    const principalPrefix = requesterEmail.includes('.gserviceaccount.com') ? 'serviceAccount:' : 'user:';
+    const formattedPrincipal = `${principalPrefix}${requesterEmail}`;
+
+    const requestBody = {
+      changeRequest: {
+        justification: justificationMsg || "Access requested via Knowledge Catalog",
+        dataProductAccessRequest: {
+          parent: parentResource,
+          accessGroupId: accessGroupId,
+          requestedPrincipal: formattedPrincipal // <-- Explicitly added back
+        }
+      }
+    };
+
+    const url = `https://dataplex.googleapis.com/v1/${parentResource}:requestAccess`;
+    
+    console.log(`Sending direct REST request to: ${url}`);
+    console.log(`Payload being sent to Google:`, JSON.stringify(requestBody, null, 2));
+    
+    const response = await axios.post(url, requestBody, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    return { success: true, data: response.data };
+
+  } catch (error) {
+    const errorDetails = error.response?.data || error.message;
+    console.error('Error requesting Dataplex access:', JSON.stringify(errorDetails, null, 2));
+    return { success: false, error: errorDetails };
+  }
 };
 
 // Send access request email using Gmail API
@@ -534,5 +576,6 @@ module.exports = {
   sendFeedbackEmail,
   sendAccessRequestEmail,
   createAccessRequestEmail,
-  initializeGmailClient
+  initializeGmailClient,
+  sendDataplexAccessRequest
 };

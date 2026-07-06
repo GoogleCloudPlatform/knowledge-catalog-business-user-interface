@@ -4,6 +4,7 @@ import axios, { AxiosError } from "axios";
 import entryReducer, {
   fetchEntry,
   fetchLineageEntry,
+  fetchEntryLinks,
   setEntry,
   pushToHistory,
   popFromHistory,
@@ -102,6 +103,9 @@ const getInitialState = () => ({
   lineageToEntryCopy: false,
   history: [] as unknown[],
   accessCheckCache: {} as Record<string, { status: 'loading' | 'succeeded' | 'failed'; error?: unknown }>,
+  entryLinks: [] as import('../../component/Glossaries/GlossaryDataType').GlossaryItem[],
+  entryLinksStatus: "idle" as const,
+  entryLinksError: null,
 });
 
 // ==========================================================================
@@ -130,6 +134,9 @@ describe("entrySlice", () => {
       expect(state.lineageEntryError).toBeNull();
       expect(state.lineageToEntryCopy).toBe(false);
       expect(state.history).toEqual([]);
+      expect(state.entryLinks).toEqual([]);
+      expect(state.entryLinksStatus).toBe("idle");
+      expect(state.entryLinksError).toBeNull();
     });
 
     it("has correct slice name", () => {
@@ -715,6 +722,227 @@ describe("entrySlice", () => {
   });
 
   // ==========================================================================
+  // fetchEntryLinks Async Thunk Tests
+  // ==========================================================================
+
+  describe("fetchEntryLinks", () => {
+    describe("Pending State", () => {
+      it("sets entryLinksStatus to loading when pending", () => {
+        const store = createTestStore();
+        store.dispatch({ type: fetchEntryLinks.pending.type });
+
+        const state = store.getState().entry;
+        expect(state.entryLinksStatus).toBe("loading");
+        expect(state.entryLinksError).toBeNull();
+      });
+    });
+
+    describe("Fulfilled State", () => {
+      it("sets entryLinksStatus to succeeded and populates entryLinks", async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          data: {
+            terms: [
+              {
+                name: "projects/p/locations/us/entryGroups/@dataplex/entries/term1",
+                entryType: "projects/p/locations/global/entryTypes/dataplex-term",
+                updateTime: "2024-01-15T10:00:00Z",
+                entrySource: {
+                  displayName: "Revenue",
+                  description: "Total revenue",
+                  labels: { finance: "true" },
+                },
+                linkedPaths: ["Schema.salary"],
+              },
+            ],
+          },
+        });
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "projects/p/entries/test", id_token: "token" }) as any
+        );
+
+        const state = store.getState().entry;
+        expect(state.entryLinksStatus).toBe("succeeded");
+        expect(state.entryLinks).toHaveLength(1);
+        expect(state.entryLinks[0].displayName).toBe("Revenue");
+        expect(state.entryLinks[0].description).toBe("Total revenue");
+        expect(state.entryLinks[0].type).toBe("term");
+        expect(state.entryLinks[0].linkedPaths).toEqual(["Schema.salary"]);
+        expect(state.entryLinks[0].labels).toEqual(["finance:true"]);
+      });
+
+      it("handles empty terms array", async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          data: { terms: [] },
+        });
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "projects/p/entries/test", id_token: "token" }) as any
+        );
+
+        const state = store.getState().entry;
+        expect(state.entryLinksStatus).toBe("succeeded");
+        expect(state.entryLinks).toEqual([]);
+      });
+
+      it("handles missing terms key in response", async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          data: { entryLinks: [] },
+        });
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "projects/p/entries/test", id_token: "token" }) as any
+        );
+
+        const state = store.getState().entry;
+        expect(state.entryLinksStatus).toBe("succeeded");
+        expect(state.entryLinks).toEqual([]);
+      });
+
+      it("maps term entry with Timestamp object format", async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          data: {
+            terms: [
+              {
+                name: "projects/p/locations/us/entryGroups/@dataplex/entries/term2",
+                entryType: "dataplex-term",
+                updateTime: { seconds: 1705312800, nanos: 0 },
+                entrySource: {
+                  displayName: "Cost",
+                  description: "Total cost",
+                },
+              },
+            ],
+          },
+        });
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "projects/p/entries/test", id_token: "token" }) as any
+        );
+
+        const state = store.getState().entry;
+        expect(state.entryLinks[0].lastModified).toBe(1705312800);
+        expect(state.entryLinks[0].labels).toEqual([]);
+      });
+
+      it("maps term entry with missing displayName to Untitled", async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          data: {
+            terms: [
+              {
+                name: "projects/p/entries/term3",
+                entrySource: {},
+              },
+            ],
+          },
+        });
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "projects/p/entries/test", id_token: "token" }) as any
+        );
+
+        const state = store.getState().entry;
+        expect(state.entryLinks[0].displayName).toBe("Untitled");
+        expect(state.entryLinks[0].description).toBe("");
+      });
+
+      it("sets Authorization header", async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({ data: { terms: [] } });
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "test-entry", id_token: "my-token" }) as any
+        );
+
+        expect(axios.defaults.headers.common["Authorization"]).toBe("Bearer my-token");
+      });
+
+      it("constructs correct URL with encoded entryName", async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({ data: { terms: [] } });
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "projects/p/entries/test entry", id_token: "token" }) as any
+        );
+
+        expect(axios.get).toHaveBeenCalledWith(
+          expect.stringContaining("entryName=projects%2Fp%2Fentries%2Ftest%20entry")
+        );
+      });
+    });
+
+    describe("Rejected State", () => {
+      it("sets entryLinksStatus to failed and clears entryLinks", async () => {
+        const axiosError = new AxiosError("Network Error");
+        (axiosError as any).response = { data: "Server error" };
+        vi.mocked(axios.get).mockRejectedValueOnce(axiosError);
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "test-entry", id_token: "token" }) as any
+        );
+
+        const state = store.getState().entry;
+        expect(state.entryLinksStatus).toBe("failed");
+        expect(state.entryLinks).toEqual([]);
+      });
+
+      it("returns PERMISSION_DENIED for 403 errors", async () => {
+        const axiosError = new AxiosError("Forbidden");
+        (axiosError as any).response = { status: 403, data: "Forbidden" };
+        vi.mocked(axios.get).mockRejectedValueOnce(axiosError);
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "test-entry", id_token: "token" }) as any
+        );
+
+        const state = store.getState().entry;
+        expect(state.entryLinksStatus).toBe("failed");
+        expect(state.entryLinksError).toEqual({
+          type: "PERMISSION_DENIED",
+          message: "You don't have access to this resource",
+        });
+      });
+
+      it("handles non-AxiosError with generic message", async () => {
+        vi.mocked(axios.get).mockRejectedValueOnce(new Error("Generic error"));
+
+        const store = createTestStore();
+        await store.dispatch(
+          fetchEntryLinks({ entryName: "test-entry", id_token: "token" }) as any
+        );
+
+        const state = store.getState().entry;
+        expect(state.entryLinksStatus).toBe("failed");
+        expect(state.entryLinksError).toBe("An unknown error occurred");
+      });
+    });
+
+    describe("State Reset on fetchEntry.pending", () => {
+      it("clears entryLinks when a new entry fetch starts", () => {
+        const store = createTestStore({
+          entryLinks: [{ id: "x", type: "term", displayName: "Old" } as any],
+          entryLinksStatus: "succeeded",
+          entryLinksError: null,
+        });
+
+        store.dispatch({ type: fetchEntry.pending.type });
+
+        const state = store.getState().entry;
+        expect(state.entryLinks).toEqual([]);
+        expect(state.entryLinksStatus).toBe("idle");
+        expect(state.entryLinksError).toBeNull();
+      });
+    });
+  });
+
+  // ==========================================================================
   // setLineageToEntryCopy Tests
   // ==========================================================================
 
@@ -813,6 +1041,12 @@ describe("entrySlice", () => {
       expect(fetchLineageEntry.rejected.type).toBe(
         "entry/fetchLineageEntry/rejected"
       );
+    });
+
+    it("fetchEntryLinks has correct action types", () => {
+      expect(fetchEntryLinks.pending.type).toBe("entry/fetchEntryLinks/pending");
+      expect(fetchEntryLinks.fulfilled.type).toBe("entry/fetchEntryLinks/fulfilled");
+      expect(fetchEntryLinks.rejected.type).toBe("entry/fetchEntryLinks/rejected");
     });
 
     it("synchronous actions have correct types", () => {
@@ -1047,6 +1281,11 @@ describe("entrySlice", () => {
     it("exports fetchLineageEntry async thunk", () => {
       expect(fetchLineageEntry).toBeDefined();
       expect(typeof fetchLineageEntry).toBe("function");
+    });
+
+    it("exports fetchEntryLinks async thunk", () => {
+      expect(fetchEntryLinks).toBeDefined();
+      expect(typeof fetchEntryLinks).toBe("function");
     });
   });
 });

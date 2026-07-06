@@ -50,6 +50,7 @@ vi.mock('../../features/entry/entrySlice', async (importOriginal) => {
     popFromHistory: vi.fn(() => ({ type: 'entry/popFromHistory' })),
     pushToHistory: vi.fn(() => ({ type: 'entry/pushToHistory' })),
     fetchEntry: vi.fn(() => ({ type: 'entry/fetchEntry' })),
+    fetchEntryLinks: vi.fn(() => ({ type: 'entry/fetchEntryLinks' })),
   };
 });
 
@@ -389,10 +390,10 @@ describe('ViewDetails', () => {
     rows: [['value1', 'value2']]
   };
 
-  const createMockStore = (entryState: any = mockEntry, entryStatus = 'succeeded', sampleDataState = mockSampleData, sampleDataStatus = 'succeeded', history: any[] = []) => {
+  const createMockStore = (entryState: any = mockEntry, entryStatus = 'succeeded', sampleDataState = mockSampleData, sampleDataStatus = 'succeeded', history: any[] = [], entryLinks: any[] = [], entryLinksStatus = 'idle') => {
     return configureStore({
       reducer: {
-        entry: (state = { items: entryState, status: entryStatus, history }) => state,
+        entry: (state = { items: entryState, status: entryStatus, history, entryLinks, entryLinksStatus }) => state,
         sampleData: (state = { items: sampleDataState, status: sampleDataStatus }) => state,
         glossaries: (state = { viewDetailsItems: [] }) => state,
         resources: (state = { items: [] }) => state,
@@ -476,7 +477,7 @@ describe('ViewDetails', () => {
     it('pops from entry history when history exists', async () => {
       const mockStore = configureStore({
         reducer: {
-          entry: () => ({ items: mockEntry, status: 'succeeded', history: [{ name: 'previous' }] }),
+          entry: () => ({ items: mockEntry, status: 'succeeded', history: [{ name: 'previous' }], entryLinks: [], entryLinksStatus: 'idle' }),
           sampleData: () => ({ items: mockSampleData, status: 'succeeded' }),
           glossaries: () => ({ viewDetailsItems: [] }),
           resources: () => ({ items: [] }),
@@ -571,7 +572,7 @@ describe('ViewDetails', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByTestId('tabpanel-2')).toBeInTheDocument();
+        expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
         expect(screen.getByTestId('lineage')).toBeInTheDocument();
       });
     });
@@ -584,7 +585,7 @@ describe('ViewDetails', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
+        expect(screen.getByTestId('tabpanel-4')).toBeInTheDocument();
         expect(screen.getByTestId('data-profile')).toBeInTheDocument();
       });
     });
@@ -597,7 +598,7 @@ describe('ViewDetails', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByTestId('tabpanel-4')).toBeInTheDocument();
+        expect(screen.getByTestId('tabpanel-5')).toBeInTheDocument();
         expect(screen.getByTestId('data-quality')).toBeInTheDocument();
       });
     });
@@ -687,12 +688,13 @@ describe('ViewDetails', () => {
   });
 
   describe('Other Entry Type', () => {
-    it('renders tabs for Other entry type', async () => {
+    it('renders tabs for Other entry type including Glossary Terms', async () => {
       renderViewDetails(mockOtherEntry);
 
       await waitFor(() => {
         expect(screen.getByText('Overview')).toBeInTheDocument();
         expect(screen.getByText('Aspects')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Glossary Terms' })).toBeInTheDocument();
       });
 
       expect(screen.queryByRole('tab', { name: 'Lineage' })).not.toBeInTheDocument();
@@ -709,6 +711,18 @@ describe('ViewDetails', () => {
 
       expect(screen.queryByText('Open in BigQuery')).not.toBeInTheDocument();
       expect(screen.queryByText('Explore in Looker')).not.toBeInTheDocument();
+    });
+
+    it('switches to Glossary Terms tab for Other entry type', async () => {
+      renderViewDetails(mockOtherEntry);
+
+      await waitFor(() => {
+        fireEvent.click(screen.getByRole('tab', { name: 'Glossary Terms' }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('tabpanel-2')).toBeInTheDocument();
+      });
     });
   });
 
@@ -988,6 +1002,149 @@ describe('ViewDetails', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Glossary Terms Tab', () => {
+    const mockLinkedTerms = [
+      { id: 'term-1', type: 'term', displayName: 'Revenue', description: 'Total revenue', lastModified: 1705312800, labels: [], linkedPaths: ['Schema.revenue'] },
+      { id: 'term-2', type: 'term', displayName: 'Cost', description: 'Total cost', lastModified: 1705399200, labels: [], linkedPaths: ['Schema.cost'] },
+    ];
+
+    it('renders Glossary Terms tab for BigQuery Tables entry', async () => {
+      renderViewDetails();
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Glossary Terms' })).toBeInTheDocument();
+      });
+    });
+
+    it('renders Glossary Terms tab for Datasets entry', async () => {
+      renderViewDetails(mockDatasetEntry);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Glossary Terms' })).toBeInTheDocument();
+      });
+    });
+
+    it('does not render Glossary Terms tab for glossary entry', async () => {
+      renderViewDetails(mockGlossaryEntry);
+
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('tab', { name: 'Glossary Terms' })).not.toBeInTheDocument();
+    });
+
+    it('does not render Glossary Terms tab for category entry', async () => {
+      renderViewDetails(mockCategoryEntry);
+
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('tab', { name: 'Glossary Terms' })).not.toBeInTheDocument();
+    });
+
+    it('does not render Glossary Terms tab for term entry', async () => {
+      renderViewDetails(mockTermEntry);
+
+      await waitFor(() => {
+        expect(screen.getByText('Overview')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('tab', { name: 'Glossary Terms' })).not.toBeInTheDocument();
+    });
+
+    it('switches to Glossary Terms tab for BigQuery Tables (index 2)', async () => {
+      renderViewDetails();
+
+      await waitFor(() => {
+        fireEvent.click(screen.getByRole('tab', { name: 'Glossary Terms' }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('tabpanel-2')).toBeInTheDocument();
+      });
+    });
+
+    it('switches to Glossary Terms tab for Datasets (index 3)', async () => {
+      renderViewDetails(mockDatasetEntry);
+
+      await waitFor(() => {
+        fireEvent.click(screen.getByRole('tab', { name: 'Glossary Terms' }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
+      });
+    });
+
+    it('shows skeleton loader when entryLinks are loading', async () => {
+      const store = createMockStore(mockEntry, 'succeeded', mockSampleData, 'succeeded', [], [], 'loading');
+      render(
+        <Provider store={store}>
+          <BrowserRouter>
+            <AuthContext.Provider value={mockAuthContextValue}>
+              <ViewDetails />
+            </AuthContext.Provider>
+          </BrowserRouter>
+        </Provider>
+      );
+
+      await waitFor(() => {
+        fireEvent.click(screen.getByRole('tab', { name: 'Glossary Terms' }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('glossaries-skeleton')).toBeInTheDocument();
+      });
+    });
+
+    it('renders linked terms when entryLinks are loaded', async () => {
+      const store = createMockStore(mockEntry, 'succeeded', mockSampleData, 'succeeded', [], mockLinkedTerms, 'succeeded');
+      render(
+        <Provider store={store}>
+          <BrowserRouter>
+            <AuthContext.Provider value={mockAuthContextValue}>
+              <ViewDetails />
+            </AuthContext.Provider>
+          </BrowserRouter>
+        </Provider>
+      );
+
+      await waitFor(() => {
+        fireEvent.click(screen.getByRole('tab', { name: 'Glossary Terms' }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('glossaries-terms')).toBeInTheDocument();
+        expect(screen.getByText('Revenue')).toBeInTheDocument();
+        expect(screen.getByText('Cost')).toBeInTheDocument();
+      });
+    });
+
+    it('renders empty state when no linked terms exist', async () => {
+      const store = createMockStore(mockEntry, 'succeeded', mockSampleData, 'succeeded', [], [], 'succeeded');
+      render(
+        <Provider store={store}>
+          <BrowserRouter>
+            <AuthContext.Provider value={mockAuthContextValue}>
+              <ViewDetails />
+            </AuthContext.Provider>
+          </BrowserRouter>
+        </Provider>
+      );
+
+      await waitFor(() => {
+        fireEvent.click(screen.getByRole('tab', { name: 'Glossary Terms' }));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('glossaries-terms')).toBeInTheDocument();
+        expect(screen.getByText('0 terms')).toBeInTheDocument();
       });
     });
   });

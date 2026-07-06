@@ -431,7 +431,7 @@ const TableFilter: React.FC<TableFilterProps> = ({
                     gap: '6px',
                     padding: '4px 8px',
                     backgroundColor: '#E7F0FE',
-                    border: '1px solid #0E4DCA',
+                    border: '1px solid #022FCD',
                     borderRadius: '16px',
                     fontSize: '11px'
                   }}
@@ -439,7 +439,7 @@ const TableFilter: React.FC<TableFilterProps> = ({
                   <Typography sx={{
                     fontSize: '12px',
                     fontWeight: 500,
-                    color: '#0E4DCA'
+                    color: '#022FCD'
                   }}>
                     {filter.property}:
                   </Typography>
@@ -456,7 +456,7 @@ const TableFilter: React.FC<TableFilterProps> = ({
                       padding: '2px',
                       width: '16px',
                       height: '16px',
-                      color: '#0E4DCA',
+                      color: '#022FCD',
                       '&:hover': {
                         backgroundColor: '#D93025',
                         color: '#FFFFFF'
@@ -618,7 +618,7 @@ const TableFilter: React.FC<TableFilterProps> = ({
               size="small"
               sx={{
                 padding: 0,
-                '&.Mui-checked': { color: '#0E4DCA' },
+                '&.Mui-checked': { color: '#022FCD' },
               }}
             />
             <ListItemText

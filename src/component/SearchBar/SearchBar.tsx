@@ -306,7 +306,7 @@ const SearchBar: React.FC<SearchProps> = ({handleSearchSubmit, dataSearch, varia
                 justifyContent: 'space-between',
                 borderRadius: '170px',
                 background: variant === 'navbar'
-                  ? (mode === 'dark' ? '#282a2c' : '#F8FAFD')
+                  ? (mode === 'dark' ? '#282a2c' : '#ffffff')
                   : ((isAnyDropdownOpen || variant === 'default') ? (mode === 'dark' ? '#282a2c' : '#ffffff') : (mode === 'dark' ? '#282a2c' : '#E9EEF6')),
                 padding: '0rem 0.5rem 0rem 1rem',
                 width: '100%',
@@ -492,7 +492,7 @@ const SearchBar: React.FC<SearchProps> = ({handleSearchSubmit, dataSearch, varia
                                 width: "100%",
                                 flex: 1,
                                 background: variant === 'navbar'
-                                  ? (mode === 'dark' ? '#282a2c' : '#F8FAFD')
+                                  ? (mode === 'dark' ? '#282a2c' : '#ffffff')
                                   : ((isAnyDropdownOpen || variant === 'default') ? (mode === 'dark' ? '#282a2c' : '#ffffff') : (mode === 'dark' ? '#282a2c' : '#E9EEF6')),
                                 fontWeight: "500",
                                 fontSize: "0.875rem",

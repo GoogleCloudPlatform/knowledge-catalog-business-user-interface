@@ -31,7 +31,7 @@
   padding: 20px;
   height: 64px;
   box-sizing: border-box;
-  background: #F8FAFD;
+  background: #F4F5FA;
 }
 
 .insights-section__header-left {
@@ -125,7 +125,7 @@
   padding: 16px;
   gap: 8px;
   height: 56px;
-  background: #F8FAFD;
+  background: #F4F5FA;
   border: 1px solid #E1E3E1;
   border-radius: 8px;
   cursor: pointer;

@@ -126,7 +126,7 @@ describe('CurrentRules', () => {
       expect(screen.getByText('test_column')).toBeInTheDocument();
       expect(screen.getByText('test_rule')).toBeInTheDocument();
       expect(screen.getByText('NOT_NULL')).toBeInTheDocument();
-      expect(screen.getByText('COMPLETENESS')).toBeInTheDocument();
+      expect(screen.getByText('Completeness')).toBeInTheDocument();
     });
 
     it('should render empty table when no rules', () => {
@@ -146,10 +146,10 @@ describe('CurrentRules', () => {
       expect(screen.getByText('N/A')).toBeInTheDocument();
     });
 
-    it('should render parameters as JSON string', () => {
+    it('should render parameters in key-value format', () => {
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-      expect(screen.getByText('{"columnName":"test_column"}')).toBeInTheDocument();
-      expect(screen.getByText('{"minValue":0,"maxValue":100}')).toBeInTheDocument();
+      expect(screen.getByText(/columnName/)).toBeInTheDocument();
+      expect(screen.getByText(/minValue/)).toBeInTheDocument();
     });
 
     it('should render empty parameters for empty rule type object', () => {
@@ -162,10 +162,6 @@ describe('CurrentRules', () => {
       expect(screen.getByPlaceholderText('Enter property name or value')).toBeInTheDocument();
     });
 
-    it('should render Filter label', () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-      expect(screen.getByText('Filter')).toBeInTheDocument();
-    });
   });
 
   describe('Expand/Collapse', () => {
@@ -201,72 +197,6 @@ describe('CurrentRules', () => {
     });
   });
 
-  describe('Configurations Panel', () => {
-    it('should open configurations panel on button click', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-      const configButton = screen.getByRole('button', { name: /configurations/i });
-
-      fireEvent.click(configButton);
-
-      await waitFor(() => {
-        expect(screen.getByRole('presentation')).toBeInTheDocument();
-        expect(screen.getByTestId('configurations-panel')).toBeInTheDocument();
-      });
-    });
-
-    it('should close configurations panel on overlay click', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      // Open the panel
-      const configButton = screen.getByRole('button', { name: /configurations/i });
-      fireEvent.click(configButton);
-
-      await waitFor(() => {
-        expect(screen.getByRole('presentation')).toBeInTheDocument();
-      });
-
-      // Click the MUI Drawer backdrop to close
-      const backdrop = document.querySelector('.MuiBackdrop-root');
-      if (backdrop) {
-        fireEvent.click(backdrop);
-
-        await waitFor(() => {
-          expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
-        });
-      }
-    });
-
-    it('should close configurations panel via close callback', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      // Open panel
-      const configButton = screen.getByRole('button', { name: /configurations/i });
-      fireEvent.click(configButton);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('config-close-btn')).toBeInTheDocument();
-      });
-
-      // Close via the panel's close button
-      const closeBtn = screen.getByTestId('config-close-btn');
-      fireEvent.click(closeBtn);
-
-      await waitFor(() => {
-        expect(screen.queryByRole('presentation')).not.toBeInTheDocument();
-      });
-    });
-
-    it('should pass dataQualtyScan to ConfigurationsPanel', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-      const configButton = screen.getByRole('button', { name: /configurations/i });
-      fireEvent.click(configButton);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('scan-data')).toBeInTheDocument();
-      });
-    });
-  });
-
   describe('Text Filtering', () => {
     it('should filter by column name', () => {
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
@@ -288,14 +218,12 @@ describe('CurrentRules', () => {
       expect(screen.queryByText('test_column')).not.toBeInTheDocument();
     });
 
-    it('should filter by rule type', () => {
+    it('should not filter by rule type in text search', () => {
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
       const filterInput = screen.getByPlaceholderText('Enter property name or value');
-
       fireEvent.change(filterInput, { target: { value: 'NOT_NULL' } });
-
-      expect(screen.getByText('test_column')).toBeInTheDocument();
-      expect(screen.queryByText('another_column')).not.toBeInTheDocument();
+      // Rule type is not searchable via text, so all rows should be filtered out
+      expect(screen.queryByText('test_column')).not.toBeInTheDocument();
     });
 
     it('should filter by dimension', () => {
@@ -363,11 +291,11 @@ describe('CurrentRules', () => {
       }
     });
 
-    it('should open filter menu on Filter text click', async () => {
+    it('should open filter menu on filter icon click (duplicate)', async () => {
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
 
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
+      const filterButton = document.querySelector('[data-testid="FilterListIcon"]')?.closest('button');
+      fireEvent.click(filterButton!);
 
       await waitFor(() => {
         const menu = document.querySelector('[role="menu"]');
@@ -375,354 +303,6 @@ describe('CurrentRules', () => {
       });
     });
 
-    it('should show property selection menu initially', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        expect(screen.getByText('Select Property to Filter')).toBeInTheDocument();
-      });
-    });
-
-    it('should show property values when property is selected', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeInTheDocument();
-      });
-
-      // Find and click "Rule Type" property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const ruleTypeItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Rule Type')
-      );
-      if (ruleTypeItem) {
-        fireEvent.click(ruleTypeItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('← Back to Properties')).toBeInTheDocument();
-          expect(screen.getByText('Filter by: Rule Type')).toBeInTheDocument();
-        });
-      }
-    });
-
-    it('should go back to properties when clicking back', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeInTheDocument();
-      });
-
-      // Select a property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const ruleTypeItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Rule Type')
-      );
-      if (ruleTypeItem) {
-        fireEvent.click(ruleTypeItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('← Back to Properties')).toBeInTheDocument();
-        });
-
-        // Click back
-        fireEvent.click(screen.getByText('← Back to Properties'));
-
-        await waitFor(() => {
-          expect(screen.getByText('Select Property to Filter')).toBeInTheDocument();
-        });
-      }
-    });
-
-    it('should close filter menu', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeInTheDocument();
-      });
-
-      // Press Escape to close menu
-      fireEvent.keyDown(document.querySelector('[role="menu"]')!, { key: 'Escape' });
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeNull();
-      }, { timeout: 2000 });
-    });
-
-    it('should toggle value selection in property values', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeInTheDocument();
-      });
-
-      // Select Evaluation property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const evaluationItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Evaluation')
-      );
-      if (evaluationItem) {
-        fireEvent.click(evaluationItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-        });
-
-        // Click on FAILED value
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const failedItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('FAILED')
-        );
-        if (failedItem) {
-          fireEvent.click(failedItem);
-
-          // Should show filter chip
-          await waitFor(() => {
-            expect(screen.getByText('Evaluation:')).toBeInTheDocument();
-          });
-        }
-      }
-    });
-  });
-
-  describe('Active Filters', () => {
-    it('should show active filter chips after selecting values', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeInTheDocument();
-      });
-
-      // Select Evaluation property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const evaluationItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Evaluation')
-      );
-      if (evaluationItem) {
-        fireEvent.click(evaluationItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-        });
-
-        // Click on FAILED value
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const failedItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('FAILED')
-        );
-        if (failedItem) {
-          fireEvent.click(failedItem);
-
-          await waitFor(() => {
-            expect(screen.getByText('Evaluation:')).toBeInTheDocument();
-            // FAILED appears in table and in filter chip, so just check for the filter chip container
-            expect(screen.getAllByText('FAILED').length).toBeGreaterThan(0);
-          });
-        }
-      }
-    });
-
-    it('should remove filter chip when clicking X button', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      // Add a filter first
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeInTheDocument();
-      });
-
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const evaluationItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Evaluation')
-      );
-      if (evaluationItem) {
-        fireEvent.click(evaluationItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-        });
-
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const failedItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('FAILED')
-        );
-        if (failedItem) {
-          fireEvent.click(failedItem);
-
-          await waitFor(() => {
-            expect(screen.getByText('Evaluation:')).toBeInTheDocument();
-          });
-
-          // Find and click the remove button (×)
-          const removeButton = screen.getByText('×').closest('button');
-          if (removeButton) {
-            fireEvent.click(removeButton);
-
-            await waitFor(() => {
-              expect(screen.queryByText('Evaluation:')).not.toBeInTheDocument();
-            });
-          }
-        }
-      }
-    });
-
-    it('should show Clear All button when filters are active', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeInTheDocument();
-      });
-
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const evaluationItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Evaluation')
-      );
-      if (evaluationItem) {
-        fireEvent.click(evaluationItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-        });
-
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const failedItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('FAILED')
-        );
-        if (failedItem) {
-          fireEvent.click(failedItem);
-
-          await waitFor(() => {
-            expect(screen.getByText('Clear All')).toBeInTheDocument();
-          });
-        }
-      }
-    });
-
-    it('should clear all filters when clicking Clear All', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeInTheDocument();
-      });
-
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const evaluationItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Evaluation')
-      );
-      if (evaluationItem) {
-        fireEvent.click(evaluationItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-        });
-
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const failedItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('FAILED')
-        );
-        if (failedItem) {
-          fireEvent.click(failedItem);
-
-          await waitFor(() => {
-            expect(screen.getByText('Clear All')).toBeInTheDocument();
-          });
-
-          // Click Clear All
-          fireEvent.click(screen.getByText('Clear All'));
-
-          await waitFor(() => {
-            expect(screen.queryByText('Evaluation:')).not.toBeInTheDocument();
-            expect(screen.queryByText('Clear All')).not.toBeInTheDocument();
-          });
-        }
-      }
-    });
-
-    it('should update existing filter when re-selecting same property', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      // Add first filter
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        const menu = document.querySelector('[role="menu"]');
-        expect(menu).toBeInTheDocument();
-      });
-
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const evaluationItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Evaluation')
-      );
-      if (evaluationItem) {
-        fireEvent.click(evaluationItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-        });
-
-        // Select FAILED
-        let valueItems = document.querySelectorAll('[role="menuitem"]');
-        let failedItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('FAILED')
-        );
-        if (failedItem) {
-          fireEvent.click(failedItem);
-
-          await waitFor(() => {
-            expect(screen.getByText('Evaluation:')).toBeInTheDocument();
-          });
-
-          // Now unselect FAILED (toggle off)
-          valueItems = document.querySelectorAll('[role="menuitem"]');
-          failedItem = Array.from(valueItems).find(
-            item => item.textContent?.includes('FAILED')
-          );
-          if (failedItem) {
-            fireEvent.click(failedItem);
-
-            await waitFor(() => {
-              // Filter should be removed when no values selected
-              expect(screen.queryByText('Evaluation:')).not.toBeInTheDocument();
-            });
-          }
-        }
-      }
-    });
   });
 
   describe('Sorting', () => {
@@ -810,31 +390,7 @@ describe('CurrentRules', () => {
 
       if (sortButton) {
         fireEvent.click(sortButton);
-        expect(screen.getByText('COMPLETENESS')).toBeInTheDocument();
-      }
-    });
-
-    it('should sort by parameters', () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const parametersHeader = screen.getByText('Parameters').closest('th');
-      const sortButton = parametersHeader?.querySelector('button');
-
-      if (sortButton) {
-        fireEvent.click(sortButton);
-        expect(screen.getByText('{"columnName":"test_column"}')).toBeInTheDocument();
-      }
-    });
-
-    it('should sort by threshold', () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const thresholdHeader = screen.getByText('Threshold').closest('th');
-      const sortButton = thresholdHeader?.querySelector('button');
-
-      if (sortButton) {
-        fireEvent.click(sortButton);
-        expect(screen.getByText('85%')).toBeInTheDocument();
+        expect(screen.getByText('Completeness')).toBeInTheDocument();
       }
     });
 
@@ -876,44 +432,36 @@ describe('CurrentRules', () => {
   });
 
   describe('Property Value Filtering', () => {
-    it('should filter table data based on active filters', async () => {
+    it('should filter table data using text search', () => {
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
 
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
+      // Use text search to filter — this tests the filtering logic in CurrentRules
+      const filterInput = screen.getByPlaceholderText('Enter property name or value');
+      fireEvent.change(filterInput, { target: { value: 'another_column' } });
+
+      // Only matching row should be visible
+      expect(screen.getByText('another_column')).toBeInTheDocument();
+      expect(screen.queryByText('test_column')).not.toBeInTheDocument();
+    });
+
+    it('should show filter menu with dropdown properties on filter icon click', async () => {
+      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
+
+      const filterButton = document.querySelector('[data-testid="FilterListIcon"]')?.closest('button');
+      fireEvent.click(filterButton!);
 
       await waitFor(() => {
         const menu = document.querySelector('[role="menu"]');
         expect(menu).toBeInTheDocument();
       });
 
-      // Select Evaluation property and FAILED value
+      // Verify dropdown properties are visible in filter icon menu
       const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const evaluationItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Evaluation')
-      );
-      if (evaluationItem) {
-        fireEvent.click(evaluationItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-        });
-
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const failedItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('FAILED')
-        );
-        if (failedItem) {
-          fireEvent.click(failedItem);
-
-          await waitFor(() => {
-            // Only FAILED rows should be visible
-            expect(screen.getByText('another_column')).toBeInTheDocument();
-            // PASSED rows should be filtered out
-            expect(screen.queryByText('test_column')).not.toBeInTheDocument();
-          });
-        }
-      }
+      const menuTexts = Array.from(menuItems).map(item => item.textContent);
+      expect(menuTexts.some(t => t?.includes('Evaluation'))).toBe(true);
+      expect(menuTexts.some(t => t?.includes('Rule Type'))).toBe(true);
+      expect(menuTexts.some(t => t?.includes('Status'))).toBe(true);
+      expect(menuTexts.some(t => t?.includes('Dimensions'))).toBe(true);
     });
   });
 
@@ -948,58 +496,20 @@ describe('CurrentRules', () => {
   });
 
   describe('Additional Branch Coverage', () => {
-    it('should add multiple values to same filter property', async () => {
+    it('should filter by text and show matching rows only', () => {
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
 
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
+      const filterInput = screen.getByPlaceholderText('Enter property name or value');
 
-      await waitFor(() => {
-        expect(document.querySelector('[role="menu"]')).toBeInTheDocument();
-      });
+      // Filter by column name to show only matching rows
+      fireEvent.change(filterInput, { target: { value: 'test_column' } });
+      expect(screen.getByText('test_column')).toBeInTheDocument();
+      expect(screen.queryByText('another_column')).not.toBeInTheDocument();
 
-      // Select Evaluation property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const evaluationItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Evaluation')
-      );
-      expect(evaluationItem).toBeTruthy();
-      if (evaluationItem) {
-        fireEvent.click(evaluationItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-        });
-
-        // Select first value (FAILED)
-        let valueItems = document.querySelectorAll('[role="menuitem"]');
-        const failedItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('FAILED')
-        );
-        expect(failedItem).toBeTruthy();
-        if (failedItem) {
-          fireEvent.click(failedItem);
-
-          await waitFor(() => {
-            expect(screen.getByText('Evaluation:')).toBeInTheDocument();
-          });
-
-          // Now select second value (PASSED) - this tests the update existing filter branch
-          valueItems = document.querySelectorAll('[role="menuitem"]');
-          const passedItem = Array.from(valueItems).find(
-            item => item.textContent?.includes('PASSED')
-          );
-          expect(passedItem).toBeTruthy();
-          if (passedItem) {
-            fireEvent.click(passedItem);
-
-            await waitFor(() => {
-              // Filter should now have both values
-              expect(screen.getByText('Evaluation:')).toBeInTheDocument();
-            });
-          }
-        }
-      }
+      // Clear filter to show all rows
+      fireEvent.change(filterInput, { target: { value: '' } });
+      expect(screen.getByText('test_column')).toBeInTheDocument();
+      expect(screen.getByText('another_column')).toBeInTheDocument();
     });
 
     it('should handle sort direction cycling from null to asc', () => {
@@ -1022,264 +532,47 @@ describe('CurrentRules', () => {
       }
     });
 
-    it('should filter by Column Name property', async () => {
+    it('should filter by Dimensions using text search', () => {
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
 
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
+      const filterInput = screen.getByPlaceholderText('Enter property name or value');
+      fireEvent.change(filterInput, { target: { value: 'Completeness' } });
 
-      await waitFor(() => {
-        expect(document.querySelector('[role="menu"]')).toBeInTheDocument();
-      });
-
-      // Select Column Name property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const columnNameItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Column Name')
-      );
-      expect(columnNameItem).toBeTruthy();
-      if (columnNameItem) {
-        fireEvent.click(columnNameItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Column Name')).toBeInTheDocument();
-        });
-
-        // Select a column value
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const testColumnItem = Array.from(valueItems).find(
-          item => item.textContent === 'test_column'
-        );
-        if (testColumnItem) {
-          fireEvent.click(testColumnItem);
-
-          await waitFor(() => {
-            // Filter chip should show
-            expect(screen.getByText('Column Name:')).toBeInTheDocument();
-          });
-        }
-      }
+      // Should show the row with Completeness dimension
+      expect(screen.getByText('test_column')).toBeInTheDocument();
     });
 
-    it('should filter by Rule Name property', async () => {
+    it('should show text-mode properties in search bar menu', async () => {
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
 
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
+      // Click the search bar to open property menu via search trigger
+      const filterInput = screen.getByPlaceholderText('Enter property name or value');
+      fireEvent.click(filterInput);
 
       await waitFor(() => {
-        expect(document.querySelector('[role="menu"]')).toBeInTheDocument();
+        const menu = document.querySelector('[role="menu"]');
+        expect(menu).toBeInTheDocument();
       });
 
-      // Select Rule Name property
+      // Text-mode properties should be visible in search bar menu
       const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const ruleNameItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Rule Name')
-      );
-      expect(ruleNameItem).toBeTruthy();
-      if (ruleNameItem) {
-        fireEvent.click(ruleNameItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Rule Name')).toBeInTheDocument();
-        });
-      }
+      const menuTexts = Array.from(menuItems).map(item => item.textContent);
+      expect(menuTexts.some(t => t?.includes('Column Name'))).toBe(true);
+      expect(menuTexts.some(t => t?.includes('Rule Name'))).toBe(true);
+      // Dropdown-only properties should NOT be visible in search bar menu
+      expect(menuTexts.some(t => t?.includes('Status'))).toBe(false);
     });
 
-    it('should filter by Dimensions property', async () => {
+    it('should filter by text search with partial match', () => {
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
 
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
+      const filterInput = screen.getByPlaceholderText('Enter property name or value');
 
-      await waitFor(() => {
-        expect(document.querySelector('[role="menu"]')).toBeInTheDocument();
-      });
-
-      // Select Dimensions property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const dimensionsItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Dimensions')
-      );
-      expect(dimensionsItem).toBeTruthy();
-      if (dimensionsItem) {
-        fireEvent.click(dimensionsItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Dimensions')).toBeInTheDocument();
-        });
-
-        // Select COMPLETENESS value
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const completenessItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('COMPLETENESS')
-        );
-        if (completenessItem) {
-          fireEvent.click(completenessItem);
-
-          await waitFor(() => {
-            expect(screen.getByText('Dimensions:')).toBeInTheDocument();
-          });
-        }
-      }
-    });
-
-    it('should filter by Parameters property', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        expect(document.querySelector('[role="menu"]')).toBeInTheDocument();
-      });
-
-      // Select Parameters property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const parametersItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Parameters')
-      );
-      expect(parametersItem).toBeTruthy();
-      if (parametersItem) {
-        fireEvent.click(parametersItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Parameters')).toBeInTheDocument();
-        });
-      }
-    });
-
-    it('should filter by Threshold property', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        expect(document.querySelector('[role="menu"]')).toBeInTheDocument();
-      });
-
-      // Select Threshold property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const thresholdItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Threshold')
-      );
-      expect(thresholdItem).toBeTruthy();
-      if (thresholdItem) {
-        fireEvent.click(thresholdItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Threshold')).toBeInTheDocument();
-        });
-
-        // Select 95% value
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const value95Item = Array.from(valueItems).find(
-          item => item.textContent?.includes('95%')
-        );
-        if (value95Item) {
-          fireEvent.click(value95Item);
-
-          await waitFor(() => {
-            expect(screen.getByText('Threshold:')).toBeInTheDocument();
-          });
-        }
-      }
-    });
-
-    it('should filter by Rule Type property', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        expect(document.querySelector('[role="menu"]')).toBeInTheDocument();
-      });
-
-      // Select Rule Type property
-      const menuItems = document.querySelectorAll('[role="menuitem"]');
-      const ruleTypeItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Rule Type')
-      );
-      expect(ruleTypeItem).toBeTruthy();
-      if (ruleTypeItem) {
-        fireEvent.click(ruleTypeItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Rule Type')).toBeInTheDocument();
-        });
-
-        // Select NOT_NULL value
-        const valueItems = document.querySelectorAll('[role="menuitem"]');
-        const notNullItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('NOT_NULL')
-        );
-        if (notNullItem) {
-          fireEvent.click(notNullItem);
-
-          await waitFor(() => {
-            expect(screen.getByText('Rule Type:')).toBeInTheDocument();
-          });
-        }
-      }
-    });
-
-    it('should handle existing filter pre-selection when selecting property', async () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
-
-      await waitFor(() => {
-        expect(document.querySelector('[role="menu"]')).toBeInTheDocument();
-      });
-
-      // Select Evaluation property and add a filter
-      let menuItems = document.querySelectorAll('[role="menuitem"]');
-      let evaluationItem = Array.from(menuItems).find(
-        item => item.textContent?.includes('Evaluation')
-      );
-      if (evaluationItem) {
-        fireEvent.click(evaluationItem);
-
-        await waitFor(() => {
-          expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-        });
-
-        // Select FAILED
-        let valueItems = document.querySelectorAll('[role="menuitem"]');
-        const failedItem = Array.from(valueItems).find(
-          item => item.textContent?.includes('FAILED')
-        );
-        if (failedItem) {
-          fireEvent.click(failedItem);
-
-          await waitFor(() => {
-            expect(screen.getByText('Evaluation:')).toBeInTheDocument();
-          });
-
-          // Go back to properties
-          fireEvent.click(screen.getByText('← Back to Properties'));
-
-          await waitFor(() => {
-            expect(screen.getByText('Select Property to Filter')).toBeInTheDocument();
-          });
-
-          // Select Evaluation again - should pre-select FAILED
-          menuItems = document.querySelectorAll('[role="menuitem"]');
-          evaluationItem = Array.from(menuItems).find(
-            item => item.textContent?.includes('Evaluation')
-          );
-          if (evaluationItem) {
-            fireEvent.click(evaluationItem);
-
-            await waitFor(() => {
-              expect(screen.getByText('Filter by: Evaluation')).toBeInTheDocument();
-            });
-          }
-        }
-      }
+      // Search for partial column name
+      fireEvent.change(filterInput, { target: { value: 'third' } });
+      expect(screen.getByText('third_column')).toBeInTheDocument();
+      expect(screen.queryByText('test_column')).not.toBeInTheDocument();
+      expect(screen.queryByText('another_column')).not.toBeInTheDocument();
     });
   });
 });

@@ -161,7 +161,7 @@ describe("Schema", () => {
         padding: "48px",
         textAlign: "center",
         fontSize: "14px",
-        color: "#575757",
+        color: "#0C1226CC",
       });
     });
   });

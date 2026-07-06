@@ -92,7 +92,8 @@ const DataQuality: React.FC<DataQualityProps> = ({ scanName, allScansStatus }) =
   return (
     <Box sx={{
       display: 'flex',
-      gap: '0.125rem',
+      flexDirection: 'column',
+      gap: '1rem',
       padding: '0 1.25rem 1.25rem 1.25rem',
       height: '100%',
       minHeight: '31.25rem',
@@ -103,8 +104,8 @@ const DataQuality: React.FC<DataQualityProps> = ({ scanName, allScansStatus }) =
         <DataQualitySkeleton />
         ) : (dataQualityAvailable ? (
         <>
-          <CurrentRules dataQualtyScan={dataQualityScan}/>
           <DataQualityStatus dataQualityScan={dataQualityScan}/>
+          <CurrentRules dataQualtyScan={dataQualityScan}/>
         </>)
         : (
           <Box sx={{
@@ -121,7 +122,7 @@ const DataQuality: React.FC<DataQualityProps> = ({ scanName, allScansStatus }) =
           <Typography sx={{
           fontSize: '14px',
           fontWeight: 400,
-          color: '#575757',
+          color: '#0C1226CC',
           lineHeight: '1.43em' }}>
             No published Data Quality available for this entry
           </Typography>

@@ -10,7 +10,7 @@ const { DataCatalogClient } = require('@google-cloud/datacatalog');
 const path = require('path');
 const cors = require('cors');
 const { querySampleFromBigQuery } = require('./utility');
-const { sendAccessRequestEmail, sendFeedbackEmail } = require('./services/emailService');
+const { sendAccessRequestEmail, sendFeedbackEmail, sendDataplexAccessRequest } = require('./services/emailService');
 const { BigQuery } = require('@google-cloud/bigquery');
 const rateLimit = require('express-rate-limit');
 const { default: axios } = require('axios');
@@ -647,6 +647,98 @@ app.get('/api/v1/lookup-entry', async (req, res) => {
   } catch (error) {
     console.error('Error fetching entry', error);
     return checkErrorAndSendResponse(res, error, 'An error occurred while fetching entry from Knowledge Catalog.');
+  }
+});
+
+app.get('/api/v1/lookup-entry-links', async (req, res) => {
+  try {
+    const entryName = req.query.entryName; // full entry resource name
+    const accessToken = req.headers.authorization?.split(' ')[1];
+
+    if (!entryName) {
+      return res.status(400).json({ error: 'entryName is required' });
+    }
+
+    // entryName format: projects/<p>/locations/<loc>/entryGroups/<eg>/entries/<id...>
+    // The `lookupEntryLinks` service must be called at the same location as
+    // the entry (e.g. `us` for BigQuery US entries). The entry-link-types
+    // and entry-mode params are required for definition (term-to-asset) links.
+    const match = entryName.match(/^projects\/([^/]+)\/locations\/([^/]+)\//);
+    if (!match) {
+      return res.status(400).json({ error: 'Invalid entryName format' });
+    }
+    const [, project, location] = match;
+
+    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const dataplexClientv1 = new CatalogServiceClient({ auth: oauth2Client });
+
+    const url = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:lookupEntryLinks`;
+
+    const response = await axios.get(url, {
+      params: {
+        entry: entryName,
+        entry_link_types:
+          'projects/dataplex-types/locations/global/entryLinkTypes/definition',
+        entry_mode: 'SOURCE',
+        page_size: 50,
+      },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const entryLinks = response.data?.entryLinks || [];
+
+    // Collect unique TARGET entry names (the glossary term entries). The same
+    // term can be linked multiple times (asset-level + column-level), so
+    // dedupe by resource name while preserving the `path`s we see.
+    const targetsMap = new Map(); // name -> { name, paths: string[] }
+    entryLinks.forEach((link) => {
+      const refs = link.entryReferences || [];
+      const source = refs.find((r) => r.type === 'SOURCE');
+      const target = refs.find((r) => r.type === 'TARGET');
+      if (!target?.name) return;
+      const path = source?.path || '';
+      if (!targetsMap.has(target.name)) {
+        targetsMap.set(target.name, { name: target.name, paths: path ? [path] : [] });
+      } else if (path) {
+        const existing = targetsMap.get(target.name);
+        if (!existing.paths.includes(path)) existing.paths.push(path);
+      }
+    });
+
+    // Fetch each target term's details in parallel (same pattern as
+    // fetchItemDetails for glossary terms, using getEntry with the full name).
+    const targets = Array.from(targetsMap.values());
+    const termEntries = await Promise.all(
+      targets.map(async ({ name, paths }) => {
+        try {
+          const [entry] = await dataplexClientv1.getEntry({
+            name,
+            view: protos.google.cloud.dataplex.v1.EntryView.ALL,
+          });
+          return { entry, paths };
+        } catch (err) {
+          console.warn('Failed to fetch term entry', name, err?.message || err);
+          return null;
+        }
+      })
+    );
+
+    const terms = termEntries
+      .filter(Boolean)
+      .map(({ entry, paths }) => ({ ...entry, linkedPaths: paths }));
+
+    res.json({ entryLinks, terms });
+  } catch (error) {
+    console.error('Error fetching entry links', error?.response?.data || error);
+    const err = error?.response?.data?.error || error;
+    return checkErrorAndSendResponse(
+      res,
+      err,
+      'An error occurred while fetching entry links from Knowledge Catalog.'
+    );
   }
 });
 
@@ -1829,7 +1921,12 @@ app.post('/api/v1/get-dataset-entries', async (req, res) => {
 app.post('/api/v1/access-request', async (req, res) => {
   
   try {
-    const { assetName, message, requesterEmail, projectId, projectAdmin, isDataProductRequest, accessGroup } = req.body;
+    console.log('INCOMING BODY FROM FRONTEND:', req.body);
+    const { 
+      assetName, message, requesterEmail, projectId, projectAdmin, 
+      isDataProductRequest, accessGroup, 
+      projectNumber, locationId, dataProductId 
+    } = req.body;
     
     // Validation
     if (!assetName || typeof assetName !== 'string' || assetName.trim() === '') {
@@ -1879,7 +1976,51 @@ app.post('/api/v1/access-request', async (req, res) => {
       timestamp: new Date().toISOString()
     }); 
 
-    const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
+    const accessToken = req.headers.authorization?.split(' ')[1];
+
+    if (isDataProductRequest) {
+      console.log('Processing as a Dataplex data product access request...');
+      if (!projectNumber || !locationId || !dataProductId || !accessGroup?.accessGroupId) {
+        console.log('Validation failed: Missing required Dataplex parameters for data product access request');
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required Dataplex parameters (projectNumber, locationId, dataProductId, or accessGroupId)'
+        });
+      }
+
+      console.log('Sending Dataplex access request API call...');
+      const dataplexResult = await sendDataplexAccessRequest(
+        accessToken,
+        projectNumber,
+        locationId,
+        dataProductId,
+        accessGroup.accessGroupId,
+        requesterEmail,
+        message || ''
+      );
+
+      if (!dataplexResult.success) {
+        console.error('Failed to create Dataplex access request:', dataplexResult.error);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to create Dataplex access request',
+          details: dataplexResult.error
+        });
+      }
+      
+      console.log('Dataplex access request created successfully:', dataplexResult.data);
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Dataplex access request submitted successfully',
+        data: {
+          assetName,
+          requesterEmail,
+          projectId,
+          submittedAt: new Date().toISOString()
+        }
+      });
+    }
 
     // Send access request email
     console.log('About to send access request email...');
@@ -1889,7 +2030,7 @@ app.post('/api/v1/access-request', async (req, res) => {
       message || '',
       requesterEmail,
       projectId,
-      projectAdmin || [], // Pass projectAdmin emails,
+      projectAdmin || [],
       isDataProductRequest || false,
       accessGroup || null
     );

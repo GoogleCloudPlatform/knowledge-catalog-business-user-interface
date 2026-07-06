@@ -3,8 +3,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import Tag from '../Tags/Tag';
-import { AccessTime, LocationOnOutlined, LockOutlined } from '@mui/icons-material';
+import { DateRangeOutlined, LocationOnOutlined, LockOutlined } from '@mui/icons-material';
 import BigQueryProductIcon from '../../assets/svg/BigQuery.svg';
+import LookerStudioIcon from "/assets/svg/looker-icon.svg";
 import './SearchEntriesCard.css';
 import { type SxProps, type Theme } from '@mui/material/styles';
 import { fetchEntry, checkEntryAccess, clearHistory } from '../../features/entry/entrySlice';
@@ -298,7 +299,7 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
             flexDirection: 'column',
             gap: '8px',
             backgroundColor: isSelected ? (mode === 'dark' ? '#004a76' : '#EDF2FC') : (mode === 'dark' ? '#131314' : '#FFFFFF'),
-            border: isSelected ? (mode === 'dark' ? '1px solid #8ab4f8' : '1px solid #0E4DCA') : (mode === 'dark' ? '1px solid #3c4043' : '1px solid #DADCE0'),
+            border: isSelected ? (mode === 'dark' ? '1px solid #8ab4f8' : '1px solid #022FCD') : (mode === 'dark' ? '1px solid #3c4043' : '1px solid #DADCE0'),
             borderRadius: '16px',
             height: '120px',
             boxSizing: 'border-box',
@@ -323,7 +324,7 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
               {isGlossaryAssetType(capitalizeFirstLetter(entryType)) ? (
                 getGlossaryMuiIcon(assetNameToGlossaryType(capitalizeFirstLetter(entryType)), {
                   size: '24px',
-                  color: '#4285F4',
+                  color: '#022FCD',
                 })
               ) : getAssetIcon(capitalizeFirstLetter(entryType)) ? (
                 <img
@@ -332,7 +333,9 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
                   style={{
                     width: '24px',
                     height: '24px',
-                    flex: '0 0 auto'
+                    flex: '0 0 auto',
+                    // Tint the asset-type SVG to #076AFF
+                    filter: 'brightness(0) saturate(100%) invert(14%) sepia(97%) saturate(3439%) hue-rotate(231deg) brightness(87%) contrast(100%)',
                   }}
                 />
               ) : null}
@@ -451,77 +454,95 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
             flex: 'none',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', gap: '12px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                 <Tag text={(() => {
                   return systemName.toLowerCase() === 'bigquery' ? 'BigQuery' : systemName.replace("_", " ").replace("-", " ").toLowerCase();
                 })()} className="asset-tag" css={{
-                  fontFamily: '"Google Sans Text", sans-serif',
-                  color: mode === 'dark' ? '#c1e6ff' : '#004A77',
-                  backgroundColor: mode === 'dark' ? '#004a76' : '#C2E7FF',
+                  fontFamily: '"Google Sans", sans-serif',
+                  color: '#076AFF',
+                  background: 'rgba(7, 106, 255, 0.1)',
+                  border: '1px solid rgba(7, 106, 255, 0.2)',
                   margin: 0,
+                  height: 'auto',
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   padding: "4px 12px",
-                  fontSize: "12px",
-                  fontWeight: 500,
-                  borderRadius: '38px',
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  letterSpacing: '0.2px',
+                  lineHeight: 1,
+                  borderRadius: '12px',
                   textTransform: "capitalize",
                   flexShrink: 0,
                   cursor: 'default',
                   transition: 'none',
                 }}/>
                 <Tag text={entryType} className="asset-tag" css={{
-                  fontFamily: '"Google Sans Text", sans-serif',
-                  color: mode === 'dark' ? '#c1e6ff' : '#004A77',
-                  backgroundColor: mode === 'dark' ? '#004a76' : '#C2E7FF',
+                  fontFamily: '"Google Sans", sans-serif',
+                  color: '#076AFF',
+                  background: 'rgba(7, 106, 255, 0.1)',
+                  border: '1px solid rgba(7, 106, 255, 0.2)',
                   margin: 0,
+                  height: 'auto',
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   padding: "4px 12px",
-                  fontSize: "12px",
-                  fontWeight: 500,
-                  borderRadius: '38px',
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  letterSpacing: '0.2px',
+                  lineHeight: 1,
+                  borderRadius: '12px',
                   textTransform: 'capitalize',
                   flexShrink: 0,
                   cursor: 'default',
                   transition: 'none',
                 }}/>
               </div>
-              <Tooltip title={`Last Modified at ${modifiedDate}`} arrow placement='top'>
+              <Box sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                backgroundColor: '#F5FEF8',
+                border: '1px solid #C4E9D8',
+                borderRadius: '12px',
+                padding: '0px 8px',
+                height: '24px',
+                flex: '0 1 auto',
+                minWidth: 0,
+              }}>
+                <LocationOnOutlined sx={{ fontSize: '14px', color: '#027E4C', flexShrink: 0 }} />
+                <Tooltip title={entryData.entrySource.location} arrow placement='top'>
+                  <Typography component="span" sx={{
+                    fontFamily: '"Google Sans", sans-serif',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#027E4C',
+                    lineHeight: 1,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {entryData.entrySource.location.charAt(0).toUpperCase() + entryData.entrySource.location.slice(1)}
+                  </Typography>
+                </Tooltip>
+              </Box>
+              <Tooltip title={`Last Modified: ${modifiedDate}`} arrow placement='top'>
                 <span style={{
-                  color: mode === 'dark' ? '#dedfe0' : '#575757',
-                  fontSize: "12px",
-                  fontWeight: 400,
                   display: "flex",
                   alignItems: "center",
                   flex: '0 0 auto',
                   gap: '4px'
                 }}>
-                  <AccessTime style={{ fontSize: 18 }}/>
-                  <span>{modifiedDate}</span>
-                </span>
-              </Tooltip>
-              <Tooltip title={`Location - ${entryData.entrySource.location}`} arrow placement='top'>
-                <span style={{
-                  color: mode === 'dark' ? '#dedfe0' : '#575757',
-                  fontSize: "12px",
-                  fontWeight: 400,
-                  display: "flex",
-                  alignItems: "center",
-                  flex: '0 1 auto',
-                  gap: '4px',
-                  minWidth: '60px'
-                }}>
-                  <LocationOnOutlined style={{ fontSize: 18, flexShrink: 0 }}/>
+                  <DateRangeOutlined style={{ fontSize: 16, color: '#979DA2' }}/>
                   <span style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {entryData.entrySource.location}
-                  </span>
+                    color: '#979DA2',
+                    whiteSpace: 'nowrap',
+                    fontFamily: '"Product Sans", sans-serif',
+                    fontWeight: 400,
+                    fontSize: '14px',
+                  }}>{modifiedDate}</span>
                 </span>
               </Tooltip>
             </div>
@@ -622,7 +643,7 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
                             '&:hover': { backgroundColor: mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)' },
                           }}
                         >
-                          <img src="/assets/svg/looker-icon.svg" alt="Looker Studio" style={{ width: '20px', height: '20px' }} />
+                          <img src={LookerStudioIcon} alt="Looker Studio" style={{ width: '20px', height: '20px' }} />
                         </Box>
                       </Tooltip>
                     ) : (
@@ -637,7 +658,7 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
                         boxSizing: 'border-box',
                         opacity: 0.4,
                       }}>
-                        <img src="/assets/svg/looker-icon.svg" alt="Looker Studio" style={{ width: '20px', height: '20px' }} />
+                        <img src={LookerStudioIcon} alt="Looker Studio" style={{ width: '20px', height: '20px' }} />
                       </div>
                     )
                   ) : isAccessLoading ? (
@@ -665,7 +686,7 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
                       boxSizing: 'border-box',
                       opacity: 0.4,
                     }}>
-                      <img src="/assets/svg/looker-icon.svg" alt="Looker Studio" style={{ width: '20px', height: '20px' }} />
+                      <img src={LookerStudioIcon} alt="Looker Studio" style={{ width: '20px', height: '20px' }} />
                     </div>
                   )
                 )}
@@ -677,7 +698,7 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
                     sx={{
                       height: '32px',
                       padding: '6px 12px',
-                      background: mode === 'dark' ? '#a7c6fa' : '#0B57D0',
+                      background: mode === 'dark' ? '#a7c6fa' : '#022FCD',
                       borderRadius: '100px',
                       display: 'flex',
                       alignItems: 'center',
@@ -685,7 +706,7 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
                       cursor: 'pointer',
                       boxSizing: 'border-box',
                       transition: 'background-color 0.2s ease',
-                      '&:hover': { backgroundColor: mode === 'dark' ? '#8fb8f0' : '#1A5CD8' },
+                      '&:hover': { backgroundColor: mode === 'dark' ? '#8fb8f0' : '#2c4ecaff' },
                     }}
                   >
                     <span className="view-details-text" style={{
@@ -704,7 +725,7 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
                   <div style={{
                     height: '32px',
                     padding: '6px 12px',
-                    background: mode === 'dark' ? '#a7c6fa' : '#0B57D0',
+                    background: mode === 'dark' ? '#a7c6fa' : '#2c4ecaff',
                     borderRadius: '100px',
                     display: 'flex',
                     alignItems: 'center',
@@ -717,7 +738,7 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
                   <div style={{
                     height: '32px',
                     padding: '6px 12px',
-                    background: mode === 'dark' ? '#a7c6fa' : '#0B57D0',
+                    background: mode === 'dark' ? '#a7c6fa' : '#2c4ecaff',
                     borderRadius: '100px',
                     display: 'flex',
                     alignItems: 'center',

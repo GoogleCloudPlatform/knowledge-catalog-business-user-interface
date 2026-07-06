@@ -1,7 +1,7 @@
 import React from 'react';
 import ArrowRightIcon from '@mui/icons-material/ArrowRight';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import EditNoteIcon from '../../assets/svg/edit_note.svg';
+import EditNoteIcon from '../../assets/svg/ListIcon.svg';
 import DatabaseSchemaIcon from '../../assets/svg/database_schema_icon.svg';
 import { getAspectL2Icon } from '../../constants/aspectIcons';
 
@@ -13,6 +13,7 @@ interface FieldItemProps {
   onToggleField: (path: string) => void;
   fieldPath: string;
   isLast?: boolean;
+  isDataProduct?: boolean;
 }
 
 /**
@@ -25,7 +26,12 @@ const isComplexField = (fieldValue: any): boolean => {
     const values = fieldValue.listValue?.values;
     return values?.some((v: any) => v.kind === 'structValue') ?? false;
   }
-  return false;
+  // Plain JSON array of objects
+  if (Array.isArray(fieldValue)) {
+    return fieldValue.some((v: any) => v && typeof v === 'object');
+  }
+  // Plain JSON nested object (no kind wrapper)
+  return Object.keys(fieldValue).length > 0;
 };
 
 /**
@@ -105,6 +111,7 @@ const FieldItem: React.FC<FieldItemProps> = ({
   onToggleField,
   fieldPath,
   isLast = false,
+  isDataProduct = false,
 }) => {
   const isExpanded = expandedFieldPaths.has(fieldPath);
   const complex = isComplexField(fieldValue);
@@ -120,8 +127,6 @@ const FieldItem: React.FC<FieldItemProps> = ({
 
   // Render expanded content based on field type
   const renderExpandedContent = (): React.ReactNode => {
-    if (!fieldValue || typeof fieldValue !== 'object') return null;
-
     // Simple value types — show value text
     const simpleValueStyle: React.CSSProperties = {
       padding: `6px 0 6px 53px`,
@@ -133,6 +138,11 @@ const FieldItem: React.FC<FieldItemProps> = ({
       lineHeight: 1.5,
     };
 
+    if (fieldValue === null || typeof fieldValue !== 'object') {
+      const val = getSimpleDisplayValue(fieldValue);
+      return val !== null ? <div style={simpleValueStyle}>{val}</div> : null;
+    }
+    
     if (fieldValue.kind === 'stringValue') {
       return <div style={simpleValueStyle}>{fieldValue.stringValue}</div>;
     }
@@ -233,6 +243,7 @@ const FieldItem: React.FC<FieldItemProps> = ({
                     onToggleField={onToggleField}
                     fieldPath={`${fieldPath}.${index}`}
                     isLast={index === values.length - 1}
+                    isDataProduct={isDataProduct}
                   />
                 );
               }
@@ -285,22 +296,86 @@ const FieldItem: React.FC<FieldItemProps> = ({
       );
     }
 
+    // Plain JSON array (no kind wrapper)
+    if (Array.isArray(fieldValue)) {
+      return (
+        <div style={{ paddingLeft: isL2 ? '16px' : '8px' }}>
+          {fieldValue.map((item: any, index: number) => {
+            if (item && typeof item === 'object') {
+              const itemPath = `${fieldPath}.${index}`;
+              const itemExpanded = expandedFieldPaths.has(itemPath);
+              return (
+                <div key={itemPath}>
+                  <div
+                    onClick={() => onToggleField(itemPath)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '0px 16px', minHeight: '36px', cursor: 'pointer',
+                      borderBottom: (!isLast || index < fieldValue.length - 1) ? '1px solid #E9EEF6' : 'none',
+                    }}
+                  >
+                    {itemExpanded
+                      ? <ArrowDropDownIcon sx={{ fontSize: '20px', color: '#575757' }} />
+                      : <ArrowRightIcon sx={{ fontSize: '20px', color: '#575757' }} />}
+                    <span style={{
+                      fontFamily: 'Google Sans Text, sans-serif', fontSize: '12px',
+                      fontWeight: 600, color: '#575757', textTransform: 'capitalize',
+                    }}>
+                      {`${formatFieldName(fieldName)} ${index + 1}`}
+                    </span>
+                  </div>
+                  {itemExpanded && (
+                    <div style={{ padding: '6px 0' }}>
+                      {renderLeafKeyValuePairs(item)}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            const simpleVal = getSimpleDisplayValue(item);
+            if (simpleVal) {
+              return (
+                <div key={`${fieldPath}.${index}`} style={{
+                  padding: '4px 0', fontFamily: 'Google Sans Text, sans-serif',
+                  fontSize: '12px', fontWeight: 400, color: '#1F1F1F',
+                  paddingLeft: '53px', wordBreak: 'break-word',
+                }}>
+                  {simpleVal}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      );
+    }
+
+    // Plain JSON object (no kind wrapper)
+    if (fieldValue && typeof fieldValue === 'object') {
+      return (
+        <div style={{ padding: '6px 0' }}>
+          {renderLeafKeyValuePairs(fieldValue)}
+        </div>
+      );
+    }
     return null;
   };
 
   // L2: depth=0, L3: depth=1
   const rowStyle: React.CSSProperties = isL2
     ? {
-        background: '#F8FAFD',
+        background: isDataProduct ? '#FFFFFF' : '#F8FAFD',
         padding: '12px 12px 12px 24px',
         borderBottom: isLast ? 'none' : '1px solid #E9EEF6',
       }
     : isL3
     ? {
+        background: isDataProduct ? '#FFFFFF' : 'transparent',
         padding: '0px 16px',
         borderBottom: isLast ? 'none' : '1px solid #E9EEF6',
       }
     : {
+        background: isDataProduct ? '#FFFFFF' : 'transparent',
         borderBottom: isLast ? 'none' : '1px solid #E9EEF6',
       };
 
@@ -332,7 +407,7 @@ const FieldItem: React.FC<FieldItemProps> = ({
           <ArrowRightIcon sx={{ fontSize: '20px', color: '#575757' }} />
         )}
         {icon && (
-          <img src={icon} alt="" style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+          <img src={icon} alt="" style={{ width: '12px', height: '12px', flexShrink: 0 }} />
         )}
         <span style={titleStyle}>
           {fieldName}

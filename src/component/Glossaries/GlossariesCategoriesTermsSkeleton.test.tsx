@@ -57,26 +57,25 @@ describe('GlossariesCategoriesTermsSkeleton', () => {
     it('renders exactly 6 card skeleton placeholders', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       // Count by structure - each card has icon + title + 2 desc + footer
-      // 6 cards * 5 skeleton elements per card = 30, plus header = ~33 skeletons
       const skeletons = document.querySelectorAll('.MuiSkeleton-root');
-      // Header: 1 rounded + 1 circular + 1 text = 3
+      // Header: 2 rounded (search bar + sort controls) = 2
       // Each card: 1 circular (icon) + 1 text (title) + 2 text (desc) + 1 circular (time icon) + 1 text (time) = 6
-      // Total: 3 + (6 * 6) = 39 skeletons
-      expect(skeletons.length).toBe(39);
+      // Total: 2 + (6 * 6) = 38 skeletons
+      expect(skeletons.length).toBe(38);
     });
 
     it('renders circular skeleton for card icons', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const circularSkeletons = document.querySelectorAll('.MuiSkeleton-circular');
-      // Header sort icon (1) + 6 card icons (6) + 6 card footer time icons (6) = 13
-      expect(circularSkeletons.length).toBe(13);
+      // 6 card icons (6) + 6 card footer time icons (6) = 12
+      expect(circularSkeletons.length).toBe(12);
     });
 
     it('renders text skeletons for card titles', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const textSkeletons = document.querySelectorAll('.MuiSkeleton-text');
-      // Header sort text (1) + 6 card titles (6) + 12 card descriptions (2 per card) + 6 card times (6) = 25
-      expect(textSkeletons.length).toBe(25);
+      // 6 card titles (6) + 12 card descriptions (2 per card) + 6 card times (6) = 24
+      expect(textSkeletons.length).toBe(24);
     });
 
     it('renders description line skeletons for each card', () => {
@@ -91,8 +90,8 @@ describe('GlossariesCategoriesTermsSkeleton', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const circularSkeletons = document.querySelectorAll('.MuiSkeleton-circular');
       // Each card has a small circular skeleton (16x16) for time icon
-      // 6 cards * 1 time icon = 6 time icons + 6 card icons + 1 header icon = 13
-      expect(circularSkeletons.length).toBe(13);
+      // 6 cards * 1 time icon = 6 time icons + 6 card icons = 12
+      expect(circularSkeletons.length).toBe(12);
     });
   });
 
@@ -100,21 +99,22 @@ describe('GlossariesCategoriesTermsSkeleton', () => {
     it('uses rounded variant for search bar', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const roundedSkeletons = document.querySelectorAll('.MuiSkeleton-rounded');
-      expect(roundedSkeletons.length).toBe(1);
+      // Search bar + sort controls pill = 2 rounded skeletons
+      expect(roundedSkeletons.length).toBe(2);
     });
 
     it('uses circular variant for icons', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const circularSkeletons = document.querySelectorAll('.MuiSkeleton-circular');
-      // 1 header icon + 6 card icons + 6 time icons = 13
-      expect(circularSkeletons.length).toBe(13);
+      // 6 card icons + 6 time icons = 12
+      expect(circularSkeletons.length).toBe(12);
     });
 
     it('uses text variant for text content', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const textSkeletons = document.querySelectorAll('.MuiSkeleton-text');
-      // 1 header sort text + 6 titles + 12 descriptions + 6 times = 25
-      expect(textSkeletons.length).toBe(25);
+      // 6 titles + 12 descriptions + 6 times = 24
+      expect(textSkeletons.length).toBe(24);
     });
   });
 
@@ -148,75 +148,61 @@ describe('GlossariesCategoriesTermsSkeleton', () => {
   });
 
   describe('Skeleton Dimensions', () => {
-    it('renders search bar skeleton with width 309', () => {
+    it('renders search bar skeleton with width 320', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const roundedSkeleton = document.querySelector('.MuiSkeleton-rounded');
       expect(roundedSkeleton).toBeInTheDocument();
       // Width is applied as inline style
-      expect(roundedSkeleton).toHaveStyle({ width: '309px' });
+      expect(roundedSkeleton).toHaveStyle({ width: '320px' });
     });
 
-    it('renders search bar skeleton with height 32', () => {
+    it('renders search bar skeleton with height 36', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const roundedSkeleton = document.querySelector('.MuiSkeleton-rounded');
-      expect(roundedSkeleton).toHaveStyle({ height: '32px' });
-    });
-
-    it('renders header sort icon with dimensions 24x24', () => {
-      render(<GlossariesCategoriesTermsSkeleton />);
-      const circularSkeletons = document.querySelectorAll('.MuiSkeleton-circular');
-      // First circular skeleton is the header sort icon (24x24)
-      expect(circularSkeletons[0]).toHaveStyle({ width: '24px', height: '24px' });
-    });
-
-    it('renders header sort text with width 100', () => {
-      render(<GlossariesCategoriesTermsSkeleton />);
-      const textSkeletons = document.querySelectorAll('.MuiSkeleton-text');
-      // First text skeleton is the header sort text
-      expect(textSkeletons[0]).toHaveStyle({ width: '100px' });
+      expect(roundedSkeleton).toHaveStyle({ height: '36px' });
     });
 
     it('renders card icon skeleton with dimensions 24x24', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const circularSkeletons = document.querySelectorAll('.MuiSkeleton-circular');
-      // Second circular skeleton is the first card icon (24x24)
-      expect(circularSkeletons[1]).toHaveStyle({ width: '24px', height: '24px' });
+      // First circular skeleton is the first card icon (24x24)
+      expect(circularSkeletons[0]).toHaveStyle({ width: '24px', height: '24px' });
     });
 
     it('renders card time icon skeleton with dimensions 16x16', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const circularSkeletons = document.querySelectorAll('.MuiSkeleton-circular');
-      // Circular skeletons are interleaved: header(0), card1-icon(1), card1-time(2), card2-icon(3), card2-time(4), etc.
-      // Index 2 is the first footer time icon (16x16)
-      expect(circularSkeletons[2]).toHaveStyle({ width: '16px', height: '16px' });
+      // Circular skeletons are interleaved: card1-icon(0), card1-time(1), card2-icon(2), card2-time(3), etc.
+      // Index 1 is the first footer time icon (16x16)
+      expect(circularSkeletons[1]).toHaveStyle({ width: '16px', height: '16px' });
     });
 
     it('renders card title skeleton with 60% width', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const textSkeletons = document.querySelectorAll('.MuiSkeleton-text');
-      // Index 1 is the first card title (after header sort text)
-      expect(textSkeletons[1]).toHaveStyle({ width: '60%' });
+      // Index 0 is the first card title
+      expect(textSkeletons[0]).toHaveStyle({ width: '60%' });
     });
 
     it('renders first description line with 100% width', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const textSkeletons = document.querySelectorAll('.MuiSkeleton-text');
-      // Index 2 is the first card's first description line
-      expect(textSkeletons[2]).toHaveStyle({ width: '100%' });
+      // Index 1 is the first card's first description line
+      expect(textSkeletons[1]).toHaveStyle({ width: '100%' });
     });
 
     it('renders second description line with 80% width', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const textSkeletons = document.querySelectorAll('.MuiSkeleton-text');
-      // Index 3 is the first card's second description line
-      expect(textSkeletons[3]).toHaveStyle({ width: '80%' });
+      // Index 2 is the first card's second description line
+      expect(textSkeletons[2]).toHaveStyle({ width: '80%' });
     });
 
     it('renders card footer time text with width 100', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const textSkeletons = document.querySelectorAll('.MuiSkeleton-text');
-      // Index 4 is the first card's footer time text
-      expect(textSkeletons[4]).toHaveStyle({ width: '100px' });
+      // Index 3 is the first card's footer time text
+      expect(textSkeletons[3]).toHaveStyle({ width: '100px' });
     });
   });
 
@@ -228,8 +214,8 @@ describe('GlossariesCategoriesTermsSkeleton', () => {
       const cardIcons = Array.from(circularSkeletons).filter((s) => {
         return s.getAttribute('style')?.includes('24px');
       });
-      // 1 header + 6 card icons = 7 circular skeletons with 24x24
-      expect(cardIcons.length).toBe(7);
+      // 6 card icons = 6 circular skeletons with 24x24
+      expect(cardIcons.length).toBe(6);
     });
 
     it('renders 6 card time icon skeletons (16x16)', () => {
@@ -290,7 +276,7 @@ describe('GlossariesCategoriesTermsSkeleton', () => {
       render(<GlossariesCategoriesTermsSkeleton />);
       const skeletons = document.querySelectorAll('.MuiSkeleton-root');
       // All skeletons should be rendered
-      expect(skeletons.length).toBe(39);
+      expect(skeletons.length).toBe(38);
     });
 
     it('renders with visible animation for loading indication', () => {
@@ -319,9 +305,9 @@ describe('GlossariesCategoriesTermsSkeleton', () => {
       const textSkeletons = document.querySelectorAll('.MuiSkeleton-text');
 
       // Each card has exactly: 2 circular (icon + time) + 4 text (title + 2 desc + time)
-      // 6 cards = 12 circular + 24 text + 1 header circular + 1 header text = 13 circular + 25 text
-      expect(circularSkeletons.length).toBe(13);
-      expect(textSkeletons.length).toBe(25);
+      // 6 cards = 12 circular + 24 text (header has 2 rounded, no circular/text)
+      expect(circularSkeletons.length).toBe(12);
+      expect(textSkeletons.length).toBe(24);
     });
 
     it('renders the component without any text content', () => {
@@ -367,8 +353,8 @@ describe('GlossariesCategoriesTermsSkeleton', () => {
       );
 
       const skeletons = container.querySelectorAll('.MuiSkeleton-root');
-      // 39 skeletons per component * 2 = 78
-      expect(skeletons.length).toBe(78);
+      // 38 skeletons per component * 2 = 76
+      expect(skeletons.length).toBe(76);
     });
 
     it('does not throw errors when unmounted', () => {

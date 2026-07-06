@@ -9,9 +9,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 0;
-  gap: 8px;
-  background-color: var(--sys-surface-container-high);
+  padding: 16px 0 20px;
+  gap: 40px;
+  background-color: #FEFEFF;
+  border-right: 1px solid #E8EEF5;
   box-sizing: border-box;
   position: relative;
   z-index: 1200;
@@ -22,18 +23,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 23px;
+  gap: 16px;
   width: 100%;
   flex: 1;
-}
-
-/* Bottom section for dark mode toggle */
-.sidebar-bottom-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0 0 16px;
-  width: 100%;
 }
 
 /* Individual Menu Item */
@@ -41,76 +33,60 @@
   width: 96px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  padding: 0;
-  gap: 7px;
+  padding: 12px 0;
+  gap: 4px;
   cursor: pointer;
   transition: background-color 0.2s ease;
   box-sizing: border-box;
 }
 
-/* Single-line label: 52px height */
 .sidebar-menu-item.single-line {
-  height: 52px;
+  height: 68px;
 }
 
-/* Two-line label: 68px height */
 .sidebar-menu-item.two-line {
-  height: 68px;
+  height: 84px;
 }
 
 /* Icon container (pill shape) */
 .menu-icon-container {
   width: 56px;
-  height: 32px;
+  height: 28px;
   display: flex;
-  flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 4px 12px;
-  gap: 6px;
-  border-radius: 1000px;
-  transition: background-color 0.2s ease;
+  border-radius: 16px;
   box-sizing: border-box;
 }
 
-/* Active state */
-.sidebar-menu-item.active .menu-icon-container {
-  background-color: var(--sys-primary-container);
-}
-
-.sidebar-menu-item.active .menu-label {
-  color: var(--sys-on-secondary-fixed);
-}
-
-/* Inactive state */
-.sidebar-menu-item:not(.active) .menu-icon-container {
-  background-color: transparent;
+/* Active state — tinted cell background */
+.sidebar-menu-item.active {
+  background: rgba(234, 238, 250, 0.6);
 }
 
 /* Hover state (inactive items) */
-.sidebar-menu-item:not(.active):not(.disabled):hover .menu-icon-container {
-  background-color: color-mix(in srgb, var(--sys-on-surface) 4%, transparent);
+.sidebar-menu-item:not(.active):not(.disabled):hover {
+  background: rgba(234, 238, 250, 0.6);
 }
 
 /* Material Symbols icon */
 .sidebar-icon {
   font-size: 24px;
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  color: var(--sys-on-surface-variant);
-  transition: font-variation-settings 0.3s ease, transform 0.2s ease;
+  color: #6A6E7B;
+  transition: font-variation-settings 0.3s ease, transform 0.2s ease, color 0.2s ease;
 }
 
-/* Hover: enlarge + fill */
 .sidebar-menu-item:not(.active):not(.disabled):hover .sidebar-icon {
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   transform: scale(1.10);
 }
 
-/* Active: filled icon */
 .sidebar-menu-item.active .sidebar-icon {
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  color: var(--sys-on-secondary-fixed);
+  color: #022FCD;
   transform: scale(1.10);
 }
 
@@ -119,7 +95,7 @@
   width: 96px;
   font-family: 'Google Sans', sans-serif;
   font-style: normal;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 12px;
   line-height: 16px;
   display: flex;
@@ -127,7 +103,12 @@
   text-align: center;
   justify-content: center;
   letter-spacing: 0.1px;
-  color: var(--sys-on-surface-variant);
+  color: #6A6E7B;
+  transition: color 0.2s ease;
+}
+
+.sidebar-menu-item.active .menu-label {
+  color: #022FCD;
 }
 
 /* Disabled state */
@@ -140,8 +121,13 @@
   background-color: transparent;
 }
 
-.sidebar-menu-item.disabled .menu-label {
-  color: var(--sys-on-surface-variant);
+/* Version number */
+.sidebar-version {
+  font-size: 10px;
+  color: #6A6E7B;
+  opacity: 0.5;
+  letter-spacing: 0.2px;
+  align-self: center;
 }
 
 /* Responsive: Hide sidebar on mobile */
@@ -157,4 +143,50 @@
     width: 96px;
     min-width: 96px;
   }
+}
+
+.dp-icon {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+}
+
+.dp-icon .dp-outline,
+.dp-icon .dp-filled {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Outline: fully visible by default, retreats from the left on reveal */
+.dp-icon .dp-outline {
+  clip-path: inset(0 0 0 0);
+  transition: clip-path 0.35s ease;
+}
+
+/* Filled: clipped away from the right by default */
+.dp-icon .dp-filled {
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.35s ease;
+}
+
+/* On hover/active: filled grows in from the left, outline retreats from the left */
+.sidebar-menu-item:not(.disabled):hover .dp-icon .dp-filled,
+.sidebar-menu-item.active .dp-icon .dp-filled {
+  clip-path: inset(0 0 0 0);
+}
+
+.sidebar-menu-item:not(.disabled):hover .dp-icon .dp-outline,
+.sidebar-menu-item.active .dp-icon .dp-outline {
+  clip-path: inset(0 0 0 100%);
+}
+
+/* Data Products: scale a bit more than the other icons */
+.sidebar-menu-item:not(.active):not(.disabled):hover .dp-icon .sidebar-icon {
+  transform: scale(1.20);
+}
+
+.sidebar-menu-item.active .dp-icon .sidebar-icon {
+  transform: scale(1.20);
 }

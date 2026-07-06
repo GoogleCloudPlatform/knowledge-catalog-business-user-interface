@@ -1,7 +1,7 @@
 {
-  "name": "dataplex-business-ui-api",
-  "version": "1.0.1",
-  "description": "Backend api for dataplex-business-ui to communicate with dataplex api's",
+  "name": "knowledge-catalog-business-ui-api",
+  "version": "1.4.0",
+  "description": "Backend api for knowledge-catalog-business-ui to communicate with knowledge catalog api's",
   "main": "index.js",
   "scripts": {
     "start": "node --env-file-if-exists=.env.test server.js",

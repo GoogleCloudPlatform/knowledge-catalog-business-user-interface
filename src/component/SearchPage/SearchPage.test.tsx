@@ -314,7 +314,7 @@ describe("SearchPage", () => {
 
       await waitFor(() => {
         const iconSpan = screen.getByTestId("CloseIcon").closest("span");
-        expect(iconSpan).toHaveStyle({ background: "#0E4DCA" });
+        expect(iconSpan).toHaveStyle({ background: "#022FCD" });
       });
 
       // Click to close again
@@ -1194,7 +1194,7 @@ describe("SearchPage", () => {
 
       const closeIcon = screen.getByTestId("CloseIcon").closest("span");
       expect(closeIcon).toHaveStyle({
-        background: "#0E4DCA",
+        background: "#022FCD",
         borderRadius: "59px",
         padding: "8px 13px",
       });

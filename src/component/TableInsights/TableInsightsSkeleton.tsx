@@ -1,63 +1,66 @@
 import React from 'react';
 import { Box, Skeleton } from '@mui/material';
 
+const cardSx = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  padding: '24px',
+  gap: '16px',
+  width: '100%',
+  boxSizing: 'border-box',
+  background: '#FFFFFF',
+  border: '1px solid #ECEEF4',
+  borderRadius: '12px',
+} as const;
+
+/** Mirrors the icon + title + help-icon header used by the insights cards. */
+const SectionHeaderSkeleton: React.FC = () => (
+  <>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+      <Skeleton variant="rounded" width={32} height={32} sx={{ borderRadius: '6px', flexShrink: 0 }} />
+      <Skeleton variant="text" width={160} height={24} />
+      <Skeleton variant="circular" width={16} height={16} />
+    </Box>
+    <Skeleton variant="rectangular" width="100%" height={1} sx={{ mt: '-4px' }} />
+  </>
+);
+
 const TableInsightsSkeleton: React.FC = () => {
   return (
-    <Box className="insights-skeleton">
+    <Box className="insights-skeleton" sx={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
       {/* Table Description Section Skeleton */}
-      <Box className="insights-section" sx={{ mb: 2 }}>
-        <Box className="insights-section__header" sx={{ p: 2, backgroundColor: '#F8FAFD', borderRadius: '8px 8px 0 0' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Skeleton variant="circular" width={24} height={24} />
-            <Skeleton variant="text" width={150} height={24} />
-            <Skeleton variant="circular" width={16} height={16} />
+      <Box className="insights-section" sx={cardSx}>
+        <SectionHeaderSkeleton />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+          <Box sx={{ width: '100%' }}>
+            <Skeleton variant="text" width="100%" height={20} />
+            <Skeleton variant="text" width="95%" height={20} />
+            <Skeleton variant="text" width="80%" height={20} />
           </Box>
-          <Skeleton variant="circular" width={24} height={24} />
-        </Box>
-        <Box sx={{ p: 2, backgroundColor: '#FFFFFF', borderRadius: '0 0 8px 8px', border: '1px solid #DADCE0', borderTop: 'none' }}>
-          <Skeleton variant="text" width="100%" height={20} />
-          <Skeleton variant="text" width="90%" height={20} />
-          <Skeleton variant="text" width="30%" height={20} sx={{ mt: 1 }} />
+          {/* "View column descriptions" link */}
+          <Skeleton variant="text" width={150} height={16} />
         </Box>
       </Box>
 
       {/* Generated Queries Section Skeleton */}
-      <Box className="insights-section">
-        <Box className="insights-section__header" sx={{ p: 2, backgroundColor: '#F8FAFD', borderRadius: '8px 8px 0 0' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Skeleton variant="circular" width={24} height={24} />
-            <Skeleton variant="text" width={150} height={24} />
-            <Skeleton variant="circular" width={16} height={16} />
-          </Box>
-          <Skeleton variant="circular" width={24} height={24} />
-        </Box>
+      <Box className="insights-section" sx={cardSx}>
+        <SectionHeaderSkeleton />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+          {/* Filter Bar */}
+          <Skeleton variant="rounded" width="100%" height={32} sx={{ maxWidth: '350px', borderRadius: '54px' }} />
 
-        {/* Filter Bar Skeleton */}
-        <Box sx={{ p: 1.5, borderBottom: '1px solid #DADCE0', display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Skeleton variant="circular" width={16} height={16} />
-          <Skeleton variant="text" width={40} height={20} />
-          <Skeleton variant="text" width={200} height={20} />
-        </Box>
-
-        {/* Query Items Skeleton */}
-        {[1, 2, 3].map((item) => (
-          <Box
-            key={item}
-            sx={{
-              p: 2,
-              borderBottom: '1px solid #E1E3E1',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
-              <Skeleton variant="circular" width={20} height={20} />
-              <Skeleton variant="text" width="60%" height={20} />
+          {/* Date Group Headers */}
+          {[1, 2, 3].map((item) => (
+            <Box
+              key={item}
+              sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}
+            >
+              <Skeleton variant="text" width={220} height={24} />
+              <Skeleton variant="circular" width={24} height={24} />
             </Box>
-            <Skeleton variant="circular" width={24} height={24} />
-          </Box>
-        ))}
+          ))}
+        </Box>
       </Box>
     </Box>
   );

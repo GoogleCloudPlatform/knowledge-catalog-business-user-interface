@@ -151,11 +151,10 @@ describe('SubmitAccess', () => {
     expect(screen.getByText(/Request Access for "Test-asset"/i)).toBeInTheDocument();
   });
 
-  it('displays current and modified dates', () => {
+  it('displays request time', () => {
     renderSubmitAccess();
 
-    expect(screen.getByText('Creation Time')).toBeInTheDocument();
-    expect(screen.getByText('Modification time')).toBeInTheDocument();
+    expect(screen.getByText('Request Date')).toBeInTheDocument();
   });
 
   it('displays contact information', () => {
@@ -169,7 +168,8 @@ describe('SubmitAccess', () => {
   it('renders message input field', () => {
     renderSubmitAccess();
     
-    const messageInput = screen.getByPlaceholderText('Enter your message here...');
+    // Use regex to ignore extra characters like '*'
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
     expect(messageInput).toBeInTheDocument();
     expect(messageInput).toHaveAttribute('rows', '6');
   });
@@ -177,7 +177,7 @@ describe('SubmitAccess', () => {
   it('updates message when user types', () => {
     renderSubmitAccess();
     
-    const messageInput = screen.getByPlaceholderText('Enter your message here...');
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
     fireEvent.change(messageInput, { target: { value: 'Test message' } });
     
     expect(messageInput).toHaveValue('Test message');
@@ -206,7 +206,7 @@ describe('SubmitAccess', () => {
   it('clears message when cancel is clicked', () => {
     renderSubmitAccess();
     
-    const messageInput = screen.getByPlaceholderText('Enter your message here...');
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
     fireEvent.change(messageInput, { target: { value: 'Test message' } });
     
     const cancelButton = screen.getByText('Cancel');
@@ -272,7 +272,7 @@ describe('SubmitAccess', () => {
       expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
     });
 
-    const messageInput = screen.getByPlaceholderText('Enter your message here...');
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
     fireEvent.change(messageInput, { target: { value: 'Test access request' } });
 
     const submitButton = screen.getByText('Submit');
@@ -304,16 +304,19 @@ describe('SubmitAccess', () => {
 
   it('handles API error response', async () => {
     vi.mocked(axios.post).mockRejectedValueOnce(new Error('API Error'));
-
     renderSubmitAccess();
 
-    const messageInput = screen.getByPlaceholderText('Enter your message here...');
+    // Wait for contacts
+    await waitFor(() => {
+      expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+    });
+
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
     fireEvent.change(messageInput, { target: { value: 'Test message' } });
 
     const submitButton = screen.getByText('Submit');
     fireEvent.click(submitButton);
 
-    // Should make the API call but handle error gracefully
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalled();
     });
@@ -321,16 +324,19 @@ describe('SubmitAccess', () => {
 
   it('handles network error', async () => {
     vi.mocked(axios.post).mockRejectedValueOnce(new Error('Network Error'));
-
     renderSubmitAccess();
 
-    const messageInput = screen.getByPlaceholderText('Enter your message here...');
+    // Wait for contacts
+    await waitFor(() => {
+      expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+    });
+
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
     fireEvent.change(messageInput, { target: { value: 'Test message' } });
 
     const submitButton = screen.getByText('Submit');
     fireEvent.click(submitButton);
 
-    // Should make the API call but handle error gracefully
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalled();
     });
@@ -338,16 +344,19 @@ describe('SubmitAccess', () => {
 
   it('handles submission state correctly', async () => {
     vi.mocked(axios.post).mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve({ data: { success: true } }), 100)));
-
     renderSubmitAccess();
 
-    const messageInput = screen.getByPlaceholderText('Enter your message here...');
+    // Wait for contacts
+    await waitFor(() => {
+      expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+    });
+
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
     fireEvent.change(messageInput, { target: { value: 'Test message' } });
 
     const submitButton = screen.getByText('Submit');
     fireEvent.click(submitButton);
 
-    // Should make the API call
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalled();
     });
@@ -382,14 +391,17 @@ describe('SubmitAccess', () => {
   });
 
   it('auto-closes after successful submission', async () => {
-    vi.mocked(axios.post).mockResolvedValueOnce({
-      data: { success: true }
-    });
-
+    vi.mocked(axios.post).mockResolvedValueOnce({ data: { success: true } });
     const mockOnClose = vi.fn();
     renderSubmitAccess({ onClose: mockOnClose });
 
-    const messageInput = screen.getByPlaceholderText('Enter your message here...');
+    // Wait for contacts to load before doing anything
+    await waitFor(() => {
+      expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+    });
+
+    // Use regex to ignore the trailing asterisk
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
     fireEvent.change(messageInput, { target: { value: 'Test message' } });
 
     const submitButton = screen.getByText('Submit');
@@ -401,13 +413,14 @@ describe('SubmitAccess', () => {
   });
 
   it('clears message after successful submission', async () => {
-    vi.mocked(axios.post).mockResolvedValueOnce({
-      data: { success: true }
-    });
-
+    vi.mocked(axios.post).mockResolvedValueOnce({ data: { success: true } });
     renderSubmitAccess();
 
-    const messageInput = screen.getByPlaceholderText('Enter your message here...');
+    await waitFor(() => {
+      expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+    });
+
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
     fireEvent.change(messageInput, { target: { value: 'Test message' } });
 
     const submitButton = screen.getByText('Submit');
@@ -652,60 +665,22 @@ describe('SubmitAccess', () => {
   });
 
   describe('Date/Time Formatting', () => {
-    it('formats Unix seconds timestamp correctly', () => {
+    it('displays the Request Date instead of Creation/Modification time', () => {
       renderSubmitAccess();
 
-      // Should display formatted date
-      expect(screen.getByText('Creation Time')).toBeInTheDocument();
-      expect(screen.getByText('Modification time')).toBeInTheDocument();
+      expect(screen.getByText('Request Date')).toBeInTheDocument();
+
+      expect(screen.queryByText('Creation Time')).not.toBeInTheDocument();
+      expect(screen.queryByText('Modification time')).not.toBeInTheDocument();
     });
 
-    it('formats ISO 8601 timestamp correctly in lookup mode', async () => {
-      const lookupEntry = {
-        name: 'lookup/entry',
-        entryType: 'entries/456',
-        aspects: {
-          '456.global.contacts': {
-            data: {
-              identities: [
-                { name: 'User <user@example.com>', role: 'Owner' }
-              ]
-            }
-          }
-        }
+    it('handles missing previewData timestamps gracefully', () => {
+      const previewWithoutDates = {
+        name: 'test-preview'
       };
 
-      const lookupPreview = {
-        createTime: '2021-01-01T10:30:45Z',
-        updateTime: '2021-01-02T14:20:30Z'
-      };
-
-      renderSubmitAccess({ entry: lookupEntry, previewData: lookupPreview, isLookup: true });
-
-      await waitFor(() => {
-        // Dates are formatted by getFormattedDateTimePartsByDateTime
-        expect(screen.getByText(/January 1, 2021/)).toBeInTheDocument();
-      });
-    });
-
-    it('handles missing createTime', () => {
-      const previewWithoutCreate = {
-        updateTime: { seconds: 1609545600 }
-      };
-
-      renderSubmitAccess({ previewData: previewWithoutCreate });
-
-      expect(screen.getByText(/Request Access for/i)).toBeInTheDocument();
-    });
-
-    it('handles missing updateTime', () => {
-      const previewWithoutUpdate = {
-        createTime: { seconds: 1609459200 }
-      };
-
-      renderSubmitAccess({ previewData: previewWithoutUpdate });
-
-      expect(screen.getByText(/Request Access for/i)).toBeInTheDocument();
+      renderSubmitAccess({ previewData: previewWithoutDates });
+      expect(screen.getByText('Request Date')).toBeInTheDocument();
     });
   });
 
@@ -754,28 +729,41 @@ describe('SubmitAccess', () => {
     });
 
     it('clears message field after submit is initiated', async () => {
-      vi.mocked(axios.post).mockResolvedValueOnce({ data: { success: true } });
+    vi.mocked(axios.post).mockResolvedValueOnce({ data: { success: true } });
+    renderSubmitAccess();
 
-      renderSubmitAccess();
-
-      const messageInput = screen.getByPlaceholderText('Enter your message here...');
-      fireEvent.change(messageInput, { target: { value: 'Test message' } });
-
-      const submitButton = screen.getByText('Submit');
-      fireEvent.click(submitButton);
-
-      await waitFor(() => {
-        expect(messageInput).toHaveValue('');
-      }, { timeout: 3000 });
+    // 1. Wait for contacts to load
+    await waitFor(() => {
+      expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
     });
+
+    // 2. Use Regex for placeholder
+    const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
+    fireEvent.change(messageInput, { target: { value: 'Test message' } });
+
+    const submitButton = screen.getByText('Submit');
+    fireEvent.click(submitButton);
+
+    // 3. Now it will correctly clear the string
+    await waitFor(() => {
+      expect(messageInput).toHaveValue('');
+    }, { timeout: 3000 });
+  });
   });
 
   describe('API Success Flow', () => {
     it('calls onSubmitSuccess with correct assetName', async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({ data: { success: true } });
-
       const mockOnSubmitSuccess = vi.fn();
       renderSubmitAccess({ onSubmitSuccess: mockOnSubmitSuccess });
+
+      // Wait for contacts to load
+      await waitFor(() => {
+        expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+      });
+
+      const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
+      fireEvent.change(messageInput, { target: { value: 'Test message' } });
 
       const submitButton = screen.getByText('Submit');
       fireEvent.click(submitButton);
@@ -787,29 +775,49 @@ describe('SubmitAccess', () => {
 
     it('auto-closes after 2 second timeout on success', async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({ data: { success: true } });
-
       const mockOnClose = vi.fn();
       renderSubmitAccess({ onClose: mockOnClose });
 
+      // 1. Wait for contacts to load using real timers
+      await waitFor(() => {
+        expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+      });
+
+      const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
+      fireEvent.change(messageInput, { target: { value: 'Test message' } });
+
+      // 2. NOW start fake timers to bypass the 2000ms delay
+      vi.useFakeTimers();
+
       const submitButton = screen.getByText('Submit');
       fireEvent.click(submitButton);
 
-      await waitFor(() => {
-        expect(mockOnClose).toHaveBeenCalled();
-      }, { timeout: 3000 });
+      // 3. Fast forward time safely
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(mockOnClose).toHaveBeenCalled();
+
+      // 4. Clean up
+      vi.useRealTimers();
     });
   });
 
-  describe('Error Handling', () => {
+describe('Error Handling', () => {
     it('handles axios error gracefully', async () => {
       vi.mocked(axios.post).mockRejectedValueOnce(new Error('Network error'));
-
       renderSubmitAccess();
+
+      // Wait for contacts to load
+      await waitFor(() => {
+        expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+      });
+
+      const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
+      fireEvent.change(messageInput, { target: { value: 'Test message' } });
 
       const submitButton = screen.getByText('Submit');
       fireEvent.click(submitButton);
 
-      // Should not crash
       await waitFor(() => {
         expect(axios.post).toHaveBeenCalled();
       });
@@ -817,8 +825,15 @@ describe('SubmitAccess', () => {
 
     it('handles API response with success: false', async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({ data: { success: false, error: 'API Error' } });
-
       renderSubmitAccess();
+
+      // Wait for contacts to load
+      await waitFor(() => {
+        expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+      });
+
+      const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
+      fireEvent.change(messageInput, { target: { value: 'Test message' } });
 
       const submitButton = screen.getByText('Submit');
       fireEvent.click(submitButton);
@@ -864,8 +879,15 @@ describe('SubmitAccess', () => {
 
     it('verifies Authorization header uses user.token from AuthContext', async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({ data: { success: true } });
-
       renderSubmitAccess();
+
+      // Wait for contacts to load
+      await waitFor(() => {
+        expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
+      });
+
+      const messageInput = screen.getByPlaceholderText(/Enter your message here/i);
+      fireEvent.change(messageInput, { target: { value: 'Test message' } });
 
       const submitButton = screen.getByText('Submit');
       fireEvent.click(submitButton);

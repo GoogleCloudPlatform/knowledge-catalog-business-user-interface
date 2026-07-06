@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Box, Typography, IconButton, Collapse, InputBase, Tooltip } from '@mui/material';
-import { ExpandMore, ExpandLess, HelpOutline, FilterList } from '@mui/icons-material';
+import { Box, Typography, IconButton, Collapse, Tooltip, Divider } from '@mui/material';
+import { ExpandMore, ExpandLess, AutoFixHighOutlined, HelpOutline } from '@mui/icons-material';
 import TableInsightsQueryItem from './TableInsightsQueryItem'; 
 import type { GroupedQueries } from '../../utils/insightsUtils'; 
-
+import QueryFilterBar from '../../component/Common/QueryFilterBar';
 interface TableInsightsGeneratedQueriesProps {
   groupedQueries: GroupedQueries[];
   searchTerm: string;
@@ -15,13 +15,7 @@ const TableInsightsGeneratedQueries: React.FC<TableInsightsGeneratedQueriesProps
   searchTerm,
   onSearchTermChange,
 }) => {
-  const [mainExpanded, setMainExpanded] = useState(true);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
-
-  const handleMainToggle = () => {
-    setMainExpanded(!mainExpanded);
-  };
-
   const handleDateToggle = (dateKey: string) => {
     const newExpanded = new Set(expandedDates);
     if (newExpanded.has(dateKey)) {
@@ -32,80 +26,40 @@ const TableInsightsGeneratedQueries: React.FC<TableInsightsGeneratedQueriesProps
     setExpandedDates(newExpanded);
   };
 
-  return (
-    <Box className="insights-section insights-section--queries">
-      {/* Header */}
-      <Box
-        className="insights-section__header"
-        onClick={handleMainToggle}
-        sx={{ cursor: 'pointer' }}
-      >
-        <Box className="insights-section__header-left">
-          <Typography
-            className="insights-section__title"
-            sx={{
-              fontFamily: '"Google Sans"',
-              fontStyle: 'normal',
-              fontWeight: 500,
-              fontSize: '18px',
-              lineHeight: '24px',
-              color: '#1F1F1F',
-            }}
-          >
-            Generated Queries
-          </Typography>
-          <Tooltip title="AI-generated SQL queries based on the table's schema and data patterns">
-            <HelpOutline sx={{ fontSize: 16, color: '#575757', cursor: 'help' }} />
-          </Tooltip>
+ return (
+  <Box sx={{
+    display: "flex", flexDirection: "column", alignItems: "flex-start",
+    padding: "24px", gap: "16px", width: "100%", boxSizing: "border-box",
+    background: "#FFFFFF", border: "1px solid #ECEEF4", borderRadius: "12px",
+  }}>
+    {/* Header */}
+    <Box 
+      sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <Box sx={{ width: "32px", height: "32px", background: "#EAEEFA", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <AutoFixHighOutlined sx={{ fontSize: "20px", color: "#022FCD" }} /> 
         </Box>
-        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleMainToggle(); }}>
-          {mainExpanded ? <ExpandLess /> : <ExpandMore />}
-        </IconButton>
+        <Typography sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 600, fontSize: "18px", color: "#3D4151" }}>
+          Generated Queries
+        </Typography>
+        <Tooltip title="AI-generated SQL queries based on the table's schema and data patterns">
+          <HelpOutline sx={{ fontSize: 16, color: '#575757' }} />
+        </Tooltip>
       </Box>
+    </Box>
 
-      <Collapse in={mainExpanded}>
-        {/* Filter Bar */}
-        <Box className="insights-filter-bar">
-          <FilterList sx={{ fontSize: 16, color: '#1F1F1F' }} />
-          <Typography
-            sx={{
-              fontFamily: '"Google Sans"',
-              fontStyle: 'normal',
-              fontWeight: 500,
-              fontSize: '12px',
-              lineHeight: '20px',
-              color: '#1F1F1F',
-            }}
-          >
-            Filter
-          </Typography>
-          <InputBase
-            placeholder="Search query description"
-            value={searchTerm}
-            onChange={(e) => onSearchTermChange(e.target.value)}
-            sx={{
-              fontFamily: '"Google Sans"',
-              fontStyle: 'normal',
-              fontWeight: 400,
-              fontSize: '12px',
-              lineHeight: '20px',
-              color: '#575757',
-              flex: 1,
-              '& .MuiInputBase-input::placeholder': {
-                fontFamily: '"Google Sans"',
-                fontStyle: 'normal',
-                fontWeight: 400,
-                fontSize: '12px',
-                lineHeight: '20px',
-                color: '#575757',
-                opacity: 1,
-              },
-            }}
+    <Divider sx={{ width: "100%", borderColor: "#E8EBEF", margin: "-4px 0 0 0" }} />
+
+      <Box sx={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <QueryFilterBar 
+            searchTerm={searchTerm} 
+            onSearchTermChange={onSearchTermChange} 
+            placeholder="Search query description" 
           />
-        </Box>
 
         {/* Query Groups by Date */}
-        <Box className="insights-queries-list">
+        <Box className="insights-queries-list" sx={{ width: "100%" }}>
           {groupedQueries.length === 0 ? (
             <Box className="insights-queries-empty">
               <Typography>No queries match your search criteria.</Typography>
@@ -120,12 +74,11 @@ const TableInsightsGeneratedQueries: React.FC<TableInsightsGeneratedQueriesProps
                 >
                   <Typography
                     sx={{
-                      fontFamily: '"Google Sans"',
-                      fontStyle: 'normal',
-                      fontWeight: 500,
-                      fontSize: '16px',
+                      fontFamily: '"Google Sans", sans-serif',
+                      fontWeight: 600,
+                      fontSize: '15px',
                       lineHeight: '24px',
-                      color: '#1F1F1F',
+                      color: '#3D4151',
                     }}
                   >
                     Generated date: {group.formattedDate}
@@ -137,7 +90,15 @@ const TableInsightsGeneratedQueries: React.FC<TableInsightsGeneratedQueriesProps
 
                 {/* Queries for this date */}
                 <Collapse in={expandedDates.has(group.jobUid)}>
-                  <Box className="insights-date-group__queries">
+                  <Box 
+                    className="insights-date-group__queries"
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '16px',
+                      gap: '16px',
+                    }}
+                  >
                     {group.queries.map((query, index) => (
                       <TableInsightsQueryItem
                         key={`${group.jobUid}-${index}`}
@@ -150,7 +111,7 @@ const TableInsightsGeneratedQueries: React.FC<TableInsightsGeneratedQueriesProps
             ))
           )}
         </Box>
-      </Collapse>
+        </Box>
     </Box>
   );
 };

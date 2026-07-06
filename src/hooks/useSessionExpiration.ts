@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import store from '../app/store';
 
 interface SessionExpirationConfig {
   checkInterval?: number; // milliseconds
@@ -9,14 +10,14 @@ interface SessionExpirationConfig {
 
 /**
  * Synchronously checks if the stored token is expired.
- * Used for initial state to prevent flash of content on new tab load.
+ * Reads from Redux store (hydrated by redux-persist) to prevent flash of content on new tab load.
  */
 function getInitialExpirationState(): { isExpired: boolean; reason: 'session_expired' | 'token_expired' | 'unauthorized' } {
   try {
-    const storedData = JSON.parse(localStorage.getItem('sessionUserData') || 'null');
-    if (storedData?.tokenExpiry) {
+    const userData = store.getState().user.userData as any;
+    if (userData?.tokenExpiry) {
       const now = Date.now() / 1000;
-      if (storedData.tokenExpiry < now) {
+      if (userData.tokenExpiry < now) {
         return { isExpired: true, reason: 'token_expired' };
       }
     }
@@ -32,7 +33,7 @@ export const useSessionExpiration = (config: SessionExpirationConfig = {}) => {
   const [expirationReason, setExpirationReason] = useState<'session_expired' | 'token_expired' | 'unauthorized'>(
     () => getInitialExpirationState().reason
   );
-  
+
   const {
     checkInterval = 30000, // Check every 30 seconds by default
     onSessionExpired,
@@ -47,32 +48,22 @@ export const useSessionExpiration = (config: SessionExpirationConfig = {}) => {
     try {
       // Check if user object has token expiration info
       const now = Date.now() / 1000; // Current time in seconds
-      
-      // Since the User type doesn't have tokenExpiry, we'll check the stored session data
-      const storedData = JSON.parse(localStorage.getItem('sessionUserData') || 'null');
-      if (storedData?.tokenExpiry && storedData.tokenExpiry < now) {
+
+      const tokenExpiry = (user as any)?.tokenExpiry;
+      if (tokenExpiry && tokenExpiry < now) {
         setExpirationReason('token_expired');
         setIsExpired(true);
         onTokenExpired?.();
         return;
       }
 
-      // You can add additional checks here, such as:
-      // - Making a lightweight API call to validate the token
-      // - Checking localStorage for session data
-      // - Validating JWT token if you're using JWT
-
-      // Example: Check if there's a stored token and validate it
-      const storedToken = localStorage.getItem('sessionUserData');
-      if (!storedToken) {
+      // Check if user exists in Redux (no token = session expired)
+      if (!user) {
         setExpirationReason('session_expired');
         setIsExpired(true);
         onSessionExpired?.();
         return;
       }
-
-      // Optional: Make a lightweight API call to validate the token
-      // This can be uncommented and modified as needed for additional token validation
 
     } catch (error) {
       console.error('Error checking session validity:', error);
@@ -86,7 +77,7 @@ export const useSessionExpiration = (config: SessionExpirationConfig = {}) => {
     }
 
     const interval = setInterval(checkTokenValidity, checkInterval);
-    
+
     // Check immediately
     checkTokenValidity();
 

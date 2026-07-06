@@ -246,7 +246,7 @@ return (
                   borderColor: '#B8B8B8'
                 },
                 '&.Mui-focused fieldset': {
-                  borderColor: '#0E4DCA'
+                  borderColor: '#022FCD'
                 }
               },
               '& .MuiInputBase-input': {
@@ -292,11 +292,11 @@ return (
             if(contactEmails.length > 0 && message.length > 0) handleSubmit();
           }}
           variant="contained"
-          style={{color: '#FFFFFF',backgroundColor: '#0E4DCA'}}
+          style={{color: '#FFFFFF',backgroundColor: '#022FCD'}}
           sx={{
             fontSize: '14px',
             fontWeight: '500',
-            backgroundColor: contactEmails.length > 0 ? '#0E4DCA' : '#A0A0A0',
+            backgroundColor: contactEmails.length > 0 ? '#022FCD' : '#A0A0A0',
             color: '#FFFFFF',
             textTransform: 'none',
             borderRadius: '100px',

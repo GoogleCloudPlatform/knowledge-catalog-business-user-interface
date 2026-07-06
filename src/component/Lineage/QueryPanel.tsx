@@ -387,12 +387,12 @@ const QueryPanel: React.FC<QueryPanelProps> = ({ queryPanelDataStatus, queryPane
                   '&::after': {
                     content: '""',
                     position: 'absolute',
-                    left: '16px',  // <-- This matches the padding
-                    right: '16px', // <-- This matches the padding
-                    bottom: '-2px', // From your reference file's logic
+                    left: '16px',
+                    right: '16px',
+                    bottom: '-2px',
                     height: '5px',
-                    backgroundColor: '#ffffff', // Covers the grey border
-                    borderTop: '4px solid #1976d2', // Your color
+                    backgroundColor: '#ffffff',
+                    borderTop: '4px solid #1976d2',
                     borderRadius: '2.5px 2.5px 0 0'
                   }
                 }

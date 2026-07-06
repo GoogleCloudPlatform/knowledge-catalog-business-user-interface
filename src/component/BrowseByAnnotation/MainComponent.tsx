@@ -6,9 +6,8 @@ import {
   Tab,
   Paper,
   Skeleton,
-  Tooltip,
 } from '@mui/material';
-import { ArrowBack, KeyboardArrowUp, KeyboardArrowDown, Close, FormatListBulleted } from '@mui/icons-material';
+import { ArrowBack, KeyboardArrowUp, KeyboardArrowDown, Close, FormatListBulleted, DashboardOutlined, Inventory2Outlined } from '@mui/icons-material';
 import IconButton from '@mui/material/IconButton';
 import { useNavigate } from 'react-router-dom';
 import type { AppDispatch, RootState } from '../../app/store';
@@ -187,96 +186,117 @@ const MainComponent: React.FC<MainComponentProps> = ({
       <Box sx={{ flexShrink: 0 }}>
         <Box
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '20px',
-            padding: '20px 20px 0px',
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "flex-start",
+            alignItems: "flex-start",
+            padding: "24px",
+            gap: "20px",
+            width: "auto",
+            margin: "20px 20px 15px 20px",
+            background: "#FFFFFF",
+            borderRadius: "16px",
+            border: "1px solid #ECEEF4",
+            flex: "none",
+            order: 0,
           }}
         >
-          <IconButton
-            sx={{ p: '4px', mr: 0.5, width: '40px', height: '40px', borderRadius: '50%', color: '#0B57D0', transition: 'background-color 0.2s', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' } }}
-            onClick={handleBackClick}
+          {/* Back Arrow, Icon, and Title Row */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '20px',
+              width: '100%',
+              minHeight: '40px',
+            }}
           >
-            <ArrowBack style={{ fontSize: "24px" }} />
-          </IconButton>
-          <ThemedIconContainer iconColor="#F9AB00">
-            <img
-              src={AnnotationSubitemIcon}
-              alt=""
-              style={{ width: '24px', height: '24px' }}
-            />
-          </ThemedIconContainer>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-              <Tooltip title={selectedSubItem?.displayName || selectedSubItem?.title || ''} arrow placement="top">
-                <label style={{
-                  fontFamily: '"Google Sans", sans-serif',
-                  color: '#1F1F1F',
-                  fontSize: '28px',
-                  fontWeight: '400',
-                  lineHeight: '36px',
-                  maxWidth: '500px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {selectedSubItem?.displayName || selectedSubItem?.title}
-                </label>
-              </Tooltip>
+            <IconButton
+              sx={{ p: '4px', width: '40px', height: '40px', borderRadius: '50%', color: '#1F1F1F', transition: 'background-color 0.2s', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' } }}
+              onClick={handleBackClick}
+            >
+              <ArrowBack style={{ fontSize: "24px" }} />
+            </IconButton>
+            <ThemedIconContainer iconColor="#F9AB00">
+              <img
+                src={AnnotationSubitemIcon}
+                alt=""
+                style={{ width: '24px', height: '24px' }}
+              />
+            </ThemedIconContainer>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                  <label style={{
+                    fontFamily: '"Google Sans", sans-serif',
+                    color: '#1F1F1F',
+                    fontSize: '24px',
+                    fontWeight: '500',
+                    lineHeight: '32px',
+                    maxWidth: '500px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {selectedSubItem?.displayName || selectedSubItem?.title}
+                  </label>
+              </div>
             </div>
-          </div>
-        </Box>
-        <div style={{ padding: '16px 20px 0px', maxWidth: '800px' }}>
-          {subItemDescription ? (
-            <>
+          </Box>
+
+          {/* Description Section */}
+          <div style={{ width: '100%' }}>
+            {subItemDescription ? (
+              <>
+                <div style={{
+                  fontFamily: '"Google Sans", sans-serif',
+                  fontSize: '14px',
+                  lineHeight: '20px',
+                  color: '#0C1226',
+                  fontWeight: 400,
+                  maxHeight: subItemDescExpanded ? 'none' : '60px',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}>
+                  {subItemDescription}
+                </div>
+                {subItemDescription.length > 200 && (
+                  <button
+                    onClick={() => setSubItemDescExpanded(!subItemDescExpanded)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '6px 0px',
+                      color: '#0B57D0',
+                      fontFamily: '"Google Sans", sans-serif',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      lineHeight: '20px',
+                      marginTop: '4px'
+                    }}
+                  >
+                    {subItemDescExpanded ? <KeyboardArrowUp sx={{ fontSize: '20px' }} /> : <KeyboardArrowDown sx={{ fontSize: '20px' }} />}
+                    {subItemDescExpanded ? 'Show less' : 'Show more'}
+                  </button>
+                )}
+              </>
+            ) : (
               <div style={{
                 fontFamily: '"Google Sans", sans-serif',
                 fontSize: '14px',
                 lineHeight: '20px',
-                color: '#575757',
+                color: '#0C1226CC',
                 fontWeight: 400,
-                maxHeight: subItemDescExpanded ? 'none' : '60px',
-                overflow: 'hidden',
-                position: 'relative',
               }}>
-                {subItemDescription}
+                No description provided.
               </div>
-              {subItemDescription.length > 200 && (
-                <button
-                  onClick={() => setSubItemDescExpanded(!subItemDescExpanded)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '6px 0px',
-                    color: '#0B57D0',
-                    fontFamily: '"Google Sans", sans-serif',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    lineHeight: '20px',
-                  }}
-                >
-                  {subItemDescExpanded ? <KeyboardArrowUp sx={{ fontSize: '20px' }} /> : <KeyboardArrowDown sx={{ fontSize: '20px' }} />}
-                  {subItemDescExpanded ? 'Show less' : 'Show more'}
-                </button>
-              )}
-            </>
-          ) : (
-            <div style={{
-              fontFamily: '"Google Sans", sans-serif',
-              fontSize: '14px',
-              lineHeight: '20px',
-              color: '#575757',
-              fontWeight: 400,
-              fontStyle: 'italic',
-            }}>
-              No description provided.
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        </Box>
       </Box>
     );
 
@@ -288,7 +308,7 @@ const MainComponent: React.FC<MainComponentProps> = ({
           display: 'flex',
           height: 'calc(100vh - 80px)',
           flex: 1,
-          backgroundColor: '#fff',
+          backgroundColor: '#f8fafc',
         }}
       >
         <Paper
@@ -297,7 +317,7 @@ const MainComponent: React.FC<MainComponentProps> = ({
             flex: 1,
             height: '100%',
             borderRadius: '0px',
-            backgroundColor: '#fff',
+            backgroundColor: 'transparent',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -314,10 +334,10 @@ const MainComponent: React.FC<MainComponentProps> = ({
                 padding: '8px 13px',
                 gap: '8px',
                 height: '32px',
-                border: isSidebarOpen ? 'none' : '1px solid #0E4DCA',
+                border: isSidebarOpen ? 'none' : '1px solid #022FCD',
                 borderRadius: '59px',
-                background: isSidebarOpen ? '#0E4DCA' : 'none',
-                color: isSidebarOpen ? '#EDF2FC' : '#0E4DCA',
+                background: isSidebarOpen ? '#022FCD' : 'none',
+                color: isSidebarOpen ? '#EDF2FC' : '#022FCD',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
               }}
@@ -353,37 +373,46 @@ const MainComponent: React.FC<MainComponentProps> = ({
               paddingLeft: "1.75rem",
               position: "relative",
               "& .MuiTabs-root": {
-                minHeight: "48px",
+                minHeight: "47px",
+                height: "47px",
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "flex-start",
+                "& .MuiTabs-flexContainer": { gap: "4px" }
               },
               "& .MuiTab-root": {
-                fontFamily: '"Product Sans Regular", sans-serif',
+                fontFamily: '"Google Sans", sans-serif',
                 fontSize: "14px",
-                color: "#575757",
+                fontWeight: 500,
+                color: "#0C1226",
                 textTransform: "none",
-                minHeight: "48px",
-                padding: "12px 20px 16px",
-                "&.Mui-selected": {
-                  color: "#0E4DCA",
-                },
+                minHeight: "47px",
+                padding: "0px 16px",
+                display: "inline-flex",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "4px",
+                "&.Mui-selected": { color: "#022FCD" },
+                "&.Mui-disabled": { color: "#BDBDBD" },
               },
               "& .MuiTabs-indicator": {
                 backgroundColor: "transparent",
                 "&::after": {
                   content: '""',
                   position: "absolute",
-                  left: "20px",
-                  right: "20px",
-                  bottom: "-2px",
-                  height: "5px",
-                  backgroundColor: "white",
-                  borderTop: "3px solid #0E4DCA",
-                  borderRadius: "2.5px 2.5px 0 0",
+                  left: "16px",
+                  right: "16px",
+                  bottom: "0px",
+                  height: "3px",
+                  backgroundColor: "#022FCD",
+                  borderRadius: "3px 3px 0 0",
                 },
               },
             }}
           >
             {resourcesStatus === 'loading' ? (
-              <Box sx={{ minHeight: '48px', height: '48px', display: 'flex', alignItems: 'flex-end', pb: '8px' }}>
+              <Box sx={{ minHeight: '47px', height: '47px', display: 'flex', alignItems: 'flex-end', pb: '8px' }}>
                 <Skeleton
                   variant="text"
                   width={100}
@@ -399,7 +428,11 @@ const MainComponent: React.FC<MainComponentProps> = ({
                   children: <span className="indicator" />,
                 }}
               >
-                <Tab label="Linked Assets" />
+                <Tab 
+                  label="Linked Assets" 
+                  icon={<Inventory2Outlined sx={{ fontSize: "20px" }} />} 
+                  iconPosition="start" 
+                />
               </Tabs>
             )}
           </Box>
@@ -427,7 +460,7 @@ const MainComponent: React.FC<MainComponentProps> = ({
           </Box>
         </Paper>
 
-        {/* Resource Preview Panel - matching Glossaries CSS */}
+        {/* Resource Preview Panel */}
         <Paper
           elevation={0}
           sx={{
@@ -435,8 +468,8 @@ const MainComponent: React.FC<MainComponentProps> = ({
             minWidth: isPreviewOpen ? 'clamp(300px, 22vw, 360px)' : '0px',
             height: 'calc(100vh - 100px)',
             borderRadius: '0px',
-            backgroundColor: '#fff',
-            border: 'transparent',
+            backgroundColor: 'transparent',
+            border: 'none',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -475,8 +508,8 @@ const MainComponent: React.FC<MainComponentProps> = ({
           flex: 1,
           height: 'calc(100vh - 80px)',
           borderRadius: '0px',
-          backgroundColor: '#fff',
-          border: 'transparent',
+          backgroundColor: '#f8fafc',
+          border: 'none',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -499,7 +532,7 @@ const MainComponent: React.FC<MainComponentProps> = ({
         flex: 1,
         height: 'calc(100vh - 72px)',
         borderRadius: '0px',
-        backgroundColor: '#fff',
+        backgroundColor: '#f8fafc',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -527,10 +560,10 @@ const MainComponent: React.FC<MainComponentProps> = ({
               padding: '8px 13px',
               gap: '8px',
               height: '32px',
-              border: isSidebarOpen ? 'none' : '1px solid #0E4DCA',
+              border: isSidebarOpen ? 'none' : '1px solid #022FCD',
               borderRadius: '59px',
-              background: isSidebarOpen ? '#0E4DCA' : 'none',
-              color: isSidebarOpen ? '#EDF2FC' : '#0E4DCA',
+              background: isSidebarOpen ? '#022FCD' : 'none',
+              color: isSidebarOpen ? '#EDF2FC' : '#022FCD',
               cursor: 'pointer',
               transition: 'all 0.2s ease',
             }}
@@ -553,87 +586,104 @@ const MainComponent: React.FC<MainComponentProps> = ({
           </span>
         </Box>
 
-        {/* Title Row */}
+        {/* Header Card (Title and Description) */}
         <Box
           sx={{
+            boxSizing: "border-box",
             display: "flex",
-            alignItems: "center",
+            flexDirection: "column",
+            justifyContent: "flex-start",
+            alignItems: "flex-start",
+            padding: "24px",
             gap: "20px",
-            padding: "20px 20px 0px",
+            width: "auto",
+            margin: "20px 20px 15px 20px",
+            background: "#FFFFFF",
+            borderRadius: "16px",
+            border: "1px solid #ECEEF4",
+            flex: "none",
+            order: 0,
           }}
         >
-          <ThemedIconContainer iconColor="#1A73E8">
-            <img src={AnnotationsIconBlue} alt="" style={{ width: '24px', height: '24px' }} />
-          </ThemedIconContainer>
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
-              <Tooltip title={selectedCard?.title || ''} arrow placement="top">
-                <label style={{
-                  fontFamily: '"Google Sans", sans-serif',
-                  color: "#1F1F1F", fontSize: "28px",
-                  fontWeight: "400", lineHeight: "36px",
-                  maxWidth: "500px", overflow: "hidden",
-                  textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
-                  {selectedCard?.title}
-                </label>
-              </Tooltip>
+          {/* Title Row */}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: "20px",
+              width: "100%",
+              minHeight: "40px",
+            }}
+          >
+            <ThemedIconContainer iconColor="#1A73E8">
+              <img src={AnnotationsIconBlue} alt="" style={{ width: '24px', height: '24px' }} />
+            </ThemedIconContainer>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
+                  <label style={{
+                    fontFamily: '"Google Sans", sans-serif',
+                    color: "#1F1F1F", fontSize: "24px",
+                    fontWeight: "500", lineHeight: "32px",
+                  }}>
+                    {selectedCard?.title}
+                  </label>
+              </div>
             </div>
-          </div>
-        </Box>
+          </Box>
 
-        {/* Description Section */}
-        <div style={{ padding: "16px 20px 0px", maxWidth: "800px" }}>
-          {selectedCard?.description ? (
-            <>
+          {/* Description Section */}
+          <div style={{ width: "100%" }}>
+            {selectedCard?.description ? (
+              <>
+                <div style={{
+                  fontFamily: '"Google Sans", sans-serif',
+                  fontSize: "14px",
+                  lineHeight: "20px",
+                  color: "#0C1226",
+                  fontWeight: 400,
+                  maxHeight: descriptionExpanded ? "none" : "60px",
+                  overflow: "hidden",
+                  position: "relative",
+                }}>
+                  {selectedCard.description}
+                </div>
+                {selectedCard.description.length > 200 && (
+                  <button
+                    onClick={() => setDescriptionExpanded(!descriptionExpanded)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "6px 0px",
+                      color: "#0B57D0",
+                      fontFamily: '"Google Sans", sans-serif',
+                      fontSize: "14px",
+                      fontWeight: 500,
+                      lineHeight: "20px",
+                      marginTop: "4px"
+                    }}
+                  >
+                    {descriptionExpanded ? <KeyboardArrowUp sx={{ fontSize: "20px" }} /> : <KeyboardArrowDown sx={{ fontSize: "20px" }} />}
+                    {descriptionExpanded ? 'Show less' : 'Show more'}
+                  </button>
+                )}
+              </>
+            ) : (
               <div style={{
                 fontFamily: '"Google Sans", sans-serif',
                 fontSize: "14px",
                 lineHeight: "20px",
-                color: "#575757",
+                color: "#0C1226CC",
                 fontWeight: 400,
-                maxHeight: descriptionExpanded ? "none" : "60px",
-                overflow: "hidden",
-                position: "relative",
               }}>
-                {selectedCard.description}
+                No description provided for this aspect.
               </div>
-              {selectedCard.description.length > 200 && (
-                <button
-                  onClick={() => setDescriptionExpanded(!descriptionExpanded)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    padding: "6px 0px",
-                    color: "#0B57D0",
-                    fontFamily: '"Google Sans", sans-serif',
-                    fontSize: "14px",
-                    fontWeight: 500,
-                    lineHeight: "20px",
-                  }}
-                >
-                  {descriptionExpanded ? <KeyboardArrowUp sx={{ fontSize: "20px" }} /> : <KeyboardArrowDown sx={{ fontSize: "20px" }} />}
-                  {descriptionExpanded ? 'Show less' : 'Show more'}
-                </button>
-              )}
-            </>
-          ) : (
-            <div style={{
-              fontFamily: '"Google Sans", sans-serif',
-              fontSize: "14px",
-              lineHeight: "20px",
-              color: "#575757",
-              fontWeight: 400,
-              fontStyle: "italic",
-            }}>
-              No description provided for this aspect.
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        </Box>
 
         {/* Tabs */}
         <Box
@@ -641,31 +691,40 @@ const MainComponent: React.FC<MainComponentProps> = ({
             paddingLeft: "1.75rem",
             position: "relative",
             "& .MuiTabs-root": {
-              minHeight: "48px",
+              minHeight: "47px",
+              height: "47px",
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "flex-start",
+              "& .MuiTabs-flexContainer": { gap: "4px" }
             },
             "& .MuiTab-root": {
-              fontFamily: '"Product Sans Regular", sans-serif',
+              fontFamily: '"Google Sans", sans-serif',
               fontSize: "14px",
-              color: "#575757",
+              fontWeight: 500,
+              color: "#0C1226",
               textTransform: "none",
-              minHeight: "48px",
-              padding: "12px 20px 16px",
-              "&.Mui-selected": {
-                color: "#0E4DCA",
-              },
+              minHeight: "47px",
+              padding: "0px 16px",
+              display: "inline-flex",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "4px",
+              "&.Mui-selected": { color: "#022FCD" },
+              "&.Mui-disabled": { color: "#BDBDBD" },
             },
             "& .MuiTabs-indicator": {
               backgroundColor: "transparent",
               "&::after": {
                 content: '""',
                 position: "absolute",
-                left: "20px",
-                right: "20px",
-                bottom: "-2px",
-                height: "5px",
-                backgroundColor: "white",
-                borderTop: "3px solid #0E4DCA",
-                borderRadius: "2.5px 2.5px 0 0",
+                left: "16px",
+                right: "16px",
+                bottom: "0px",
+                height: "3px",
+                backgroundColor: "#022FCD",
+                borderRadius: "3px 3px 0 0",
               },
             },
           }}
@@ -678,8 +737,33 @@ const MainComponent: React.FC<MainComponentProps> = ({
               children: <span className="indicator" />,
             }}
           >
-            <Tab label="Overview" />
-            <Tab label="Sub Types" />
+            <Tab 
+              label="Overview" 
+              icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} 
+              iconPosition="start" 
+            />
+            <Tab 
+              label="Sub Types" 
+              icon={
+                <Box 
+                  component="span" 
+                  sx={{ 
+                    width: '16px', 
+                    height: '16px', 
+                    backgroundColor: 'currentColor',
+                    WebkitMaskImage: `url("${AnnotationSubitemIcon}")`,
+                    WebkitMaskSize: 'contain',
+                    WebkitMaskRepeat: 'no-repeat',
+                    WebkitMaskPosition: 'center',
+                    maskImage: `url("${AnnotationSubitemIcon}")`,
+                    maskSize: 'contain',
+                    maskRepeat: 'no-repeat',
+                    maskPosition: 'center',
+                  }} 
+                />
+              } 
+              iconPosition="start" 
+            />
           </Tabs>
         </Box>
         <Box sx={{ mx: "20px", borderBottom: "1px solid #DADCE0" }} />

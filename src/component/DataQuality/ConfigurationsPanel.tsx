@@ -304,7 +304,7 @@ const ConfigurationsPanel: React.FC<ConfigurationsPanelProps> = ({ onClose, data
               <Typography sx={{
                 fontSize: '0.875rem',
                 fontWeight: 400,
-                color: '#0E4DCA',
+                color: '#022FCD',
                 lineHeight: '1.43em',
                 cursor: 'pointer',
                 textDecoration: 'underline',
@@ -406,7 +406,7 @@ const ConfigurationsPanel: React.FC<ConfigurationsPanelProps> = ({ onClose, data
               <Typography sx={{
                 fontSize: '0.875rem',
                 fontWeight: 400,
-                color: '#0E4DCA',
+                color: '#022FCD',
                 lineHeight: '1.43em',
                 // textDecoration: 'underline',
               }}>

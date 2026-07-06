@@ -259,8 +259,9 @@ describe('DetailPageOverview', () => {
       expect(tableInfo).toBeInTheDocument();
     }
     expect(screen.getByText('Documentation')).toBeInTheDocument();
-    expect(screen.getByText('Contacts')).toBeInTheDocument();
-    expect(screen.getByText('Timestamps')).toBeInTheDocument();
+    // Contacts and Timestamps are now consolidated into the "Info" card
+    expect(screen.getByText('Info')).toBeInTheDocument();
+    expect(screen.getByText('Last Modified')).toBeInTheDocument();
     expect(screen.getByText('Usage Metrics')).toBeInTheDocument();
     expect(screen.getByText('Labels')).toBeInTheDocument();
   });
@@ -389,7 +390,8 @@ describe('DetailPageOverview', () => {
   it('displays contacts with avatars and roles', () => {
     renderDetailPageOverview();
     
-    expect(screen.getByText('Contacts')).toBeInTheDocument();
+    // Contacts are rendered inside the consolidated "Info" card (no "Contacts" heading)
+    expect(screen.getByText('Info')).toBeInTheDocument();
     expect(screen.getByText('Owner')).toBeInTheDocument();
     expect(screen.getByText('Admin')).toBeInTheDocument();
     expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
@@ -416,15 +418,19 @@ describe('DetailPageOverview', () => {
     };
     
     renderDetailPageOverview({ entry: entryWithoutContacts });
-    
-    expect(screen.getByText('No contacts assigned to this asset.')).toBeInTheDocument();
+
+    // When there are no contacts, the contacts block is omitted entirely.
+    // The Info card still renders with its metadata (Last Modified) row.
+    expect(screen.getByText('Info')).toBeInTheDocument();
+    expect(screen.getByText('Last Modified')).toBeInTheDocument();
+    expect(screen.queryByText('Owner')).not.toBeInTheDocument();
   });
 
-  it('displays creation and modification times in Timestamps section', () => {
+  it('displays modification time in the Info section', () => {
     renderDetailPageOverview();
 
-    expect(screen.getByText('Created')).toBeInTheDocument();
-    expect(screen.getByText('Last modified')).toBeInTheDocument();
+    // The Info card now shows only "Last Modified" (Created was removed in the redesign)
+    expect(screen.getByText('Last Modified')).toBeInTheDocument();
   });
 
   it('displays usage metrics when available', () => {
@@ -455,7 +461,7 @@ describe('DetailPageOverview', () => {
     renderDetailPageOverview({ entry: entryWithoutUsage });
 
     expect(screen.getByText('Usage Metrics')).toBeInTheDocument();
-    expect(screen.getByText('No usage metrics available for this asset.')).toBeInTheDocument();
+    expect(screen.getByText('No usage metrics available.')).toBeInTheDocument();
   });
 
   it('hides Usage Metrics section for glossary entry type', () => {
@@ -467,8 +473,8 @@ describe('DetailPageOverview', () => {
 
     expect(screen.queryByText('Usage Metrics')).not.toBeInTheDocument();
     expect(screen.getByText('Documentation')).toBeInTheDocument();
-    expect(screen.getByText('Contacts')).toBeInTheDocument();
-    expect(screen.getByText('Timestamps')).toBeInTheDocument();
+    expect(screen.getByText('Info')).toBeInTheDocument();
+    expect(screen.getByText('Last Modified')).toBeInTheDocument();
     expect(screen.getByText('Labels')).toBeInTheDocument();
   });
 
@@ -481,8 +487,8 @@ describe('DetailPageOverview', () => {
 
     expect(screen.queryByText('Usage Metrics')).not.toBeInTheDocument();
     expect(screen.getByText('Documentation')).toBeInTheDocument();
-    expect(screen.getByText('Contacts')).toBeInTheDocument();
-    expect(screen.getByText('Timestamps')).toBeInTheDocument();
+    expect(screen.getByText('Info')).toBeInTheDocument();
+    expect(screen.getByText('Last Modified')).toBeInTheDocument();
     expect(screen.getByText('Labels')).toBeInTheDocument();
   });
 
@@ -561,7 +567,7 @@ describe('DetailPageOverview', () => {
 
     // Component handles null entryType gracefully by using empty string
     renderDetailPageOverview({ entry: entryWithoutType });
-    expect(screen.getByText('Timestamps')).toBeInTheDocument();
+    expect(screen.getByText('Last Modified')).toBeInTheDocument();
   });
 
   it('handles entry without aspects', () => {
@@ -569,15 +575,15 @@ describe('DetailPageOverview', () => {
 
     // Component handles missing aspects gracefully
     renderDetailPageOverview({ entry: entryWithoutAspects });
-    expect(screen.getByText('Timestamps')).toBeInTheDocument();
+    expect(screen.getByText('Last Modified')).toBeInTheDocument();
   });
 
-  it('formats dates correctly in Timestamps section', () => {
+  it('formats the Last Modified date correctly in the Info section', () => {
     renderDetailPageOverview();
 
-    // Check for Created and Last modified labels in Timestamps section
-    expect(screen.getByText('Created')).toBeInTheDocument();
-    expect(screen.getByText('Last modified')).toBeInTheDocument();
+    // The Info card shows the formatted "Last Modified" timestamp (updateTime: Jan 2, 2022)
+    expect(screen.getByText('Last Modified')).toBeInTheDocument();
+    expect(screen.getByText((content) => content.includes('Jan 2, 2022'))).toBeInTheDocument();
   });
 
   it('handles contact without email format', () => {
@@ -610,9 +616,9 @@ describe('DetailPageOverview', () => {
 
     renderDetailPageOverview({ entry: entryWithPlainContact });
 
-    expect(screen.getByText('Contacts')).toBeInTheDocument();
+    expect(screen.getByText('Info')).toBeInTheDocument();
     expect(screen.getByText('Viewer')).toBeInTheDocument();
-    // Name appears in both avatar and contact text, so use getAllByText
+    // With no "<email>" format, the raw name is used as the contact label
     const bobWilsonElements = screen.getAllByText('Bob Wilson');
     expect(bobWilsonElements.length).toBeGreaterThan(0);
   });
@@ -647,7 +653,7 @@ describe('DetailPageOverview', () => {
 
     renderDetailPageOverview({ entry: entryWithEmptyContactName });
 
-    expect(screen.getByText('Contacts')).toBeInTheDocument();
+    expect(screen.getByText('Info')).toBeInTheDocument();
     expect(screen.getByText('Owner')).toBeInTheDocument();
     // Empty name shows "--"
     const contactsSection = screen.getByText('Owner').closest('div');
@@ -666,7 +672,7 @@ describe('DetailPageOverview', () => {
     renderDetailPageOverview({ entry: entryWithoutLabels });
 
     expect(screen.getByText('Labels')).toBeInTheDocument();
-    expect(screen.getByText('No Labels available for this asset.')).toBeInTheDocument();
+    expect(screen.getByText('No Labels available.')).toBeInTheDocument();
   });
 
   it('renders access denied state', () => {

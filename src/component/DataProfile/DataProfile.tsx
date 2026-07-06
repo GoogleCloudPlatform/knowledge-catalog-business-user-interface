@@ -3,31 +3,17 @@ import {
   Box,
   Typography,
   Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  IconButton,
-  Collapse,
-  Menu,
-  MenuItem,
-  ListItemText,
-  Checkbox,
-  TextField,
-  InputAdornment,
   Tooltip,
-  Drawer
+  Drawer,
+  Divider
 } from '@mui/material';
 import {
-  ExpandLess,
-  FilterList,
-  Close,
-  ArrowUpward,
-  ArrowDownward,
   InfoOutline,
+  KeyboardArrowDown,
+  ChevronRight,
+  AnalyticsOutlined
 } from '@mui/icons-material';
+import FilterBar, { type ActiveFilter, type PropertyConfig } from '../Common/FilterBar';
 import DataProfileConfigurationsPanel from './DataProfileConfigurationsPanel';
 import DataProfileSkeleton from './DataProfileSkeleton';
 import { useAuth } from '../../auth/AuthProvider';
@@ -35,48 +21,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch } from '../../app/store';
 import { fetchDataScan, selectScanData, selectScanStatus, selectIsScanLoading } from '../../features/dataScan/dataScanSlice';
 import { useAccessRequest } from '../../contexts/AccessRequestContext';
-
-/**
- * @file DataProfile.tsx
- * @summary Renders the "Profile Results" tab for a data entry.
- *
- * @description
- * This component displays the data profiling results associated with a given data
- * entry.
- *
- * 1.  **Data Fetching**: On mount, it inspects the `entry.entrySource.labels` to
- * find a Knowledge Catalog Data Scan ID (`dataplex-dp-published-scan`).
- * 2.  **Redux Integration**: It uses this scan ID (formatted as a full scan name)
- * to check the Redux store (via `dataScanSlice` selectors) to see if the
- * profile data has already been fetched.
- * 3.  **API Call**: If the data is not in the store, it dispatches the
- * `fetchDataScan` action to retrieve it.
- * 4.  **State Handling**: It manages loading (`CircularProgress`), error, and
- * "no data" states. If no scan is associated, it displays a "No published
- * Data Profile available" message.
- * 5.  **Data Transformation**: It parses the `dataProfileScan` result from Redux
- * into a standardized `profileData` array for stable rendering.
- * 6.  **UI & Features**:
- * - Renders the data in a collapsible accordion panel.
- * - Displays a feature-rich sticky-header `Table` of the profile results.
- * - **Filtering**: Provides a text search, a multi-select property/value
- * filter dropdown, and "filter chips" for active filters.
- * - **Sorting**: Allows three-state sorting (asc, desc, off) on the
- * main columns.
- * - **Visualization**: Renders 'Statistics' as a key-value list and
- * 'Top 10 values' as a custom horizontal bar chart within the table cells.
- * - **Configurations**: Includes a "Configurations" button that opens the
- * `DataProfileConfigurationsPanel` side panel to show the scan's setup.
- *
- * @param {object} props - The props for the DataProfile component.
- * @param {any} props.entry - The data entry object, which is inspected for
- * data profile scan labels.
- *
- * @returns {JSX.Element} The rendered React component, which will be one of:
- * - A `CircularProgress` loader.
- * - A "No published Data Profile" message.
- * - The full, interactive data profile table.
- */
+import { useColumnResize } from '../../hooks/useColumnResize';
+import ResizeHandle from '../Schema/ResizeHandle';
 
 interface ProfileData {
   columnName: string;
@@ -84,17 +30,67 @@ interface ProfileData {
   nullPercentage: string;
   uniquePercentage: string;
   statistics: {
-    [key: string]: string| number;
+    [key: string]: string | number | number[];
   };
   topValues: Array<{
     value: string;
     percentage: string;
+    rawPercentage: number;
+    count: number;
   }>;
 }
+
 interface DataProfileProps {
   scanName: string | null;
   allScansStatus: string;
 }
+
+const FILTER_PROPERTIES: PropertyConfig[] = [
+  { name: 'Column Name', mode: 'text' },
+  { name: 'Type', mode: 'dropdown' },
+  { name: 'Null % less than', mode: 'text', hint: 'Enter a number, e.g. 5 shows rows where Null % < 5%' },
+  { name: 'Unique % more than', mode: 'text', hint: 'Enter a number, e.g. 50 shows rows where Unique % > 50%' },
+];
+
+let _measureCtx: CanvasRenderingContext2D | null = null;
+const measureLabelWidth = (text: string): number => {
+  if (!_measureCtx) {
+    const canvas = document.createElement('canvas');
+    _measureCtx = canvas.getContext('2d');
+  }
+  if (!_measureCtx) return text.length * 7;
+  _measureCtx.font = '400 12px sans-serif';
+  return _measureCtx.measureText(text).width;
+};
+
+
+const COLUMN_CONFIGS = [
+  { key: 'columnName',       initialWidth: 175, minWidth: 100 },
+  { key: 'type',             initialWidth: 145,  minWidth: 70  },
+  { key: 'nullPercentage',   initialWidth: 155,  minWidth: 60  },
+  { key: 'uniquePercentage', initialWidth: 155,  minWidth: 60  },
+  { key: 'statistics',       initialWidth: 250, minWidth: 120 },
+  { key: 'topValues',        initialWidth: 390, minWidth: 200 },
+];
+
+const headerCellStyle: React.CSSProperties = {
+  fontFamily: '"Google Sans", sans-serif',
+  fontWeight: 500,
+  fontSize: '12px',
+  lineHeight: '16px',
+  letterSpacing: '0.1px',
+  color: '#444746',
+  display: 'flex',
+  alignItems: 'center',
+  padding: '0px',
+  position: 'relative',
+};
+
+const bodyCellStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  overflow: 'hidden',
+};
 
 const DataProfile: React.FC<DataProfileProps> = ({ scanName, allScansStatus }) => {
   const isParentLoading = allScansStatus !== 'succeeded';
@@ -106,39 +102,33 @@ const DataProfile: React.FC<DataProfileProps> = ({ scanName, allScansStatus }) =
   const [loading, setLoading] = useState<boolean>(true);
   const [dataProfileAvailable, setDataProfileAvailable] = useState<boolean>(false);
 
-  // Use selectors to get data for this specific scan
   const dataProfileScan = useSelector(selectScanData(scanName || ''));
   const dataProfileScanStatus = useSelector(selectScanStatus(scanName || ''));
   const isScanLoading = useSelector(selectIsScanLoading(scanName || ''));
 
+  const { columnWidths, activeIndex, handleMouseDown } = useColumnResize({
+    columns: COLUMN_CONFIGS,
+    mode: 'flex',
+  });
+
   const getStatsColumnKey = (type: string) => {
     switch (type) {
-      case 'STRING':
-        return 'stringProfile';
-      case 'INTEGER':
-        return 'integerProfile';
-      case 'FLOAT':
-        return 'doubleProfile';
-      case 'DOUBLE':
-        return 'doubleProfile';
-      case 'NUMERIC':
-        return 'numericProfile';
-      case 'BOOLEAN':
-        return 'booleanProfile';
+      case 'STRING': return 'stringProfile';
+      case 'INTEGER': return 'integerProfile';
+      case 'FLOAT': return 'doubleProfile';
+      case 'DOUBLE': return 'doubleProfile';
+      case 'NUMERIC': return 'numericProfile';
+      case 'BOOLEAN': return 'booleanProfile';
       case 'TIMESTAMP':
-      case 'DATE':
-        return 'dateProfile';
-      default:
-        return 'otherProfile';
+      case 'DATE': return 'dateProfile';
+      default: return 'otherProfile';
     }
   };
 
- useEffect(() => {
+  useEffect(() => {
     if (scanName && id_token && !dataProfileScan && !isScanLoading) {
-      console.log("Data Profile Scan Name:", scanName);
       dispatch(fetchDataScan({ name: scanName, id_token: id_token }));
     } else if (scanName && dataProfileScan) {
-      // We already have the data, no need to fetch
       setDataProfileAvailable(true);
       setLoading(false);
     } else if (!scanName) {
@@ -148,1150 +138,740 @@ const DataProfile: React.FC<DataProfileProps> = ({ scanName, allScansStatus }) =
   }, [scanName, id_token, dataProfileScan, isScanLoading, dispatch]);
 
   useEffect(() => {
-    // Handle data scan status changes
     if (dataProfileScanStatus === 'succeeded' && dataProfileScan) {
       setDataProfileAvailable(true);
       setLoading(false);
-      console.log("Data Profile Scan:", dataProfileScan);
     } else if (dataProfileScanStatus === 'failed') {
       setDataProfileAvailable(false);
       setLoading(false);
-      console.log("Data Profile Scan failed");
     } else if (dataProfileScanStatus === 'idle' && !scanName) {
       setLoading(false);
     }
   }, [dataProfileScanStatus, dataProfileScan, scanName]);
 
-  const [isExpanded, setIsExpanded] = useState(true);
   const [isConfigurationsOpen, setIsConfigurationsOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
-  const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedProperty, setSelectedProperty] = useState<string>('');
-  const [selectedValues, setSelectedValues] = useState<string[]>([]);
-  const [activeFilters, setActiveFilters] = useState<Array<{property: string, values: string[]}>>([]);
-  const [sortColumn, setSortColumn] = useState<string>('');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [hoveredBars, setHoveredBars] = useState<Record<number, number | null>>({});
 
-  // Sync configurations panel state with global context for z-index management
   useEffect(() => {
     setAccessPanelOpen(isConfigurationsOpen);
   }, [isConfigurationsOpen, setAccessPanelOpen]);
 
-  // Dummy data based on Figma design
-  const profileData: ProfileData[] = [];
-
-  dataProfileScan?.scan?.dataProfileResult?.profile?.fields.forEach((profile: any) => {
-    profileData.push({
-      columnName: profile.name,
-      type: profile.type,
-      nullPercentage: profile.profile.nullRatio ? `${(profile.profile.nullRatio * 100).toFixed(2)}%` : '0%',
-      uniquePercentage: profile.profile.distinctRatio ? `${(profile.profile.distinctRatio * 100).toFixed(2)}%` : '0%',
-      statistics: Object.fromEntries(
-        Object.entries(profile.profile[getStatsColumnKey(profile.type)] || {}).map(([key, value]) => [key, value as string ])
-      ),
-      topValues: (profile.profile.topNValues || []).map((item: any) => ({
-        value: item.value,
-        percentage: item.ratio ? `${(item.ratio * 100).toFixed(2)}%` : '0%'
-      }))
+  const profileData: ProfileData[] = useMemo(() => {
+    const result: ProfileData[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dataProfileScan?.scan?.dataProfileResult?.profile?.fields.forEach((profile: any) => {
+      result.push({
+        columnName: profile.name,
+        type: profile.type,
+        nullPercentage: profile.profile.nullRatio ? `${(profile.profile.nullRatio * 100).toFixed(2)}%` : '0%',
+        uniquePercentage: profile.profile.distinctRatio ? `${(profile.profile.distinctRatio * 100).toFixed(2)}%` : '0%',
+        statistics: Object.fromEntries(
+          Object.entries(profile.profile[getStatsColumnKey(profile.type)] || {}).map(([key, value]) => [key, value as string])
+        ),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        topValues: (profile.profile.topNValues || []).map((item: any) => ({
+          value: item.value,
+          rawPercentage: item.ratio ? item.ratio * 100 : 0,
+          percentage: item.ratio ? `${(item.ratio * 100).toFixed(2)}%` : '0%',
+          count: item.count ?? 0,
+        }))
+      });
     });
-  });
-  console.log("Profile Data:", profileData);
-  // Property names for filter dropdown
-  const propertyNames = [
-    'Column name',
-    'Type', 
-    'Null %',
-    'Unique %',
-    'Statistics',
-    'Top 10 values'
-  ];
+    return result;
+  }, [dataProfileScan]);
 
-  // Get unique values for selected property
-  const getPropertyValues = (property: string) => {
+  const getPropertyValues = (property: string): string[] => {
     const values = new Set<string>();
-    
     profileData.forEach(row => {
-      switch (property) {
-        case 'Column name':
-          values.add(row.columnName);
-          break;
-        case 'Type':
-          values.add(row.type);
-          break;
-        case 'Null %':
-          values.add(row.nullPercentage);
-          break;
-        case 'Unique %':
-          values.add(row.uniquePercentage);
-          break;
-        case 'Statistics':
-          Object.values(row.statistics).forEach(value => values.add(value as string));
-          break;
-        case 'Top 10 values':
-          row.topValues.forEach(item => {
-            values.add(item.value);
-            values.add(item.percentage);
-          });
-          break;
-      }
+      if (property === 'Type') values.add(row.type);
     });
-    
     return Array.from(values).sort();
   };
 
-  // Filter and sort data based on selected values
   const filteredData = useMemo(() => {
     let data = profileData;
-    
-    // Apply text filter first
+
     if (filterText) {
-      data = profileData.filter(row =>
-        row.columnName.toLowerCase().includes(filterText.toLowerCase()) ||
-        row.type.toLowerCase().includes(filterText.toLowerCase()) ||
-        row.nullPercentage.toLowerCase().includes(filterText.toLowerCase()) ||
-        row.uniquePercentage.toLowerCase().includes(filterText.toLowerCase()) ||
-        Object.values(row.statistics).some(stat => 
-          String(stat).toLowerCase().includes(filterText.toLowerCase())
-        ) ||
-        row.topValues.some(item => 
-          item.value.toLowerCase().includes(filterText.toLowerCase()) ||
-          item.percentage.toLowerCase().includes(filterText.toLowerCase())
-        )
+      const lower = filterText.toLowerCase();
+      data = data.filter(row =>
+        row.columnName.toLowerCase().includes(lower) ||
+        row.type.toLowerCase().includes(lower) ||
+        row.nullPercentage.toLowerCase().includes(lower) ||
+        row.uniquePercentage.toLowerCase().includes(lower) ||
+        Object.values(row.statistics).some(s => String(s).toLowerCase().includes(lower)) ||
+        row.topValues.some(t => t.value.toLowerCase().includes(lower) || t.percentage.toLowerCase().includes(lower))
       );
     }
-    
-    // Apply property filters
+
     if (activeFilters.length > 0) {
-      data = data.filter(row => {
-        return activeFilters.every(filter => {
-          const isMatch = filter.values.some(value => {
-            switch (filter.property) {
-              case 'Column name':
-                return row.columnName === value;
-              case 'Type':
-                return row.type === value;
-              case 'Null %':
-                return row.nullPercentage === value;
-              case 'Unique %':
-                return row.uniquePercentage === value;
-              case 'Statistics':
-                return Object.values(row.statistics).includes(value);
-              case 'Top 10 values':
-                return row.topValues.some(item => 
-                  item.value === value || item.percentage === value
-                );
-              default:
-                return false;
-            }
-          });
-          return isMatch;
-        });
-      });
+      data = data.filter(row =>
+        activeFilters.every(filter => {
+          const { property, values } = filter;
+          if (values.length === 0) return true;
+          switch (property) {
+            case '': return values.some(v => {
+              const lower = v.toLowerCase();
+              return row.columnName.toLowerCase().includes(lower) ||
+                row.type.toLowerCase().includes(lower) ||
+                row.nullPercentage.toLowerCase().includes(lower) ||
+                row.uniquePercentage.toLowerCase().includes(lower) ||
+                Object.values(row.statistics).some(s => String(s).toLowerCase().includes(lower)) ||
+                row.topValues.some(t => t.value.toLowerCase().includes(lower) || t.percentage.toLowerCase().includes(lower));
+            });
+            case 'Column Name': return values.some(v => row.columnName.toLowerCase().includes(v.toLowerCase()));
+            case 'Type': return values.includes(row.type);
+            case 'Null % less than': return values.some(v => { const threshold = parseFloat(v); return !isNaN(threshold) && parseFloat(row.nullPercentage) < threshold; });
+            case 'Unique % more than': return values.some(v => { const threshold = parseFloat(v); return !isNaN(threshold) && parseFloat(row.uniquePercentage) > threshold; });
+            default: return true;
+          }
+        })
+      );
     }
 
-    // Apply sorting
-    if (sortDirection && sortColumn) {
+    if (sortColumn) {
       data = [...data].sort((a, b) => {
-        let aValue: string | number;
-        let bValue: string | number;
-
+        let aVal: string | number, bVal: string | number;
         switch (sortColumn) {
-          case 'columnName':
-            aValue = a.columnName.toLowerCase();
-            bValue = b.columnName.toLowerCase();
-            break;
-          case 'type':
-            aValue = a.type.toLowerCase();
-            bValue = b.type.toLowerCase();
-            break;
-          case 'nullPercentage':
-            aValue = parseFloat(a.nullPercentage.replace('%', ''));
-            bValue = parseFloat(b.nullPercentage.replace('%', ''));
-            break;
-          case 'uniquePercentage':
-            aValue = parseFloat(a.uniquePercentage.replace('%', ''));
-            bValue = parseFloat(b.uniquePercentage.replace('%', ''));
-            break;
-          default:
-            return 0;
+          case 'columnName': aVal = a.columnName.toLowerCase(); bVal = b.columnName.toLowerCase(); break;
+          case 'type': aVal = a.type.toLowerCase(); bVal = b.type.toLowerCase(); break;
+          case 'nullPercentage': aVal = parseFloat(a.nullPercentage); bVal = parseFloat(b.nullPercentage); break;
+          case 'uniquePercentage': aVal = parseFloat(a.uniquePercentage); bVal = parseFloat(b.uniquePercentage); break;
+          default: return 0;
         }
-
-        if (sortDirection === 'asc') {
-          return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-        } else {
-          return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
-        }
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return sortOrder === 'asc' ? cmp : -cmp;
       });
     }
 
     return data;
-  }, [profileData, activeFilters, filterText, sortColumn, sortDirection]);
+  }, [profileData, activeFilters, filterText, sortColumn, sortOrder]);
 
-  // Event handlers for filter dropdown
-  const handleFilterClick = (event: React.MouseEvent<HTMLElement>) => {
-    setFilterAnchorEl(event.currentTarget);
+  const totalTableWidth = columnWidths.reduce((sum, w) => sum + w, 0) + 28 + 24; // 28px expand icon + 24px row padding
+
+  const toggleRowExpand = (index: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index); else next.add(index);
+      return next;
+    });
   };
 
-  const handleFilterClose = () => {
-    setFilterAnchorEl(null);
+  const getSortTooltip = (column: string): string => {
+    const isNumeric = column === 'nullPercentage' || column === 'uniquePercentage';
+    if (sortColumn === column && sortOrder === 'asc') return isNumeric ? 'Sort high to low' : 'Sort Z to A';
+    if (sortColumn === column && sortOrder === 'desc') return '';
+    return isNumeric ? 'Sort low to high' : 'Sort A to Z';
   };
 
-  const handlePropertySelect = (property: string) => {
-    setSelectedProperty(property);
-    
-    // Check if this property already has an active filter and pre-select those values
-    const existingFilter = activeFilters.find(f => f.property === property);
-    setSelectedValues(existingFilter ? existingFilter.values : []);
-  };
-
-  const handleValueToggle = (value: string) => {
-    const newSelectedValues = selectedValues.includes(value) 
-      ? selectedValues.filter(v => v !== value)
-      : [...selectedValues, value];
-    
-    setSelectedValues(newSelectedValues);
-    
-    // Auto-apply filter when values change
-    if (selectedProperty && newSelectedValues.length > 0) {
-      // Check if this property already has an active filter
-      const existingFilterIndex = activeFilters.findIndex(f => f.property === selectedProperty);
-      
-      if (existingFilterIndex >= 0) {
-        // Update existing filter
-        setActiveFilters(prev => prev.map((filter, index) => 
-          index === existingFilterIndex 
-            ? { ...filter, values: newSelectedValues }
-            : filter
-        ));
-      } else {
-        // Add new filter
-        setActiveFilters(prev => [...prev, { property: selectedProperty, values: newSelectedValues }]);
-      }
-    } else if (selectedProperty && newSelectedValues.length === 0) {
-      // Remove filter if no values are selected
-      setActiveFilters(prev => prev.filter(f => f.property !== selectedProperty));
-    }
-  };
-
-  const handleRemoveFilter = (propertyToRemove: string) => {
-    setActiveFilters(prev => prev.filter(f => f.property !== propertyToRemove));
-  };
-
-  const handleClearFilters = () => {
-    setSelectedProperty('');
-    setSelectedValues([]);
-    setActiveFilters([]);
-    setFilterAnchorEl(null);
-    setFilterText('');
-  };
-
-  // Sorting functions
-  const handleSort = (column: string) => {
+  const handleToggleSort = (column: string) => {
     if (sortColumn === column) {
-      setSortDirection(prev => {
-        if (prev === 'asc') return 'desc';
-        if (prev === 'desc') return null;
-        return 'asc';
-      });
+      if (sortOrder === 'asc') {
+        setSortOrder('desc');
+      } else {
+        setSortColumn(null);
+        setSortOrder('asc');
+      }
     } else {
       setSortColumn(column);
-      setSortDirection('asc');
+      setSortOrder('asc');
     }
   };
 
-  const getSortIcon = (column: string) => {
-    if (sortColumn !== column || sortDirection === null) {
-      return <ArrowUpward sx={{ fontSize: '16px', opacity: 0.3 }} />;
-    }
-    return sortDirection === 'asc' ? <ArrowUpward sx={{ fontSize: '16px' }} /> : <ArrowDownward sx={{ fontSize: '16px' }} />;
-  };
+  const sortIcon = (column: string) => (
+    <Box
+      component="span"
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        flexShrink: 0,
+        opacity: sortColumn === column ? 1 : 0,
+        transform: (sortColumn === column && sortOrder === 'desc') ? 'rotate(180deg)' : 'none',
+        transition: 'transform 0.2s ease-in-out, opacity 0.2s ease',
+      }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="24" height="24" rx="12" fill="#C2E7FF"/>
+        <path d="M11.168 15.4818L11.168 5.33594L12.8346 5.33594L12.8346 15.4818L17.5013 10.8151L18.668 12.0026L12.0013 18.6693L5.33464 12.0026L6.5013 10.8151L11.168 15.4818Z" fill="#004A77"/>
+      </svg>
+    </Box>
+  );
 
-  return (loading || isScanLoading || isParentLoading) ? (
-    <DataProfileSkeleton />
-  ) : (dataProfileAvailable && profileData.length > 0 ? (
-        <Box sx={{
-          flex: 1,
-          position: 'relative',
-        }}>
-          <Box sx={{
-            backgroundColor: '#ffffff',
-            borderRadius: '8px',
-            border: '1px solid #DADCE0',
-            overflow: 'hidden',
-            position: 'relative'
-          }}>
-          {/* Header */}
-          <Box 
-            onClick={() => setIsExpanded(!isExpanded)}
-            sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '16px',
-            backgroundColor: '#F8FAFD',
-            cursor: 'pointer'
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Typography
-              variant="heading2Medium"  
-              sx={{
-                fontSize: '1.125rem',
-                fontWeight: 500,
-                color: '#1F1F1F',
-                lineHeight: '1.33em'
-              }}>
-                Profile Results
+  const formatStatKey = (key: string) =>
+    key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, s => s.toUpperCase());
+
+  const formatStatValue = (value: string | number) =>
+    typeof value === 'number' ? (Math.floor(value * 100) / 100).toString() : value;
+
+  const renderStatisticsCell = (row: ProfileData, isExpanded: boolean) => {
+    const entries = Object.entries(row.statistics);
+    if (entries.length === 0) return <Typography sx={{ fontSize: '20px', color: '#9E9E9E' }}>-</Typography>;
+
+    const fmt = (n: number) => String(Math.floor(n * 100) / 100);
+
+    const collapsedEntries: [string, string][] = entries.map(([k, v]) =>
+      k === 'quartiles' && Array.isArray(v)
+        ? ['Quartiles', v.map(fmt).join(', ')]
+        : [formatStatKey(k), String(formatStatValue(v as string | number))]
+    );
+
+    const expandedEntries: [string, string][] = entries.flatMap(([k, v]) => {
+      if (k === 'quartiles' && Array.isArray(v)) {
+        return [
+          ['Lower Quartile', fmt(v[0])],
+          ['Median Quartile', fmt(v[1])],
+          ['Upper Quartile', fmt(v[2])],
+        ] as [string, string][];
+      }
+      return [[formatStatKey(k), String(formatStatValue(v as string | number))]] as [string, string][];
+    });
+
+    if (isExpanded) {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+          {expandedEntries.map(([key, value]) => (
+            <Box key={key} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '16px', maxWidth: '160px' }}>
+              <Typography sx={{ fontSize: '13px', color: '#444746', fontWeight: 400, whiteSpace: 'nowrap' }}>
+                {key}
               </Typography>
-              <Tooltip title="Profile results provide an analysis of the data's characteristics, such as null percentages, unique value counts, and statistical properties like averages and distributions for columns" arrow>
-                <InfoOutline
-                    sx={{
-                        fontWeight: 800,
-                        width: "18px",
-                        height: "18px",
-                        opacity: 0.9
-                    }}
-                />
-            </Tooltip>
+              <Typography sx={{ fontSize: '13px', color: '#1F1F1F', fontWeight: 400, whiteSpace: 'nowrap' }}>
+                {value}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      );
+    }
 
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsConfigurationsOpen(true)
-                }}
-                sx={{
-                  color: '#0B57D0',
-                  textTransform: 'none',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  padding: 0,
-                  minWidth: 'auto',
-                  '&:hover': { backgroundColor: 'transparent', textDecoration: 'underline' }
-                }}
-              >
-                Configurations
-              </Button>
-              <IconButton
-                size="small"
-                onClick={() => setIsExpanded(!isExpanded)}
-                sx={{
-                  padding: '0.25rem',
-                  '&:hover': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                  }
-                }}
-              >
-                <ExpandLess sx={{ 
-                  fontSize: '1.5rem',
-                  transform: isExpanded ? 'rotate(0deg)' : 'rotate(180deg)',
-                  transition: 'transform 0.2s ease'
-                }} />
-              </IconButton>
-            </Box>
+    const tooltipContent = (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '4px 0' }}>
+        {collapsedEntries.map(([key, value]) => (
+          <Box key={key} sx={{ display: 'flex', gap: '8px' }}>
+            <Typography sx={{ fontSize: '12px', color: '#E0E0E0', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              {key}:
+            </Typography>
+            <Typography sx={{ fontSize: '12px', color: '#fff', wordBreak: 'break-all' }}>
+              {value}
+            </Typography>
           </Box>
+        ))}
+      </Box>
+    );
 
-          {/* Content */}
-          <Collapse in={isExpanded} timeout={300}>
-            <Box sx={{ padding: '20px', paddingBottom: '10px'}}>
-              {/* Filter Bar */}
-              <Box sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                padding: '8px 16px',
-                border: '1px solid #DADCE0',
-                borderBottom: 'none',
-                borderTopRightRadius: '8px',
-                borderTopLeftRadius: '8px',
-                backgroundColor: '#FFFFFF'
-              }}>
-                {/* Filter Header */}
-                <Box sx={{ display: 'flex', alignItems: 'center', marginLeft: '-0.5rem',}}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Tooltip title="Filter by selecting property and values" arrow>
-                      <IconButton
-                        size="small"
-                        onClick={handleFilterClick}
-                        sx={{
-                          padding: '4px',
-                          '&:hover': {
-                            backgroundColor: '#E8F4FF'
-                          }
-                        }}
-                      >
-                        <FilterList sx={{ fontSize: '16px', color: '#1f1f1f' }} />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Filter by selecting property and values" arrow>
-                      <Typography 
-                        variant="heading2Medium"  
-                        onClick={handleFilterClick}
-                        sx={{
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: '#1f1f1f',
-                          lineHeight: '1.67em',
-                          cursor: 'pointer',
-                          '&:hover': {
-                            textDecoration: 'underline'
-                          }
-                        }}
-                      >
-                        Filter
-                      </Typography>
-                    </Tooltip>
-                  </Box>
-                  <TextField
-                    value={filterText}
-                    onChange={(e) => setFilterText(e.target.value)}
-                    placeholder="Enter property name or value"
-                    variant="outlined"
-                    size="small"
-                    sx={{
-                      flex: 1,
-                      '& .MuiOutlinedInput-root': {
-                        fontSize: '12px',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        '& fieldset': {
-                          border: 'none'
-                        },
-                        '&:hover fieldset': {
-                          border: 'none'
-                        },
-                        '&.Mui-focused fieldset': {
-                          border: 'none'
-                        }
-                      },
-                      '& .MuiInputBase-input': {
-                        padding: '4px 8px',
-                        fontSize: '12px',
-                        color: '#1F1F1F'
-                      },
-                      '& .MuiInputBase-input::placeholder': {
-                        color: '#575757',
-                        opacity: 1
-                      }
-                    }}
-                    InputProps={{
-                      endAdornment: filterText && (
-                        <InputAdornment position="end">
-                          <IconButton
-                            size="small"
-                            onClick={() => setFilterText('')}
-                            sx={{ padding: '2px' }}
-                          >
-                            <Close sx={{ fontSize: '14px' }} />
-                          </IconButton>
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                  {activeFilters.length > 0 && (
-                    <Button
-                      onClick={handleClearFilters}
-                      sx={{
-                        fontSize: '11px',
-                        color: '#0B57D0',
-                        textTransform: 'none',
-                        padding: '2px 8px',
-                        minWidth: 'auto',
-                        '&:hover': { backgroundColor: 'transparent', textDecoration: 'underline' }
-                      }}
-                    >
-                      Clear All
-                    </Button>
-                  )}
-                </Box>
-                
-                {/* Active Filter Chips */}
-                {activeFilters.length > 0 && (
-                  <Box sx={{ 
-                    display: 'flex', 
-                    flexWrap: 'wrap', 
-                    gap: '6px',
-                    paddingTop: '4px'
-                  }}>
-                    {activeFilters.map((filter) => (
-                      <Box
-                        key={filter.property}
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '4px 8px',
-                          backgroundColor: '#E7F0FE',
-                          border: '1px solid #0E4DCA',
-                          borderRadius: '16px',
-                          fontSize: '11px'
-                        }}
-                      >
-                        <Typography sx={{ 
-                          fontSize: '12px', 
-                          fontWeight: 500,
-                          color: '#0E4DCA',
-                        }}>
-                          {filter.property}:
-                        </Typography>
-                        <Typography sx={{ 
-                          fontSize: '12px', 
-                          color: '#1F1F1F'
-                        }}>
-                          {filter.values.join(', ')}
-                        </Typography>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleRemoveFilter(filter.property)}
-                          sx={{
-                            padding: '2px',
-                            width: '16px',
-                            height: '16px',
-                            color: '#0E4DCA',
-                            '&:hover': {
-                              backgroundColor: '#D93025',
-                              color: '#FFFFFF'
-                            }
-                          }}
-                        >
-                          <Box sx={{ 
-                            fontSize: '12px', 
-                            fontWeight: 'bold',
-                            lineHeight: 1
-                          }}>
-                            ×
-                          </Box>
-                        </IconButton>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
+    return (
+      <Tooltip title={tooltipContent} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -8] } }] } }}>
+        <Box sx={{ display: 'flex', overflow: 'hidden', width: '100%' }}>
+          <Typography component="span" sx={{ fontSize: '12px', color: '#1F1F1F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+            {collapsedEntries.map(([key, value], idx) => (
+              <React.Fragment key={key}>
+                {idx > 0 && '    '}
+                {key}{' '}
+                <Typography component="span" sx={{ fontSize: '12px', fontWeight: 700, color: '#1F1F1F' }}>
+                  [{value}]
+                </Typography>
+              </React.Fragment>
+            ))}
+          </Typography>
+        </Box>
+      </Tooltip>
+    );
+  };
+
+  const renderBarChart = (row: ProfileData, rowIndex: number) => {
+    if (row.topValues.length === 0) return null;
+
+    const maxPct = Math.max(...row.topValues.map(t => t.rawPercentage), 0);
+    if (maxPct === 0) return null;
+
+    const labelWidth = Math.min(
+      Math.ceil(Math.max(...row.topValues.map(item => measureLabelWidth(item.value)))) + 8,
+      Math.ceil(measureLabelWidth('MMMMM')) + 8
+    );
+    const pctWidth = Math.ceil(
+      Math.max(...row.topValues.map(item => measureLabelWidth(`${item.percentage} (${item.count})`)))
+    ) + 4;
+    const maxBarWidth = Math.max(columnWidths[5] - 20 - 4 - labelWidth - 24 - pctWidth, 80);
+
+    return (
+      <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', flexDirection: 'column' }}>
+        {row.topValues.map((item, vi) => {
+          const pct = item.rawPercentage;
+          const barWidth = maxPct < 0.01 ? (pct / 100) * maxBarWidth : (pct / maxPct) * maxBarWidth;
+          const isHovered = hoveredBars[rowIndex] === vi;
+
+          return (
+            <Box
+              key={vi}
+              sx={{ display: 'flex', alignItems: 'center', marginBottom: '11px', cursor: 'default' }}
+              onMouseEnter={() => setHoveredBars(prev => ({ ...prev, [rowIndex]: vi }))}
+              onMouseLeave={() => setHoveredBars(prev => ({ ...prev, [rowIndex]: null }))}
+            >
+              {/* Label: left-aligned */}
+              <Tooltip title={measureLabelWidth(item.value) > labelWidth - 8 ? item.value : ''} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
+                <Typography sx={{
+                  width: `${labelWidth}px`,
+                  textAlign: 'left',
+                  fontSize: '12px',
+                  color: '#444746',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  flexShrink: 0,
+                }}>
+                  {item.value}
+                </Typography>
+              </Tooltip>
+
+              {/* Gap: 16px */}
+              <Box sx={{ width: '16px', flexShrink: 0 }} />
+
+              {/* Bar container: fixed width — prevents % column from ever overlapping */}
+              <Box sx={{ width: `${maxBarWidth}px`, flexShrink: 0 }}>
+                <Box sx={{
+                  width: `${barWidth}px`,
+                  height: '22px',
+                  backgroundColor: isHovered ? '#1558B0' : '#1A73E8',
+                  borderRadius: '2px',
+                  transition: 'background-color 0.15s ease',
+                  minWidth: barWidth > 0 ? '2px' : '0px',
+                }} />
               </Box>
 
-              {/* Filter Dropdown Menu */}
-             <Menu
-                anchorEl={filterAnchorEl}
-                open={Boolean(filterAnchorEl)}
-                onClose={handleFilterClose}
-                PaperProps={{
-                  sx: {
-                    maxHeight: 300,
-                    width: 250
-                  }
-                }}
-              >
-                {!selectedProperty ? (
-                  // Show property names
-                  <>
-                    <MenuItem
-                      sx={{
-                        fontSize: '0.6875rem',
-                        fontWeight: 500,
-                        backgroundColor: '#F8F9FA',
-                        borderBottom: '1px solid #E0E0E0',
-                        height: "32px",
-                        minHeight: "32px",
-                        paddingTop: 0,
-                        paddingBottom: 1,
-                        "&.Mui-disabled": {
-                          opacity: 1,
-                          color: "#575757 !important",
-                          backgroundColor: "transparent !important",
-                        },
-                      }}
-                      disabled
-                    >
-                      <ListItemText primary="Select Property to Filter" primaryTypographyProps={{
-                        fontWeight: 500,
-                        fontSize: '12px',
-                      }} />
-                    </MenuItem>
-                    {propertyNames.map((property) => (
-                      <MenuItem
-                        key={property}
-                        onClick={() => handlePropertySelect(property)}
-                        sx={{ fontSize: '12px' }}
-                      >
-                        <ListItemText primary={property} primaryTypographyProps={{ fontSize: '12px' }} />
-                      </MenuItem>
-                    ))}
-                  </>
-                ) : (
-                  // Show values for selected property
-                  <>
-                    <MenuItem
-                      onClick={() => setSelectedProperty('')}
-                      sx={{
-                        fontSize: '0.6875rem',
-                        fontWeight: 400,
-                        backgroundColor: '#F8F9FA',
-                        borderBottom: '1px solid #E0E0E0',
-                        marginTop: '-8px',
-                        paddingTop: 1.30,
-                        paddingBottom: 1.30,
-                      }}
-                    >
-                      <ListItemText primary={`← Back to Properties`} primaryTypographyProps={{ fontSize: '12px' }} />
-                    </MenuItem>
-                    <MenuItem
-                      sx={{
-                        fontSize: '0.6875rem',
-                        fontWeight: 400,
-                        backgroundColor: '#F8F9FA',
-                        borderBottom: '1px solid #E0E0E0'
-                      }}
-                      disabled
-                    >
-                      <ListItemText primary={`Filter by: ${selectedProperty}`} primaryTypographyProps={{
-                        fontSize: '12px',
-                      }} />
-                    </MenuItem>
-                    {getPropertyValues(selectedProperty).map((value) => (
-                      <MenuItem
-                        key={value}
-                        onClick={() => handleValueToggle(value)}
-                        sx={{
-                          fontSize: '12px',
-                          paddingTop: '2px',
-                          paddingBottom: '2px',
-                          paddingLeft: '8px',
-                          paddingRight: '8px',
-                          minHeight: 'auto'
-                        }}
-                      >
-                        <Checkbox
-                          checked={selectedValues.includes(value)}
-                          size="small"
-                        />
-                        <ListItemText primary={value} primaryTypographyProps={{ fontSize: '12px' }} />
-                      </MenuItem>
-                    ))}
-                  </>
-                )}
-              </Menu>
-              {/* Table */}
-              <TableContainer sx={{
-                maxHeight: 'calc(100vh - 380px)',
-                overflow: 'auto', 
-                border: '1px solid #DADCE0', 
-                borderBottomRightRadius: '8px', 
-                borderBottomLeftRadius: '8px',
-                marginTop: '0px',
-                marginLeft: '0px',
-                marginRight: '0px'
-              }}>
-                <Table stickyHeader sx={{ tableLayout: 'fixed' }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{
-                        backgroundColor: '#F0F4F8',
-                        borderBottom: '1px solid #DADCE0',
-                        padding: '8px 16px',
-                        width: '120px'
-                      }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', '&:hover .MuiIconButton-root': {
-    opacity: 1,
-  }, }}>
-                          <Typography sx={{
-                            fontSize: '0.75rem',
-                            fontWeight: 500,
-                            color: '#444746',
-                            lineHeight: '1.33em',
-                            letterSpacing: '0.1px'
-                          }}>
-                            Column name
-                          </Typography>
-                          <Tooltip title="Sort" arrow>
-                            <IconButton size="small" onClick={() => handleSort('columnName')} sx={{ opacity: (sortColumn === 'columnName' && sortDirection !== null) ? 1 : 0 }} >
-                              {getSortIcon('columnName')}
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </TableCell>
-                      <TableCell sx={{
-                        backgroundColor: '#F0F4F8',
-                        borderBottom: '1px solid #DADCE0',
-                        padding: '8px 16px',
-                        width: '100px'
-                      }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', '&:hover .MuiIconButton-root': {
-    opacity: 1,
-  } }}>
-                          <Typography sx={{
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: '#444746',
-                            lineHeight: '1.33em',
-                            letterSpacing: '0.1px'
-                          }}>
-                            Type
-                          </Typography>
-                          <Tooltip title="Sort" arrow>
-                            <IconButton size="small" onClick={() => handleSort('type')} sx={{ opacity: (sortColumn === 'type' && sortDirection !== null) ? 1 : 0 }}>
-                              {getSortIcon('type')}
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </TableCell>
-                      <TableCell sx={{
-                        backgroundColor: '#F0F4F8',
-                        borderBottom: '1px solid #DADCE0',
-                        padding: '8px 16px',
-                        width: '80px'
-                      }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', '&:hover .MuiIconButton-root': {
-    opacity: 1,
-  } }}>
-                          <Typography sx={{
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: '#444746',
-                            lineHeight: '1.33em',
-                            letterSpacing: '0.1px'
-                          }}>
-                            Null %
-                          </Typography>
-                          <Tooltip title="Sort" arrow>
-                            <IconButton size="small" onClick={() => handleSort('nullPercentage')} sx={{ opacity: (sortColumn === 'nullPercentage' && sortDirection !== null) ? 1 : 0 }}>
-                              {getSortIcon('nullPercentage')}
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </TableCell>
-                      <TableCell sx={{
-                        backgroundColor: '#F0F4F8',
-                        borderBottom: '1px solid #DADCE0',
-                        padding: '8px 16px',
-                        width: '100px'
-                      }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', '&:hover .MuiIconButton-root': {
-    opacity: 1,
-  } }}>
-                          <Typography sx={{
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: '#444746',
-                            lineHeight: '1.33em',
-                            letterSpacing: '0.1px'
-                          }}>
-                            Unique %
-                          </Typography>
-                          <Tooltip title="Sort" arrow>
-                            <IconButton size="small" onClick={() => handleSort('uniquePercentage')} sx={{ opacity: (sortColumn === 'uniquePercentage' && sortDirection !== null) ? 1 : 0 }}>
-                              {getSortIcon('uniquePercentage')}
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </TableCell>
-                      <TableCell sx={{
-                        backgroundColor: '#F0F4F8',
-                        borderBottom: '1px solid #DADCE0',
-                        padding: '8px 0px',
-                        width: '200px'
-                      }}>
-                        <Typography sx={{
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: '#444746',
-                          lineHeight: '1.33em',
-                          letterSpacing: '0.1px'
-                        }}>
-                          Statistics
-                        </Typography>
-                      </TableCell>
-                      <TableCell sx={{
-                        backgroundColor: '#F0F4F8',
-                        borderBottom: '1px solid #DADCE0',
-                        padding: '8px 8px',
-                        width: '250px',
-                      }}>
-                        <Typography sx={{
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: '#444746',
-                          lineHeight: '1.33em',
-                          letterSpacing: '0.1px',
-                          marginLeft: '10px',
-                          textAlign:"center",
-                        }}>
-                          Top 10 values
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {filteredData.map((row, index) => (
-                      <React.Fragment key={row.columnName}>
-                        <TableRow sx={{ height: '152px' }}>
-                          <TableCell sx={{
-                            padding: '7px 16px',
-                            borderBottom: index < profileData.length - 1 ? '1px solid #DADCE0' : 'none',
-                            verticalAlign: 'top'
-                          }}>
-                            <Typography sx={{
-                              fontSize: '12px',
-                              fontWeight: 400,
-                              color: '#1F1F1F',
-                              lineHeight: '1.33em',
-                              letterSpacing: '0.1px',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              width: '100%'
-                            }}>
-                              {row.columnName}
-                            </Typography>
-                          </TableCell>
-                          <TableCell sx={{
-                            padding: '7px 16px',
-                            borderBottom: index < profileData.length - 1 ? '1px solid #DADCE0' : 'none',
-                            verticalAlign: 'top'
-                          }}>
-                            <Typography sx={{
-                              fontSize: '12px',
-                              fontWeight: 400,
-                              color: '#1F1F1F',
-                              lineHeight: '1.33em',
-                              letterSpacing: '0.1px',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              width: '100%'
-                            }}>
-                              {row.type}
-                            </Typography>
-                          </TableCell>
-                          <TableCell sx={{
-                            padding: '7px 16px',
-                            borderBottom: index < profileData.length - 1 ? '1px solid #DADCE0' : 'none',
-                            verticalAlign: 'top'
-                          }}>
-                            <Typography sx={{
-                              fontSize: '12px',
-                              fontWeight: 400,
-                              color: '#1F1F1F',
-                              lineHeight: '1.33em',
-                              letterSpacing: '0.1px',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              width: '100%'
-                            }}>
-                              {row.nullPercentage}
-                            </Typography>
-                          </TableCell>
-                          <TableCell sx={{
-                            padding: '7px 16px',
-                            borderBottom: index < profileData.length - 1 ? '1px solid #DADCE0' : 'none',
-                            verticalAlign: 'top'
-                          }}>
-                            <Typography sx={{
-                              fontSize: '12px',
-                              fontWeight: 400,
-                              color: '#1F1F1F',
-                              lineHeight: '1.33em',
-                              letterSpacing: '0.1px',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              width: '100%'
-                            }}>
-                              {row.uniquePercentage}
-                            </Typography>
-                          </TableCell>
-                          <TableCell sx={{
-                            padding: '0px 20px 0px 0px',
-                            borderBottom: index < profileData.length - 1 ? '1px solid #DADCE0' : 'none',
-                            verticalAlign: 'top'
-                          }}>
-                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                              {Object.entries(row.statistics).map(([key, value], statIndex) => (
-                                <Box key={key} sx={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                  padding: '8px 20px 8px 0px',
-                                  borderBottom: statIndex < Object.keys(row.statistics).length - 1 ? '1px solid #DADCE0' : 'none',
-                                  minHeight: '34px'
-                                }}>
-                                  <Typography sx={{
-                                    fontSize: '12px',
-                                    fontWeight: 500,
-                                    color: '#1F1F1F',
-                                    lineHeight: '1.33em',
-                                    letterSpacing: '0.1px',
-                                    width: '101px',
-                                    whiteSpace: 'nowrap',
-                                  }}>
-                                    {key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, str => str.toUpperCase())}
-                                  </Typography>
-                                  <Typography sx={{
-                                    fontSize: '12px',
-                                    fontWeight: 400,
-                                    color: '#1F1F1F',
-                                    lineHeight: '1.33em',
-                                    letterSpacing: '0.1px'
-                                  }}>
-                                    {typeof value === 'number' 
-                                      ? (Math.floor(value * 100) / 100).toString() 
-                                      : value}
-                                  </Typography>
-                                </Box>
-                              ))}
-                            </Box>
-                          </TableCell>
-                         <TableCell sx={{
-                            padding: '0px 16px',
-                            borderBottom: index < profileData.length - 1 ? '1px solid #DADCE0' : 'none',
-                            verticalAlign: 'top'
-                          }}>
-                            {(() => {
-                              const numBars = row.topValues.length;
-                              if (numBars === 0) return null;
-                              const topOffset = 6.5;
-                              const bottomLabelAreaHeight = 46;
-                              const minBarHeight = 6;
-                              const minGap = 8;
-                              const minStep = minBarHeight + minGap;
-                              const defaultTotalAvailableHeight = 142 - bottomLabelAreaHeight - topOffset;
-                              const minHeightForInternalText = 16; 
-                              const minWidthForInternalText = 40;  
-                              let barStep;
-                              let barHeight;
-                              let totalAvailableHeight;
-                              const slimBarStep = defaultTotalAvailableHeight / numBars;
-                              const slimBarHeight = slimBarStep - minGap;
+              {/* Gap: 8px */}
+              <Box sx={{ width: '8px', flexShrink: 0 }} />
 
-                              if (slimBarHeight < minBarHeight) {
-                                  barHeight = minBarHeight;
-                                  barStep = minStep;
-                                  totalAvailableHeight = numBars * barStep;
-                              } else {
-                                  barHeight = slimBarHeight;
-                                  barStep = slimBarStep;
-                                  totalAvailableHeight = defaultTotalAvailableHeight;
-                              }
-
-                              const isBarTooSmall = barHeight < minHeightForInternalText;
-                              const finalChartHeight = totalAvailableHeight + topOffset + bottomLabelAreaHeight;
-                              const finalGridLineHeight = totalAvailableHeight + topOffset;
-                              const maxPercentage = Math.max(...row.topValues.map(item => parseFloat(item.percentage) || 0), 0);
-                              
-                              let axisMax;
-                              if (maxPercentage > 70) {
-                                  axisMax = 100;
-                              } else {
-                                  axisMax = Math.ceil(maxPercentage / 10) * 10;
-                              }
-                              
-                              if (axisMax === 0) {
-                                  axisMax = 10;
-                              }
-
-                              return (
-                                <Box sx={{
-                                  display: 'flex',
-                                  alignItems:"center",
-                                  justifyContent:"center"
-                                }}>
-                                  <Box sx={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px',
-                                    padding: '7px 0px',
-                                    width: '216px',
-                                    height: `${finalChartHeight}px`,
-                                    position: 'relative'
-                                  }}>
-                                    <Box sx={{
-                                      position: 'absolute',
-                                      top: '0px',
-                                      left: '47px',
-                                      width: '152px',
-                                      height: `${finalGridLineHeight}px`
-                                    }}>
-                                      <Box sx={{ position: 'absolute', left: '8px', width: '1px', height: '100%', backgroundColor: '#DADCE0' }} />
-                                      <Box sx={{ position: 'absolute', left: '44px', width: '1px', height: '100%', backgroundColor: '#DADCE0' }} />
-                                      <Box sx={{ position: 'absolute', left: '80px', width: '1px', height: '100%', backgroundColor: '#DADCE0' }} />
-                                      <Box sx={{ position: 'absolute', left: '116px', width: '1px', height: '100%', backgroundColor: '#DADCE0' }} />
-                                      <Box sx={{ position: 'absolute', left: '152px', width: '1px', height: '100%', backgroundColor: '#DADCE0' }} />
-                                    </Box>
-                                    {row.topValues.map((item, valueIndex) => {
-                                      const percentage = parseFloat(item.percentage) || 0;
-                                      const barWidth = (Math.min(percentage, axisMax) / axisMax) * 144; 
-                                      const showTextOutside = isBarTooSmall || barWidth < minWidthForInternalText;
-
-                                      return (
-                                        <Box key={valueIndex} sx={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '7px', 
-                                          position: 'absolute',
-                                          top: `${topOffset + (valueIndex * barStep)}px`,
-                                          left: '0px',
-                                          width: '100%',
-                                        }}>
-                                          <Tooltip title={item.value} arrow>
-                                            <Typography sx={{
-                                              fontSize: '12px',
-                                              fontWeight: 400,
-                                              color: '#1F1F1F',
-                                              lineHeight: '1.33em',
-                                              letterSpacing: '0.1px',
-                                              width: '48px',
-                                              textAlign: 'right',
-                                              overflow: 'hidden',
-                                              whiteSpace: 'nowrap',
-                                              cursor: 'pointer',
-                                              flexShrink: 0 
-                                            }}>
-                                              {item.value.length > 5 ? 
-                                                item.value.substring(0, item.value.lastIndexOf(' ', 5)) || item.value.substring(0, 5) : 
-                                                item.value
-                                              }
-                                            </Typography>
-                                          </Tooltip>
-                                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                            <Box sx={{
-                                              width: `${barWidth}px`, 
-                                              height: `${barHeight}px`,
-                                              backgroundColor: '#0B57D0',
-                                              borderRadius: '4px',
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              justifyContent: 'center',
-                                              flexShrink: 0
-                                            }}>
-                                              <Typography sx={{
-                                                fontSize: '12px',
-                                                fontWeight: 400,
-                                                color: '#FFFFFF',
-                                                lineHeight: '1.33em',
-                                                letterSpacing: '0.1px',
-                                                display: showTextOutside ? 'none' : 'block'
-                                              }}>
-                                                {item.percentage}
-                                              </Typography>
-                                            </Box>
-                                            {showTextOutside && (
-                                              <>
-                                                <Box sx={{ 
-                                                  width: '10px', 
-                                                  height: '1px', 
-                                                  backgroundColor: '#1F1F1F',
-                                                }}/>
-                                                <Typography sx={{
-                                                  fontSize: '12px',
-                                                  fontWeight: 400,
-                                                  color: '#1F1F1F', 
-                                                  lineHeight: '1.33em',
-                                                  letterSpacing: '0.1px',
-                                                  whiteSpace: 'nowrap',
-                                                  marginLeft: '2px'
-                                                }}>
-                                                  {item.percentage}
-                                                </Typography>
-                                              </>
-                                            )}
-                                          </Box>
-
-                                        </Box>
-                                      )
-                                    })}
-                                   <Box sx={{
-                                      position: 'absolute',
-                                      bottom: '16px',
-                                      left: '47px',
-                                      width: '152px',
-                                      height: '16px'
-                                    }}>
-                                      <Typography sx={{
-                                        position: 'absolute',
-                                        left: '8px', 
-                                        transform: 'translateX(-50%)', 
-                                        fontSize: '11px',
-                                        fontWeight: 500,
-                                        color: '#1F1F1F',
-                                        lineHeight: '1.45em',
-                                      }}>
-                                        0%
-                                      </Typography>
-                                      <Typography sx={{
-                                        position: 'absolute',
-                                        left: '80px', 
-                                        transform: 'translateX(-50%)', 
-                                        fontSize: '11px',
-                                        fontWeight: 500,
-                                        color: '#1F1F1F',
-                                        lineHeight: '1.45em',
-                                      }}>
-                                        {`${axisMax / 2}%`}
-                                      </Typography>
-                                      <Typography sx={{
-                                        position: 'absolute',
-                                        left: '152px', 
-                                        transform: 'translateX(-50%)', 
-                                        fontSize: '11px',
-                                        fontWeight: 500,
-                                        color: '#1F1F1F',
-                                        lineHeight: '1.45em',
-                                      }}>
-                                        {`${axisMax}%`}
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                </Box>
-                              );
-                            })()}
-                          </TableCell>
-                        </TableRow>
-                      </React.Fragment>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              {/* Percentage: right-aligned; count on hover shifts % left naturally */}
+              <Box sx={{ width: `${pctWidth}px`, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                <Typography sx={{ fontSize: '12px', color: '#444746', whiteSpace: 'nowrap' }}>
+                  {item.rawPercentage < 0.01 ? '(<0.01%)' : item.percentage}
+                  {isHovered && item.count > 0 && (
+                    <Typography component="span" sx={{ fontSize: '12px', color: '#9E9E9E', marginLeft: '4px' }}>
+                      ({item.count})
+                    </Typography>
+                  )}
+                </Typography>
+              </Box>
             </Box>
-          </Collapse>
-          <Drawer
-            anchor="right"
-            open={isConfigurationsOpen}
-            onClose={() => setIsConfigurationsOpen(false)}
-            PaperProps={{
-              sx: {
-                width: '612px',
-                backgroundColor: '#ffffff',
-                boxShadow: '-4px 0px 8px rgba(0, 0, 0, 0.1)',
-              }
+          );
+        })}
+
+        {/* X-axis: aligned under bar area only */}
+        <Box sx={{ display: 'flex', marginLeft: `${labelWidth + 16}px`, width: `${maxBarWidth}px`, justifyContent: 'space-between', marginTop: '4px' }}>
+          <Typography sx={{ fontSize: '11px', color: '#9E9E9E' }}>0%</Typography>
+          <Typography sx={{ fontSize: '11px', color: '#9E9E9E' }}>{maxPct < 0.01 ? '50%' : `${(maxPct / 2).toFixed(1)}%`}</Typography>
+          <Typography sx={{ fontSize: '11px', color: '#9E9E9E' }}>{maxPct < 0.01 ? '100%' : `${maxPct.toFixed(1)}%`}</Typography>
+        </Box>
+      </Box>
+    );
+  };
+
+  if (loading || isScanLoading || isParentLoading) {
+    return <DataProfileSkeleton />;
+  }
+
+  if (!dataProfileAvailable || profileData.length === 0) {
+    return (
+      <Box sx={{ flex: 1, position: 'relative' }}>
+        <Box sx={{
+          display: "flex",
+          justifyContent: 'center',
+          alignItems: 'center',
+          border: "1px solid #ECEEF4",
+          borderRadius: "12px",
+          backgroundColor: "#FFFFFF",
+          minHeight: '500px',
+          width: "100%"
+        }}>
+          <Typography sx={{ fontSize: '14px', fontWeight: 400, color: '#0C1226CC' }}>
+            No published Data Profile available for this entry
+          </Typography>
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ flex: 1, position: 'relative' }}>
+      <Box sx={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        padding: "0px",
+        alignSelf: "stretch",
+        flexGrow: 0,
+        border: "1px solid #ECEEF4",
+        borderRadius: "12px",
+        overflow: "hidden",
+        backgroundColor: "#FFFFFF",
+        width: "100%",
+        minWidth: 0,
+        marginBottom: "10px",
+      }}>
+        {/* Card Header */}
+        <Box 
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            padding: "24px 24px 16px 24px",
+            width: "100%",
+            boxSizing: "border-box",
+            justifyContent: "space-between",
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <Box sx={{ width: "32px", height: "32px", background: "#EAEEFA", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <AnalyticsOutlined sx={{ fontSize: "20px", color: "#022FCD" }} />
+            </Box>
+            <Typography sx={{
+              fontFamily: '"Google Sans", sans-serif',
+              fontWeight: 600,
+              fontSize: "18px",
+              color: "#3D4151",
+            }}>
+              Profile Results
+            </Typography>
+            <Tooltip title="Profile results provide an analysis of the data's characteristics, such as null percentages, unique value counts, and statistical properties like averages and distributions for columns" slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
+              <InfoOutline sx={{ width: '18px', height: '18px', opacity: 0.9, color: "#7D7D7D" }} />
+            </Tooltip>
+          </Box>
+          <Button
+            onClick={() => setIsConfigurationsOpen(true)}
+            sx={{
+              color: '#0B57D0',
+              textTransform: 'none',
+              fontSize: '14px',
+              fontWeight: 500,
+              padding: '6px 0',
+              minWidth: 'auto',
+              '&:hover': { backgroundColor: 'transparent', textDecoration: 'underline' }
             }}
           >
-            <DataProfileConfigurationsPanel
-              onClose={() => setIsConfigurationsOpen(false)}
-              dataProfileScan={dataProfileScan}
-            />
-          </Drawer>
-          </Box>
+            Configurations
+            <KeyboardArrowDown sx={{ fontSize: '20px', width: '20px', height: '20px', marginLeft: '2px', transform: 'rotate(-90deg)' }} />
+          </Button>
         </Box>
-      ) : (
-      <Box sx={{
-        flex: 1,
-        backgroundColor: '#ffffff',
-        borderRadius: '8px',
-        border: '1px solid #DADCE0',
-        overflow: 'hidden',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '500px'
-      }}>
-        <Typography sx={{
-          fontSize: '14px',
-          fontWeight: 400,
-          color: '#575757',
-          lineHeight: '1.43em'
-        }}>
-          No published Data Profile available for this entry
-        </Typography>
-    </Box>)
+
+        <Divider sx={{ width: "calc(100% - 48px)", borderColor: "#E8EBEF", margin: "0px 24px" }} />
+
+        {/* Content */}
+        <>
+          <Box sx={{ padding: '0 20px' }}>
+            <FilterBar
+              filterText={filterText}
+              onFilterTextChange={setFilterText}
+              propertyNames={FILTER_PROPERTIES}
+              getPropertyValues={getPropertyValues}
+              activeFilters={activeFilters}
+              onActiveFiltersChange={setActiveFilters}
+              placeholder="Enter property name or value"
+              marginLeft="0px"
+              sx={{ padding: '0.5rem 0.5rem 0.5rem 0' }}
+            />
+            <Box sx={{ overflow: 'hidden' }}>
+              <Box sx={{
+                width: '100%',
+                overflowX: 'auto',
+                overflowY: 'auto',
+                maxHeight: 'calc(100vh - 420px)',
+                '&::-webkit-scrollbar': { width: '8px', height: '8px' },
+                '&::-webkit-scrollbar-track': { backgroundColor: 'transparent', borderRadius: '10px' },
+                '&::-webkit-scrollbar-thumb': { backgroundColor: '#a1a1a1ff', borderRadius: '10px' },
+                '&::-webkit-scrollbar-thumb:hover': { background: '#7c7c7d' },
+              }}>
+                {/* Header Row */}
+                <Box sx={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'stretch',
+                  padding: '0px 12px',
+                  borderBottom: '1px solid #DADCE0',
+                  minWidth: `${totalTableWidth}px`,
+                }}>
+                  {/* Expand icon placeholder */}
+                  <div style={{ ...headerCellStyle, width: '28px', flexShrink: 0 }} />
+
+                  {/* Column Name (col 0 — no extra paddingLeft on div) */}
+                  <div style={{ ...headerCellStyle, width: `${columnWidths[0]}px`, flexShrink: 0 }}>
+                    <Tooltip title={getSortTooltip('columnName')} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
+                      <Box
+                        role="button"
+                        onClick={() => handleToggleSort('columnName')}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
+                          borderRadius: '8px 8px 0 0', padding: '6px 8px',
+                          flex: 1, alignSelf: 'stretch',
+                          transition: 'background-color 0.2s ease',
+                          '&:hover': { backgroundColor: '#F8F9FA' },
+                        }}
+                      >
+                        <span>Column Name</span>
+                        {sortIcon('columnName')}
+                      </Box>
+                    </Tooltip>
+                    <ResizeHandle
+                      onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(0, e); }}
+                      isActive={activeIndex === 0}
+                      darkMode={false}
+                    />
+                  </div>
+
+                  {/* Type (col 1 — paddingLeft: '12px' on div) */}
+                  <div style={{ ...headerCellStyle, width: `${columnWidths[1]}px`, flexShrink: 0, paddingLeft: '12px' }}>
+                    <Tooltip title={getSortTooltip('type')} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
+                      <Box
+                        role="button"
+                        onClick={() => handleToggleSort('type')}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
+                          borderRadius: '8px 8px 0 0', padding: '6px 8px',
+                          flex: 1, alignSelf: 'stretch',
+                          transition: 'background-color 0.2s ease',
+                          '&:hover': { backgroundColor: '#F8F9FA' },
+                        }}
+                      >
+                        <span>Type</span>
+                        {sortIcon('type')}
+                      </Box>
+                    </Tooltip>
+                    <ResizeHandle
+                      onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(1, e); }}
+                      isActive={activeIndex === 1}
+                      darkMode={false}
+                    />
+                  </div>
+
+                  {/* Null % (col 2) */}
+                  <div style={{ ...headerCellStyle, width: `${columnWidths[2]}px`, flexShrink: 0, paddingLeft: '12px' }}>
+                    <Tooltip title={getSortTooltip('nullPercentage')} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
+                      <Box
+                        role="button"
+                        onClick={() => handleToggleSort('nullPercentage')}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
+                          borderRadius: '8px 8px 0 0', padding: '6px 8px',
+                          flex: 1, alignSelf: 'stretch',
+                          transition: 'background-color 0.2s ease',
+                          '&:hover': { backgroundColor: '#F8F9FA' },
+                        }}
+                      >
+                        <span>Null %</span>
+                        {sortIcon('nullPercentage')}
+                      </Box>
+                    </Tooltip>
+                    <ResizeHandle
+                      onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(2, e); }}
+                      isActive={activeIndex === 2}
+                      darkMode={false}
+                    />
+                  </div>
+
+                  {/* Unique % (col 3) */}
+                  <div style={{ ...headerCellStyle, width: `${columnWidths[3]}px`, flexShrink: 0, paddingLeft: '12px' }}>
+                    <Tooltip title={getSortTooltip('uniquePercentage')} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
+                      <Box
+                        role="button"
+                        onClick={() => handleToggleSort('uniquePercentage')}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
+                          borderRadius: '8px 8px 0 0', padding: '6px 8px',
+                          flex: 1, alignSelf: 'stretch',
+                          transition: 'background-color 0.2s ease',
+                          '&:hover': { backgroundColor: '#F8F9FA' },
+                        }}
+                      >
+                        <span>Unique %</span>
+                        {sortIcon('uniquePercentage')}
+                      </Box>
+                    </Tooltip>
+                    <ResizeHandle
+                      onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(3, e); }}
+                      isActive={activeIndex === 3}
+                      darkMode={false}
+                    />
+                  </div>
+
+                  {/* Statistics (col 4 — not sortable) */}
+                  <div style={{ ...headerCellStyle, width: `${columnWidths[4]}px`, flexShrink: 0, paddingLeft: '12px' }}>
+                    <span style={{ padding: '6px 8px', display: 'block' }}>Statistics</span>
+                    <ResizeHandle
+                      onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(4, e); }}
+                      isActive={activeIndex === 4}
+                      darkMode={false}
+                    />
+                  </div>
+
+                  {/* Top 10 values (col 5 — not sortable, last — no ResizeHandle) */}
+                  <div style={{ ...headerCellStyle, width: `${columnWidths[5]}px`, flexShrink: 0, paddingLeft: '12px' }}>
+                    <span style={{ padding: '6px 8px', display: 'block' }}>Top 10 values</span>
+                  </div>
+                </Box>
+
+                {/* Body Rows */}
+                <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: `${totalTableWidth}px` }}>
+                  {filteredData.length > 0 ? (
+                    filteredData.map((row, index) => {
+                      const isExpanded = expandedRows.has(index);
+                      const isNotLast = index < filteredData.length - 1;
+
+                      return (
+                        <Box
+                          key={`${row.columnName}-${index}`}
+                          onClick={() => toggleRowExpand(index)}
+                          sx={{
+                            position: 'relative',
+                            zIndex: 0,
+                            cursor: 'pointer',
+                            '&:hover::before': {
+                              content: '""',
+                              position: 'absolute',
+                              inset: 0,
+                              backgroundColor: '#F8F9FA',
+                              zIndex: -1,
+                            },
+                            ...(isNotLast && {
+                              '&::after': {
+                                content: '""',
+                                position: 'absolute',
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                height: '1px',
+                                backgroundColor: '#DADCE0',
+                              },
+                            }),
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              flexDirection: 'row',
+                              alignItems: isExpanded ? 'flex-start' : 'center',
+                              minHeight: '52px',
+                              padding: isExpanded ? '18px 12px 20px 12px' : '0px 12px',
+                              position: 'relative',
+                              zIndex: 0,
+                            }}
+                          >
+                            {/* Expand icon */}
+                            <div style={{ ...bodyCellStyle, width: '28px', flexShrink: 0, justifyContent: 'center' }}>
+                              <ChevronRight
+                                sx={{
+                                  fontSize: '20px',
+                                  color: '#575757',
+                                  transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                                  transition: 'transform 0.2s ease',
+                                }}
+                              />
+                            </div>
+
+                            {/* Column Name (col 0) */}
+                            <div style={{ ...bodyCellStyle, width: `${columnWidths[0]}px`, flexShrink: 0, paddingLeft: '8px', paddingRight: '4px' }}>
+                              <Tooltip title={measureLabelWidth(row.columnName) > columnWidths[0] - 12 ? row.columnName : ''} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
+                                <Typography sx={{
+                                  fontSize: '12px',
+                                  fontWeight: 400,
+                                  color: '#1F1F1F',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  width: '100%',
+                                }}>
+                                  {row.columnName}
+                                </Typography>
+                              </Tooltip>
+                            </div>
+
+                            {/* Type (col 1) */}
+                            <div style={{ ...bodyCellStyle, width: `${columnWidths[1]}px`, flexShrink: 0, paddingLeft: '20px', paddingRight: '4px' }}>
+                              <Box sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '0 8px',
+                                backgroundColor: '#E9EEF6',
+                                borderRadius: '8px',
+                                height: '20px',
+                              }}>
+                                <Typography sx={{ fontSize: '12px', fontWeight: 500, color: '#575757', whiteSpace: 'nowrap' }}>
+                                  {row.type}
+                                </Typography>
+                              </Box>
+                            </div>
+
+                            {/* Null % (col 2) */}
+                            <div style={{ ...bodyCellStyle, width: `${columnWidths[2]}px`, flexShrink: 0, paddingLeft: '20px', paddingRight: '4px' }}>
+                              <Typography sx={{ fontSize: '12px', color: '#1F1F1F' }}>
+                                {row.nullPercentage}
+                              </Typography>
+                            </div>
+
+                            {/* Unique % (col 3) */}
+                            <div style={{ ...bodyCellStyle, width: `${columnWidths[3]}px`, flexShrink: 0, paddingLeft: '20px', paddingRight: '4px' }}>
+                              <Typography sx={{ fontSize: '12px', color: '#1F1F1F' }}>
+                                {row.uniquePercentage}
+                              </Typography>
+                            </div>
+
+                            {/* Statistics (col 4) */}
+                            <div style={{ ...bodyCellStyle, width: `${columnWidths[4]}px`, flexShrink: 0, paddingLeft: '20px', paddingRight: '4px', alignItems: 'flex-start' }}>
+                              {renderStatisticsCell(row, isExpanded)}
+                            </div>
+
+                            {/* Top 10 values (col 5) */}
+                            <div style={{ ...bodyCellStyle, width: `${columnWidths[5]}px`, flexShrink: 0, paddingLeft: isExpanded ? '20px' : '20px', paddingRight: '4px', alignItems: 'flex-start' }}>
+                              {isExpanded
+                                ? renderBarChart(row, index)
+                                : (
+                                  <Typography
+                                    sx={{ fontSize: '12px', color: '#0B57D0', cursor: 'pointer' }}
+                                    onClick={(e) => { e.stopPropagation(); toggleRowExpand(index); }}
+                                  >
+                                    Click to expand distribution
+                                  </Typography>
+                                )
+                              }
+                            </div>
+                          </Box>
+                        </Box>
+                      );
+                    })
+                  ) : (
+                    <Box sx={{ padding: '48px', textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: '14px', color: '#0C1226CC' }}>
+                        No data matches the applied filters
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+            </Box>
+          </Box>
+        </>
+
+        {/* Configurations Drawer */}
+        <Drawer
+          anchor="right"
+          open={isConfigurationsOpen}
+          onClose={() => setIsConfigurationsOpen(false)}
+          PaperProps={{
+            sx: {
+              width: '612px',
+              backgroundColor: '#ffffff',
+              boxShadow: '-4px 0px 8px rgba(0, 0, 0, 0.1)',
+            }
+          }}
+        >
+          <DataProfileConfigurationsPanel
+            onClose={() => setIsConfigurationsOpen(false)}
+            dataProfileScan={dataProfileScan}
+          />
+        </Drawer>
+      </Box>
+    </Box>
   );
 };
 

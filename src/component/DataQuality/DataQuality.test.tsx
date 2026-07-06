@@ -66,7 +66,46 @@ vi.mock('@mui/icons-material', () => ({
   ArrowUpward: () => <div data-testid="arrow-upward-icon">Up</div>,
   ArrowDownward: () => <div data-testid="arrow-downward-icon">Down</div>,
   ExpandLess: () => <div data-testid="expand-less-icon">Less</div>,
-  ExpandMore: () => <div data-testid="expand-more-icon">More</div>
+  ExpandMore: () => <div data-testid="expand-more-icon">More</div>,
+  ContentCopy: () => <div data-testid="content-copy-icon">Copy</div>,
+  KeyboardArrowRight: () => <div data-testid="keyboard-arrow-right-icon">Right</div>,
+  KeyboardArrowDown: () => <div data-testid="keyboard-arrow-down-icon">Down</div>,
+  ChevronRight: ({ sx }: any) => <div data-testid="chevron-right-icon" style={sx}>ChevronRight</div>,
+  RuleOutlined: () => <div data-testid="rule-outlined-icon">Rule</div>,
+}));
+
+// Mock the reusable components to isolate unit tests
+vi.mock('../Common/OverflowTooltip', () => ({
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock('../../hooks/useColumnResize', () => ({
+  useColumnResize: () => ({
+    columnWidths: [120, 100, 120, 90, 100, 120, 100, 90, 90],
+    activeIndex: null,
+    handleMouseDown: vi.fn(),
+    setColumnWidths: vi.fn(),
+  }),
+}));
+
+vi.mock('../Schema/ResizeHandle', () => ({
+  default: () => <div data-testid="resize-handle" />,
+}));
+
+vi.mock('../Common/FilterBar', () => ({
+  default: function MockFilterBar(props: any) {
+    return (
+      <div data-testid="filter-bar">
+        <div data-testid="filter-list-icon">Filter</div>
+        <input
+          data-testid="filter-bar-input"
+          value={props.filterText}
+          onChange={(e: any) => props.onFilterTextChange(e.target.value)}
+          placeholder={props.placeholder}
+        />
+      </div>
+    );
+  },
 }));
 
 describe('DataQuality Components', () => {
@@ -88,6 +127,38 @@ describe('DataQuality Components', () => {
           }
         ]
       },
+      dataQualityResult: {
+        score: 95,
+        rules: [
+          {
+            rule: {
+              column: 'test_column',
+              ruleType: 'NOT_NULL',
+              ruleName: 'test_rule'
+            },
+            passed: true,
+            passRatio: 1,
+            failingRowsQuery: 'SELECT * FROM test WHERE test_column IS NULL',
+          }
+        ],
+        dimensions: [
+          {
+            dimension: { name: 'COMPLETENESS' },
+            passed: true,
+            score: 95
+          },
+          {
+            dimension: { name: 'UNIQUENESS' },
+            passed: true,
+            score: 90
+          },
+          {
+            dimension: { name: 'VALIDITY' },
+            passed: true,
+            score: 100
+          }
+        ]
+      },
       resultsTable: 'test-results-table'
     },
     jobs: [
@@ -99,21 +170,30 @@ describe('DataQuality Components', () => {
           score: 95,
           rules: [
             {
-              rule: { ruleName: 'test_rule' },
-              passed: true
+              rule: {
+                column: 'test_column',
+                ruleType: 'NOT_NULL',
+                ruleName: 'test_rule'
+              },
+              passed: true,
+              passRatio: 1,
+              failingRowsQuery: 'SELECT * FROM test WHERE test_column IS NULL',
             }
           ],
           dimensions: [
             {
               dimension: { name: 'COMPLETENESS' },
+              passed: true,
               score: 95
             },
             {
               dimension: { name: 'UNIQUENESS' },
+              passed: true,
               score: 90
             },
             {
               dimension: { name: 'VALIDITY' },
+              passed: true,
               score: 100
             }
           ]
@@ -139,7 +219,6 @@ describe('DataQuality Components', () => {
 
   describe('DataQuality Main Component', () => {
     it('handles entry without data quality labels', () => {
-      // Pass null/undefined scanName to trigger "no data" state
       renderWithStore(<DataQuality scanName={null} allScansStatus="succeeded" />);
 
       expect(screen.getByText('No published Data Quality available for this entry')).toBeInTheDocument();
@@ -160,14 +239,10 @@ describe('DataQuality Components', () => {
 
       renderWithStore(<DataQuality scanName="test-scan" allScansStatus="succeeded" />, storeWithData);
 
-      // Component will still show loading because the mock selectors return null/idle by default
-      // But the test verifies the component renders without errors
       expect(screen.getByTestId('data-quality-skeleton')).toBeInTheDocument();
     });
 
     it('handles failed data fetch status', () => {
-      // Component renders with failed state by checking dataQualityScanStatus === 'failed'
-      // Since our mocks return 'idle', we test the no data message path instead
       renderWithStore(<DataQuality scanName={null} allScansStatus="succeeded" />);
 
       expect(screen.getByText('No published Data Quality available for this entry')).toBeInTheDocument();
@@ -190,7 +265,7 @@ describe('DataQuality Components', () => {
 
     it('displays configuration data correctly', () => {
       render(<ConfigurationsPanel {...defaultProps} />);
-      
+
       expect(screen.getByText('Row Filter')).toBeInTheDocument();
       expect(screen.getByText('test-filter')).toBeInTheDocument();
       expect(screen.getByText('Sampling Size')).toBeInTheDocument();
@@ -213,14 +288,13 @@ describe('DataQuality Components', () => {
 
       render(<ConfigurationsPanel {...defaultProps} dataQualtyScan={scanWithoutData} />);
 
-      // Component displays "-" for missing data fields
       const allText = screen.getByText('Row Filter').closest('div')?.parentElement?.textContent;
       expect(allText).toContain('-');
     });
 
     it('displays last run status correctly', () => {
       render(<ConfigurationsPanel {...defaultProps} />);
-      
+
       expect(screen.getByText('Last Run Status')).toBeInTheDocument();
       expect(screen.getByText('PASSED')).toBeInTheDocument();
     });
@@ -229,7 +303,6 @@ describe('DataQuality Components', () => {
       render(<ConfigurationsPanel {...defaultProps} />);
 
       expect(screen.getByText('Last Run Time')).toBeInTheDocument();
-      // Date and time are displayed separately
       const lastRunSection = screen.getByText('Last Run Time').closest('div')?.parentElement;
       expect(lastRunSection?.textContent).toContain('Jan 1, 2022');
     });
@@ -237,10 +310,10 @@ describe('DataQuality Components', () => {
     it('handles close button click', () => {
       const mockOnClose = vi.fn();
       render(<ConfigurationsPanel {...defaultProps} onClose={mockOnClose} />);
-      
+
       const closeButton = screen.getByTestId('close-icon');
       fireEvent.click(closeButton);
-      
+
       expect(mockOnClose).toHaveBeenCalled();
     });
 
@@ -254,7 +327,7 @@ describe('DataQuality Components', () => {
       };
 
       render(<ConfigurationsPanel {...defaultProps} dataQualtyScan={scanWithFailedJob} />);
-      
+
       expect(screen.getByText('FAILED')).toBeInTheDocument();
     });
   });
@@ -264,87 +337,49 @@ describe('DataQuality Components', () => {
       dataQualtyScan: mockDataQualityScan
     };
 
-    it('renders rules table', () => {
+    it('renders the component with header', () => {
       render(<CurrentRules {...defaultProps} />);
-      
+
       expect(screen.getByText('Current Rules')).toBeInTheDocument();
+    });
+
+    it('renders the DataGrid with rule data', () => {
+      render(<CurrentRules {...defaultProps} />);
+
+      // DataGrid renders column headers
       expect(screen.getByText('Column Name')).toBeInTheDocument();
       expect(screen.getByText('Rule Name')).toBeInTheDocument();
       expect(screen.getByText('Rule Type')).toBeInTheDocument();
+      expect(screen.getByText('Status')).toBeInTheDocument();
       expect(screen.getByText('Evaluation')).toBeInTheDocument();
       expect(screen.getByText('Dimensions')).toBeInTheDocument();
       expect(screen.getByText('Parameters')).toBeInTheDocument();
+      expect(screen.getByText('Failed Rows')).toBeInTheDocument();
       expect(screen.getByText('Threshold')).toBeInTheDocument();
+      expect(screen.getByText('Query to get failed records')).toBeInTheDocument();
     });
 
-    it('displays rule data correctly', () => {
+    it('displays rule data in the grid', () => {
       render(<CurrentRules {...defaultProps} />);
-      
+
       expect(screen.getByText('test_column')).toBeInTheDocument();
       expect(screen.getByText('test_rule')).toBeInTheDocument();
       expect(screen.getByText('NOT_NULL')).toBeInTheDocument();
-      expect(screen.getAllByText('PASSED')).toHaveLength(1); // Table cell (ConfigurationsPanel is inside a closed Drawer)
-      expect(screen.getByText('COMPLETENESS')).toBeInTheDocument();
-      expect(screen.getByText('95%')).toBeInTheDocument();
+      expect(screen.getByText('Passed')).toBeInTheDocument();
+      expect(screen.getByText('Completeness')).toBeInTheDocument();
     });
 
-    it('handles configurations button click', () => {
+    it('renders FilterBar component', () => {
       render(<CurrentRules {...defaultProps} />);
-      
-      const configButtons = screen.getAllByText('Configurations');
-      fireEvent.click(configButtons[0]); // Click the first one (button)
-      
-      expect(screen.getAllByText('Configurations')).toHaveLength(2); // Button and panel header
+
+      // FilterBar renders the filter icon
+      expect(screen.getByTestId('filter-list-icon')).toBeInTheDocument();
     });
 
-    it('handles expand/collapse toggle', () => {
+    it('renders Current Rules title', () => {
       render(<CurrentRules {...defaultProps} />);
-      
-      const expandButton = screen.getByTestId('expand-less-icon');
-      fireEvent.click(expandButton);
-      
-      // Table should still be visible as the component doesn't actually hide content on collapse
-      expect(screen.getByText('test_column')).toBeInTheDocument();
-    });
 
-    it('handles text filtering', () => {
-      render(<CurrentRules {...defaultProps} />);
-      
-      const filterInput = screen.getByPlaceholderText('Enter property name or value');
-      fireEvent.change(filterInput, { target: { value: 'test' } });
-      
-      expect(screen.getByText('test_column')).toBeInTheDocument();
-    });
-
-    it('handles filter dropdown interactions', () => {
-      render(<CurrentRules {...defaultProps} />);
-      
-      const filterButton = screen.getByTestId('filter-list-icon');
-      fireEvent.click(filterButton);
-      
-      expect(screen.getAllByText('Column Name')).toHaveLength(2); // Table header and menu item
-      expect(screen.getAllByText('Rule Name')).toHaveLength(2); // Table header and menu item
-    });
-
-    it('handles sorting', () => {
-      render(<CurrentRules {...defaultProps} />);
-      
-      const columnHeader = screen.getAllByText('Column Name')[0]; // Table header
-      fireEvent.click(columnHeader);
-      
-      // Should show sort icon
-      expect(screen.getAllByTestId('arrow-upward-icon')).toHaveLength(7); // Multiple sort icons
-    });
-
-    it('handles clear filters', () => {
-      render(<CurrentRules {...defaultProps} />);
-      
-      const filterInput = screen.getByPlaceholderText('Enter property name or value');
-      fireEvent.change(filterInput, { target: { value: 'test' } });
-      
-      // Clear All button only appears when there are active filters, which requires more complex setup
-      // For now, just test that the input has the value
-      expect(filterInput).toHaveValue('test');
+      expect(screen.getByText('Current Rules')).toBeInTheDocument();
     });
 
     it('handles empty rules data', () => {
@@ -352,6 +387,11 @@ describe('DataQuality Components', () => {
         scan: {
           dataQualitySpec: {
             rules: []
+          },
+          dataQualityResult: {
+            score: 0,
+            rules: [],
+            dimensions: []
           }
         },
         jobs: [{
@@ -359,7 +399,7 @@ describe('DataQuality Components', () => {
           startTime: { seconds: 1640995200 },
           endTime: { seconds: 1640995200 },
           dataQualityResult: {
-            score: 95,
+            score: 0,
             rules: [],
             dimensions: []
           }
@@ -369,125 +409,42 @@ describe('DataQuality Components', () => {
       render(<CurrentRules dataQualtyScan={emptyScan} />);
 
       expect(screen.getByText('Current Rules')).toBeInTheDocument();
-      // Table should be empty
       expect(screen.queryByText('test_column')).not.toBeInTheDocument();
     });
 
-    it('handles deep filter menu navigation', () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      // Open filter menu
-      const filterButton = screen.getByTestId('filter-list-icon');
-      fireEvent.click(filterButton);
-
-      // Click on a property to see its values
-      const columnNameOptions = screen.getAllByText('Column Name');
-      fireEvent.click(columnNameOptions[columnNameOptions.length - 1]); // Click the menu item
-
-      // Should show "Back to Properties" option
-      const backButton = screen.queryByText(/Back to Properties/);
-      if (backButton) {
-        expect(backButton).toBeInTheDocument();
-      }
-    });
-
-    it('handles filter value selection and chip display', () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      // Open filter menu
-      const filterButton = screen.getByTestId('filter-list-icon');
-      fireEvent.click(filterButton);
-
-      // Try to select a property (this will close the menu in actual behavior)
-      const columnNameOptions = screen.getAllByText('Column Name');
-      if (columnNameOptions.length > 1) {
-        fireEvent.click(columnNameOptions[columnNameOptions.length - 1]);
-      }
-
-      // Component should still render without errors
-      expect(screen.getByText('Current Rules')).toBeInTheDocument();
-    });
-
-    it('handles multiple filter interactions', () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-
-      // Open and close filter menu multiple times
-      const filterButton = screen.getByTestId('filter-list-icon');
-
-      fireEvent.click(filterButton);
-      fireEvent.click(filterButton);
-
-      // Component should handle this gracefully
-      expect(screen.getByText('Current Rules')).toBeInTheDocument();
-    });
-
-    it('handles rule type variations', () => {
-      const scanWithMultipleRuleTypes = {
+    it('handles rule type display name mapping', () => {
+      const scanWithMappedType = {
         scan: {
           dataQualitySpec: {
             rules: [
               {
                 column: 'col1',
-                name: 'rule1',
-                ruleType: 'RANGE',
+                name: '',
+                ruleType: 'nonNullExpectation',
                 evaluation: 'PASSED',
-                dimension: 'VALIDITY',
-                RANGE: { minValue: 0, maxValue: 100 },
-                threshold: 0.95
-              },
-              {
-                column: 'col2',
-                name: 'rule2',
-                ruleType: 'REGEX',
-                evaluation: 'FAILED',
-                dimension: 'VALIDITY',
-                REGEX: { regex: '[A-Z]+' },
-                threshold: 0.90
+                dimension: 'COMPLETENESS',
+                nonNullExpectation: {},
+                threshold: 1
               }
             ]
-          }
-        },
-        jobs: [{
-          state: 'SUCCEEDED',
-          startTime: { seconds: 1640995200 },
-          endTime: { seconds: 1640995200 },
+          },
           dataQualityResult: {
-            score: 85,
-            rules: [
-              { rule: { ruleName: 'rule1' }, passed: true },
-              { rule: { ruleName: 'rule2' }, passed: false }
-            ],
+            score: 100,
+            rules: [{
+              rule: { column: 'col1', ruleType: 'nonNullExpectation' },
+              passed: true,
+              passRatio: 1,
+              failingRowsQuery: 'SELECT * FROM test',
+            }],
             dimensions: []
           }
-        }]
+        },
+        jobs: []
       };
 
-      render(<CurrentRules dataQualtyScan={scanWithMultipleRuleTypes} />);
+      render(<CurrentRules dataQualtyScan={scanWithMappedType} />);
 
-      expect(screen.getByText('col1')).toBeInTheDocument();
-      expect(screen.getByText('col2')).toBeInTheDocument();
-      expect(screen.getByText('RANGE')).toBeInTheDocument();
-      expect(screen.getByText('REGEX')).toBeInTheDocument();
-    });
-
-    it('handles different evaluation statuses', () => {
-      const scanWithMixedEvaluations = {
-        ...mockDataQualityScan,
-        scan: {
-          dataQualitySpec: {
-            rules: [
-              {
-                ...mockDataQualityScan.scan.dataQualitySpec.rules[0],
-                evaluation: 'FAILED'
-              }
-            ]
-          }
-        }
-      };
-
-      render(<CurrentRules dataQualtyScan={scanWithMixedEvaluations} />);
-
-      expect(screen.getByText('FAILED')).toBeInTheDocument();
+      expect(screen.getByText('Null check')).toBeInTheDocument();
     });
 
     it('renders without crashing when data is minimal', () => {
@@ -504,18 +461,14 @@ describe('DataQuality Components', () => {
                 threshold: 0.5
               }
             ]
-          }
-        },
-        jobs: [{
-          state: 'SUCCEEDED',
-          startTime: { seconds: 1640995200 },
-          endTime: { seconds: 1640995200 },
+          },
           dataQualityResult: {
             score: 50,
             rules: [],
             dimensions: []
           }
-        }]
+        },
+        jobs: []
       };
 
       render(<CurrentRules dataQualtyScan={minimalScan} />);
@@ -530,134 +483,127 @@ describe('DataQuality Components', () => {
       dataQualityScan: mockDataQualityScan
     };
 
-    it('renders status component', () => {
+    it('renders status component with metrics', () => {
       render(<DataQualityStatus {...defaultProps} />);
-      
+
       expect(screen.getByText('Data Quality Status')).toBeInTheDocument();
       expect(screen.getByText('Overall Score')).toBeInTheDocument();
-      expect(screen.getAllByText('95%')).toHaveLength(2); // Overall score and completeness
+      expect(screen.getByText('Configurations')).toBeInTheDocument();
     });
 
     it('displays quality metrics correctly', () => {
       render(<DataQualityStatus {...defaultProps} />);
-      
+
       expect(screen.getByText('Passed Rules')).toBeInTheDocument();
       expect(screen.getByText('1')).toBeInTheDocument();
       expect(screen.getByText('Completeness')).toBeInTheDocument();
-      expect(screen.getAllByText('95%')).toHaveLength(2); // Overall score and completeness
       expect(screen.getByText('Uniqueness')).toBeInTheDocument();
-      expect(screen.getByText('90%')).toBeInTheDocument();
       expect(screen.getByText('Validity')).toBeInTheDocument();
       expect(screen.getByText('100%')).toBeInTheDocument();
+      expect(screen.getByText('90%')).toBeInTheDocument();
     });
 
-    it('displays formatted date correctly', () => {
+    it('displays overall score with correct color for high score', () => {
       render(<DataQualityStatus {...defaultProps} />);
-      
-      expect(screen.getByText('Jan 1, 2022')).toBeInTheDocument();
+
+      expect(screen.getAllByText('95%').length).toBeGreaterThan(0);
     });
 
-    it('handles expand/collapse toggle', () => {
+    it('handles configurations button click', () => {
       render(<DataQualityStatus {...defaultProps} />);
-      
-      const expandButton = screen.getByTestId('expand-less-icon');
-      fireEvent.click(expandButton);
-      
-      // Content should still be visible as the component doesn't actually hide content on collapse
-      expect(screen.getByText('Overall Score')).toBeInTheDocument();
+
+      const configButton = screen.getByText('Configurations');
+      fireEvent.click(configButton);
+
+      expect(screen.getByText('Scope')).toBeInTheDocument();
     });
 
     it('handles missing dimension data', () => {
       const scanWithoutDimensions = {
         ...mockDataQualityScan,
-        jobs: [{
-          ...mockDataQualityScan.jobs[0],
+        scan: {
+          ...mockDataQualityScan.scan,
           dataQualityResult: {
-            ...mockDataQualityScan.jobs[0].dataQualityResult,
+            ...mockDataQualityScan.scan.dataQualityResult,
             dimensions: []
           }
-        }]
+        }
       };
 
       render(<DataQualityStatus dataQualityScan={scanWithoutDimensions} />);
 
-      // Component displays "-" for missing dimension data
-      expect(screen.getByText('Completeness')).toBeInTheDocument();
-      expect(screen.getByText('Uniqueness')).toBeInTheDocument();
-      expect(screen.getByText('Validity')).toBeInTheDocument();
+      expect(screen.queryByText('Validity')).not.toBeInTheDocument();
+      expect(screen.queryByText('Uniqueness')).not.toBeInTheDocument();
+      expect(screen.queryByText('Completeness')).not.toBeInTheDocument();
     });
 
-    it('handles missing job data', () => {
-      const scanWithoutJobs = {
+    it('displays correct score colors for different thresholds', () => {
+      const lowScoreScan = {
         ...mockDataQualityScan,
-        jobs: []
+        scan: {
+          ...mockDataQualityScan.scan,
+          dataQualityResult: {
+            ...mockDataQualityScan.scan.dataQualityResult,
+            score: 10
+          }
+        }
       };
 
-      // This will cause an error due to accessing undefined properties
-      expect(() => {
-        render(<DataQualityStatus dataQualityScan={scanWithoutJobs} />);
-      }).toThrow();
-    });
-
-    it('displays progress bar for overall score', () => {
-      render(<DataQualityStatus {...defaultProps} />);
-      
-      // Progress bar might not be found due to CSS specificity, so just check that the score is displayed
-      expect(screen.getAllByText('95%')).toHaveLength(2);
+      render(<DataQualityStatus dataQualityScan={lowScoreScan} />);
+      expect(screen.getByText('10%')).toBeInTheDocument();
     });
 
     it('handles different dimension types', () => {
       const scanWithDifferentDimensions = {
         ...mockDataQualityScan,
-        jobs: [{
-          ...mockDataQualityScan.jobs[0],
+        scan: {
+          ...mockDataQualityScan.scan,
           dataQualityResult: {
-            ...mockDataQualityScan.jobs[0].dataQualityResult,
+            ...mockDataQualityScan.scan.dataQualityResult,
             dimensions: [
               {
                 dimension: { name: 'COMPLETENESS' },
+                passed: true,
                 score: 85
               },
               {
                 dimension: { name: 'UNIQUENESS' },
+                passed: false,
                 score: null
               },
               {
                 dimension: { name: 'VALIDITY' },
+                passed: false,
                 score: 0
               }
             ]
           }
-        }]
+        }
       };
 
       render(<DataQualityStatus dataQualityScan={scanWithDifferentDimensions} />);
 
       expect(screen.getByText('85%')).toBeInTheDocument();
-      expect(screen.getByText('0%')).toBeInTheDocument(); // Validity shows 0%
-      // Component displays "-" for null values, but 0 is displayed as "0%"
+      expect(screen.getByText('0%')).toBeInTheDocument();
     });
   });
 
   describe('Integration Tests', () => {
     it('renders all components together when data is available', () => {
-      // Test individual components together
       render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
       render(<DataQualityStatus dataQualityScan={mockDataQualityScan} />);
-      
+
       expect(screen.getByText('Current Rules')).toBeInTheDocument();
       expect(screen.getByText('Data Quality Status')).toBeInTheDocument();
       expect(screen.getByText('test_column')).toBeInTheDocument();
-      expect(screen.getAllByText('95%')).toHaveLength(3); // Overall score, completeness, and threshold
     });
 
-    it('handles configurations panel integration', () => {
-      render(<CurrentRules dataQualtyScan={mockDataQualityScan} />);
-      
-      const configButtons = screen.getAllByText('Configurations');
-      fireEvent.click(configButtons[0]);
-      
-      expect(screen.getAllByText('Configurations')).toHaveLength(2);
+    it('handles configurations panel integration from DataQualityStatus', () => {
+      render(<DataQualityStatus dataQualityScan={mockDataQualityScan} />);
+
+      const configButton = screen.getByText('Configurations');
+      fireEvent.click(configButton);
+
       expect(screen.getByText('Scope')).toBeInTheDocument();
     });
   });

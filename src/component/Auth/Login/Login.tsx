@@ -70,8 +70,8 @@ const Login: React.FC = () => {
             <div className='logo-container'>
               <img src="/assets/svg/catalog-studio-logo-figma-585de1.svg" alt="Catalog Studio Logo" className='logo-image'/>
               <div className='logo-text-container'>
-                <span className='logo-text-primary' style={{color: '#0E4DCA'}}>Knowledge</span>
-                <span className='logo-text-secondary' style={{color: '#0E4DCA'}}>Catalog</span>
+                <span className='logo-text-primary' style={{color: '#022FCD'}}>Knowledge</span>
+                <span className='logo-text-secondary' style={{color: '#022FCD'}}>Catalog</span>
               </div>
             </div>
           </div>

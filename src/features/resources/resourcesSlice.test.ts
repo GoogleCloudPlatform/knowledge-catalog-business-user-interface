@@ -1,6 +1,7 @@
 import { configureStore, type AnyAction, type ThunkDispatch } from '@reduxjs/toolkit';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import axios, { AxiosError, AxiosHeaders } from 'axios';
+import userReducer from '../user/userSlice';
 import resourcesReducer, {
   searchResourcesByTerm,
   browseResourcesByAspects,
@@ -43,6 +44,7 @@ type ResourcesState = {
 // Define store type
 type RootState = {
   resources: ResourcesState;
+  user: any;
 };
 
 // Mock localStorage
@@ -161,14 +163,17 @@ describe('resourcesSlice', () => {
     ],
   };
 
-  let store: ReturnType<typeof configureStore<{ resources: ResourcesState }>>;
+  let store: ReturnType<typeof configureStore<{ resources: ResourcesState; user: any }>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockSessionData));
     store = configureStore({
       reducer: {
         resources: resourcesReducer,
+        user: userReducer as any,
+      },
+      preloadedState: {
+        user: { token: null, userData: mockSessionData, mode: 'light' as const },
       },
     });
   });
@@ -1202,36 +1207,36 @@ describe('resourcesSlice', () => {
   });
 
   describe('getAspectName helper function behavior', () => {
-    it('should handle localStorage with valid session data', async () => {
+    it('should read appConfig from Redux state instead of localStorage', async () => {
       mockedAxiosPost.mockResolvedValueOnce({ data: mockBrowseResponse });
 
       await (store.dispatch as ThunkDispatch<RootState, unknown, AnyAction>)(
         browseResourcesByAspects(mockBrowseRequestData)
       );
 
-      expect(mockLocalStorage.getItem).toHaveBeenCalledWith('sessionUserData');
+      // Thunk should read from Redux state, not localStorage
+      expect(mockLocalStorage.getItem).not.toHaveBeenCalledWith('sessionUserData');
+      expect(mockedAxiosPost).toHaveBeenCalled();
     });
 
-    it('should handle localStorage returning null', async () => {
-      mockLocalStorage.getItem.mockReturnValueOnce(null);
+    it('should handle missing userData in Redux state', async () => {
+      // Create a store without userData
+      const storeWithoutUserData = configureStore({
+        reducer: {
+          resources: resourcesReducer,
+          user: userReducer,
+        },
+        preloadedState: {
+          user: { token: null, userData: null, mode: 'light' as const },
+        },
+      });
 
       // This should not throw an error
-      await (store.dispatch as ThunkDispatch<RootState, unknown, AnyAction>)(
+      await (storeWithoutUserData.dispatch as ThunkDispatch<RootState, unknown, AnyAction>)(
         browseResourcesByAspects(mockBrowseRequestData)
       );
 
-      expect(store.getState().resources.status).toBe('failed');
-    });
-
-    it('should handle invalid JSON in localStorage', async () => {
-      mockLocalStorage.getItem.mockReturnValueOnce('invalid json');
-
-      // This should handle the error gracefully
-      await (store.dispatch as ThunkDispatch<RootState, unknown, AnyAction>)(
-        browseResourcesByAspects(mockBrowseRequestData)
-      );
-
-      expect(store.getState().resources.status).toBe('failed');
+      expect(storeWithoutUserData.getState().resources.status).toBe('failed');
     });
   });
 });

@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock functions using vi.hoisted
-const { mockRender, mockCreateRoot, mockGetElementById } = vi.hoisted(() => ({
+const { mockRender, mockCreateRoot, mockGetElementById, mockHydrateUserState } = vi.hoisted(() => ({
   mockRender: vi.fn(),
   mockCreateRoot: vi.fn(() => ({ render: mockRender })),
   mockGetElementById: vi.fn(),
+  mockHydrateUserState: vi.fn(() => Promise.resolve()),
 }));
 
 // Mock ReactDOM
@@ -75,6 +76,7 @@ vi.mock('./theme', () => ({
 // Mock store
 vi.mock('./app/store', () => ({
   default: { getState: vi.fn(), dispatch: vi.fn(), subscribe: vi.fn() },
+  hydrateUserState: () => mockHydrateUserState(),
 }));
 
 // Mock App
@@ -85,6 +87,13 @@ vi.mock('./App', () => ({
 // Mock CSS
 vi.mock('./index.css', () => ({}));
 vi.mock('./styles/dark-mode.css', () => ({}));
+
+// Helper: import main and wait for async bootstrap to complete
+const importMainAndWait = async () => {
+  await import('./main');
+  // Flush the microtask queue so the async bootstrap() completes
+  await new Promise((resolve) => setTimeout(resolve, 0));
+};
 
 describe('main.tsx', () => {
   let rootElement: HTMLElement;
@@ -108,29 +117,35 @@ describe('main.tsx', () => {
 
   describe('initialization', () => {
     it('should call document.getElementById with "root"', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       expect(mockGetElementById).toHaveBeenCalledWith('root');
     });
 
     it('should call ReactDOM.createRoot with the root element', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       expect(mockCreateRoot).toHaveBeenCalledTimes(1);
       expect(mockCreateRoot).toHaveBeenCalledWith(rootElement);
     });
 
     it('should call render on the created root', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       expect(mockRender).toHaveBeenCalledTimes(1);
+    });
+
+    it('should hydrate user state from IndexedDB before rendering', async () => {
+      await importMainAndWait();
+
+      expect(mockHydrateUserState).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('provider structure', () => {
     it('should render with React.StrictMode at the top level', async () => {
       const React = await import('react');
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       // React.StrictMode uses Symbol, so we compare the type directly
@@ -138,7 +153,7 @@ describe('main.tsx', () => {
     });
 
     it('should render Provider as child of StrictMode', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const strictModeChildren = renderCall.props.children;
@@ -148,7 +163,7 @@ describe('main.tsx', () => {
     });
 
     it('should pass store to Provider', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const providerElement = renderCall.props.children;
@@ -157,7 +172,7 @@ describe('main.tsx', () => {
     });
 
     it('should render ThemeSyncProvider inside Provider', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const providerElement = renderCall.props.children;
@@ -167,7 +182,7 @@ describe('main.tsx', () => {
     });
 
     it('should render BrowserRouter inside ThemeSyncProvider', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const providerElement = renderCall.props.children;
@@ -178,7 +193,7 @@ describe('main.tsx', () => {
     });
 
     it('should render NotificationProvider inside BrowserRouter', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const providerElement = renderCall.props.children;
@@ -190,7 +205,7 @@ describe('main.tsx', () => {
     });
 
     it('should render AccessRequestProvider inside NotificationProvider', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const providerElement = renderCall.props.children;
@@ -203,7 +218,7 @@ describe('main.tsx', () => {
     });
 
     it('should render AuthWithProvider inside AccessRequestProvider', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const providerElement = renderCall.props.children;
@@ -217,7 +232,7 @@ describe('main.tsx', () => {
     });
 
     it('should render ThemeProvider inside AuthWithProvider', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const providerElement = renderCall.props.children;
@@ -232,7 +247,7 @@ describe('main.tsx', () => {
     });
 
     it('should pass theme to ThemeProvider', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const providerElement = renderCall.props.children;
@@ -247,7 +262,7 @@ describe('main.tsx', () => {
     });
 
     it('should render App as the innermost component', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       const providerElement = renderCall.props.children;
@@ -266,7 +281,7 @@ describe('main.tsx', () => {
   describe('imports verification', () => {
     it('should import and use apiInterceptor side effects', async () => {
       // The import happens as a side effect
-      await import('./main');
+      await importMainAndWait();
 
       // apiInterceptor is imported for side effects, just verify main imports successfully
       expect(mockCreateRoot).toHaveBeenCalled();
@@ -274,14 +289,14 @@ describe('main.tsx', () => {
 
     it('should import and use testHelpers side effects', async () => {
       // The import happens as a side effect
-      await import('./main');
+      await importMainAndWait();
 
       // testHelpers is imported for side effects, just verify main imports successfully
       expect(mockCreateRoot).toHaveBeenCalled();
     });
 
     it('should import CSS file', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       // CSS is imported for side effects, just verify main imports successfully
       expect(mockCreateRoot).toHaveBeenCalled();
@@ -290,13 +305,13 @@ describe('main.tsx', () => {
 
   describe('render call structure', () => {
     it('should call render exactly once', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       expect(mockRender).toHaveBeenCalledTimes(1);
     });
 
     it('should render a valid React element', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
       expect(renderCall).toBeTruthy();
@@ -305,7 +320,7 @@ describe('main.tsx', () => {
 
     it('should have complete provider chain from StrictMode to App', async () => {
       const React = await import('react');
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
 
@@ -334,7 +349,7 @@ describe('main.tsx', () => {
 
       // This will cause createRoot to be called with null
       // The actual behavior depends on React's implementation
-      await import('./main');
+      await importMainAndWait();
 
       expect(mockCreateRoot).toHaveBeenCalledWith(null);
     });
@@ -353,7 +368,7 @@ describe('main.tsx', () => {
       // Before import, render should not have been called (in this test context)
       expect(mockRender).not.toHaveBeenCalled();
 
-      await import('./main');
+      await importMainAndWait();
 
       // After import, render should have been called
       expect(mockRender).toHaveBeenCalled();
@@ -363,7 +378,7 @@ describe('main.tsx', () => {
   describe('provider nesting order verification', () => {
     it('should have correct provider nesting order from outside to inside', async () => {
       const React = await import('react');
-      await import('./main');
+      await importMainAndWait();
 
       const renderCall = mockRender.mock.calls[0][0];
 
@@ -405,7 +420,7 @@ describe('main.tsx', () => {
 
   describe('type assertions', () => {
     it('should treat root element as HTMLElement', async () => {
-      await import('./main');
+      await importMainAndWait();
 
       // The code uses `as HTMLElement` type assertion
       // Verify createRoot was called with our mock element

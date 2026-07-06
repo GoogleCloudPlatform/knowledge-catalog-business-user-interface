@@ -30,7 +30,7 @@ interface CTAButtonProps {
 
 const CTAButton: React.FC<CTAButtonProps> = ({disabled = false, handleClick, text, css}) => {
   return (<Button disabled={disabled} onClick={handleClick} 
-    style={{background:"#0E4DCA", color:"#ffffff", borderRadius:"20px", padding:"5px 20px", ...css}}>
+    style={{background:"#022FCD", color:"#ffffff", borderRadius:"20px", padding:"5px 20px", ...css}}>
       {text}
   </Button>);
 }

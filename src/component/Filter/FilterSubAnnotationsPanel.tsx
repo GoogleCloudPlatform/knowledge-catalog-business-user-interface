@@ -225,7 +225,7 @@ const FilterSubAnnotationsPanel: React.FC<FilterSubAnnotationsPanelProps> = ({
         borderColor: mode === 'dark' ? '#3c4043' : '#DADCE0',
       },
       '&.Mui-focused fieldset': {
-        borderColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
+        borderColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
         borderWidth: '1px',
       },
     },
@@ -249,7 +249,7 @@ const FilterSubAnnotationsPanel: React.FC<FilterSubAnnotationsPanelProps> = ({
         borderColor: mode === 'dark' ? '#3c4043' : '#DADCE0',
       },
       '&.Mui-focused fieldset': {
-        borderColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
+        borderColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
         borderWidth: '1px',
       },
     },
@@ -493,7 +493,7 @@ const FilterSubAnnotationsPanel: React.FC<FilterSubAnnotationsPanelProps> = ({
                         width: '18px',
                         height: '18px',
                         borderRadius: '4px',
-                        backgroundColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
+                        backgroundColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -547,8 +547,7 @@ const FilterSubAnnotationsPanel: React.FC<FilterSubAnnotationsPanelProps> = ({
                 sx={{
                   fontWeight: 400,
                   fontSize: '0.875rem',
-                  color: mode === 'dark' ? '#9aa0a6' : '#575757',
-                  fontStyle: 'italic',
+                  color: mode === 'dark' ? '#9aa0a6' : '#0C1226CC',
                 }}
               >
                 No fields found
@@ -588,7 +587,7 @@ const FilterSubAnnotationsPanel: React.FC<FilterSubAnnotationsPanelProps> = ({
           onClick={handleClearAll}
           disabled={!hasAnyCheckedFields()}
           sx={{
-            color: hasAnyCheckedFields() ? (mode === 'dark' ? '#8ab4f8' : '#0E4DCA') : (mode === 'dark' ? '#5f6368' : '#9AA0A6'),
+            color: hasAnyCheckedFields() ? (mode === 'dark' ? '#8ab4f8' : '#022FCD') : (mode === 'dark' ? '#5f6368' : '#9AA0A6'),
             fontWeight: 500,
             fontSize: '0.875rem',
             textTransform: 'none',
@@ -623,7 +622,7 @@ const FilterSubAnnotationsPanel: React.FC<FilterSubAnnotationsPanelProps> = ({
             onSubAnnotationsApply(validFilters);
           }}
           sx={{
-            backgroundColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
+            backgroundColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
             color: mode === 'dark' ? '#1e1f20' : '#FFFFFF',
             fontWeight: 600,
             fontSize: '0.875rem',

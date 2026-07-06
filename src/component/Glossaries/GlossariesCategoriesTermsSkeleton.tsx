@@ -25,23 +25,25 @@ const GlossariesCategoriesTermsSkeleton: React.FC = () => {
           sx={{
             display: "flex",
             alignItems: "center",
-            gap: "16px",
+            gap: "8px",
             mb: 3,
             flexShrink: 0,
           }}
         >
-          {/* Search Bar Skeleton */}
+          {/* Search Bar / FilterBar Skeleton */}
           <Skeleton
             variant="rounded"
-            width={309}
-            height={32}
-            sx={{ borderRadius: "54px" }}
+            width={320}
+            height={36}
+            sx={{ borderRadius: "8px" }}
           />
-          {/* Sort Controls Skeleton */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Skeleton variant="circular" width={24} height={24} />
-            <Skeleton variant="text" width={100} height={20} />
-          </Box>
+          {/* Sort Controls Skeleton (matching the new 36px high pill) */}
+          <Skeleton 
+            variant="rounded" 
+            width={140} 
+            height={36} 
+            sx={{ borderRadius: "7.5px" }} 
+          />
         </Box>
 
         {/* Cards Grid Skeleton */}
@@ -54,18 +56,23 @@ const GlossariesCategoriesTermsSkeleton: React.FC = () => {
             overflowY: "auto",
             minHeight: 0,
             pb: 2,
+            px: 1,
+            mx: -1,
+            pt: 1,
+            mt: -1,
           }}
         >
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Box
               key={i}
               sx={{
-                border: "1px solid #DADCE0",
+                border: "1px solid #E2E8F0",
                 borderRadius: "16px",
                 height: "132px",
-                p: 2,
+                p: "16px",
                 display: "flex",
                 flexDirection: "column",
+                backgroundColor: '#FFF'
               }}
             >
               {/* Card Header with Icon and Title */}

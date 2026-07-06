@@ -156,7 +156,7 @@
 }
 
 #search-bar.navbar-variant.dropdown-open {
-    background: #F8FAFD !important;
+    background: #ffffff !important;
     border-radius: 170px 0px 0px 170px !important;
     box-shadow: 0px 2px 3px 1px rgba(0, 0, 0, 0.12), 0px 2px 1px 0px rgba(0, 0, 0, 0.14), 0px 2px 5px 0px rgba(0, 0, 0, 0.2) !important;
 }
@@ -169,7 +169,7 @@
     right: -1px;
     width: calc(9.375rem + 2px); /* Width of the select menu + padding for gaps */
     height: calc(100% + 2px);
-    background: #F8FAFD;
+    background: #ffffff;
     border-top-right-radius: 3.125rem;
     border-bottom-right-radius: 3.125rem;
     border-left: 0.0625rem solid #C5C7C5;

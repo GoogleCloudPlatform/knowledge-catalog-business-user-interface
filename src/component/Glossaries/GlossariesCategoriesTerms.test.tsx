@@ -17,6 +17,10 @@ vi.mock('../../utils/resourceUtils', () => ({
     date: `2025-01-${String(timestamp.seconds % 28 + 1).padStart(2, '0')}`,
     time: '12:00:00',
   }),
+  getFormattedDateTimeParts: (timestamp: number) => ({
+    date: `2025-01-${String(timestamp % 28 + 1).padStart(2, '0')}`,
+    time: '12:00:00',
+  }),
 }));
 
 // Mock data
@@ -139,19 +143,13 @@ describe('GlossariesCategoriesTerms', () => {
     it('renders sort button with default Last Modified', () => {
       render(<GlossariesCategoriesTerms {...defaultProps} sortBy="lastModified" />);
 
-      expect(screen.getByText('Last Modified')).toBeInTheDocument();
+      expect(screen.getByText('Last modified')).toBeInTheDocument();
     });
 
     it('renders sort button with Name when sortBy is name', () => {
       render(<GlossariesCategoriesTerms {...defaultProps} sortBy="name" />);
 
       expect(screen.getByText('Name')).toBeInTheDocument();
-    });
-
-    it('renders sort order toggle button', () => {
-      render(<GlossariesCategoriesTerms {...defaultProps} />);
-
-      expect(screen.getByTestId('sort-order-toggle')).toBeInTheDocument();
     });
   });
 
@@ -208,28 +206,17 @@ describe('GlossariesCategoriesTerms', () => {
     });
   });
 
-  describe('Sort Order Toggle', () => {
-    it('calls onSortOrderToggle when sort order button is clicked', async () => {
-      const user = userEvent.setup();
-      render(<GlossariesCategoriesTerms {...defaultProps} />);
-
-      const sortOrderButton = screen.getByTestId('sort-order-toggle');
-      await user.click(sortOrderButton);
-
-      expect(mockOnSortOrderToggle).toHaveBeenCalledTimes(1);
-    });
-
-    it('sort icon is flipped when sortOrder is asc', () => {
+  describe('Sort Order', () => {
+    it('renders sort label when sortOrder is asc', () => {
       render(<GlossariesCategoriesTerms {...defaultProps} sortOrder="asc" />);
 
-      // The component should render - the transform style is applied to the icon
-      expect(screen.getByText('Last Modified')).toBeInTheDocument();
+      expect(screen.getByText('Last modified')).toBeInTheDocument();
     });
 
-    it('sort icon is not flipped when sortOrder is desc', () => {
+    it('renders sort label when sortOrder is desc', () => {
       render(<GlossariesCategoriesTerms {...defaultProps} sortOrder="desc" />);
 
-      expect(screen.getByText('Last Modified')).toBeInTheDocument();
+      expect(screen.getByText('Last modified')).toBeInTheDocument();
     });
   });
 
@@ -238,19 +225,19 @@ describe('GlossariesCategoriesTerms', () => {
       const user = userEvent.setup();
       render(<GlossariesCategoriesTerms {...defaultProps} />);
 
-      const sortButton = screen.getByText('Last Modified');
+      const sortButton = screen.getByText('Last modified');
       await user.click(sortButton);
 
       expect(screen.getByRole('menu')).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: 'Name' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Last Modified' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Last modified' })).toBeInTheDocument();
     });
 
     it('closes sort menu when clicking outside', async () => {
       const user = userEvent.setup();
       render(<GlossariesCategoriesTerms {...defaultProps} />);
 
-      const sortButton = screen.getByText('Last Modified');
+      const sortButton = screen.getByText('Last modified');
       await user.click(sortButton);
 
       expect(screen.getByRole('menu')).toBeInTheDocument();
@@ -267,7 +254,7 @@ describe('GlossariesCategoriesTerms', () => {
       const user = userEvent.setup();
       render(<GlossariesCategoriesTerms {...defaultProps} sortBy="lastModified" />);
 
-      const sortButton = screen.getByText('Last Modified');
+      const sortButton = screen.getByText('Last modified');
       await user.click(sortButton);
 
       const nameOption = screen.getByRole('menuitem', { name: 'Name' });
@@ -283,7 +270,7 @@ describe('GlossariesCategoriesTerms', () => {
       const sortButton = screen.getByText('Name');
       await user.click(sortButton);
 
-      const lastModifiedOption = screen.getByRole('menuitem', { name: 'Last Modified' });
+      const lastModifiedOption = screen.getByRole('menuitem', { name: 'Last modified' });
       await user.click(lastModifiedOption);
 
       expect(mockOnSortByChange).toHaveBeenCalledWith('lastModified');
@@ -293,10 +280,10 @@ describe('GlossariesCategoriesTerms', () => {
       const user = userEvent.setup();
       render(<GlossariesCategoriesTerms {...defaultProps} sortBy="lastModified" />);
 
-      const sortButton = screen.getByText('Last Modified');
+      const sortButton = screen.getByText('Last modified');
       await user.click(sortButton);
 
-      const lastModifiedOption = screen.getByRole('menuitem', { name: 'Last Modified' });
+      const lastModifiedOption = screen.getByRole('menuitem', { name: 'Last modified' });
       await user.click(lastModifiedOption);
 
       expect(mockOnSortByChange).not.toHaveBeenCalled();
@@ -306,7 +293,7 @@ describe('GlossariesCategoriesTerms', () => {
       const user = userEvent.setup();
       render(<GlossariesCategoriesTerms {...defaultProps} sortBy="lastModified" />);
 
-      const sortButton = screen.getByText('Last Modified');
+      const sortButton = screen.getByText('Last modified');
       await user.click(sortButton);
 
       const nameOption = screen.getByRole('menuitem', { name: 'Name' });
@@ -462,7 +449,7 @@ describe('GlossariesCategoriesTerms', () => {
     it('shows correct sort label for lastModified', () => {
       render(<GlossariesCategoriesTerms {...defaultProps} sortBy="lastModified" />);
 
-      expect(screen.getByText('Last Modified')).toBeInTheDocument();
+      expect(screen.getByText('Last modified')).toBeInTheDocument();
     });
   });
 
@@ -479,7 +466,7 @@ describe('GlossariesCategoriesTerms', () => {
       const user = userEvent.setup();
       render(<GlossariesCategoriesTerms {...defaultProps} />);
 
-      const sortButton = screen.getByText('Last Modified');
+      const sortButton = screen.getByText('Last modified');
       await user.click(sortButton);
 
       expect(screen.getByRole('menu')).toBeInTheDocument();
@@ -489,7 +476,7 @@ describe('GlossariesCategoriesTerms', () => {
       const user = userEvent.setup();
       render(<GlossariesCategoriesTerms {...defaultProps} />);
 
-      const sortButton = screen.getByText('Last Modified');
+      const sortButton = screen.getByText('Last modified');
       await user.click(sortButton);
 
       const menu = screen.getByRole('menu');
@@ -615,7 +602,7 @@ describe('GlossariesCategoriesTerms', () => {
       const user = userEvent.setup();
       render(<GlossariesCategoriesTerms {...defaultProps} />);
 
-      const sortButton = screen.getByText('Last Modified');
+      const sortButton = screen.getByText('Last modified');
       await user.click(sortButton);
 
       const menuItems = screen.getAllByRole('menuitem');
@@ -626,7 +613,7 @@ describe('GlossariesCategoriesTerms', () => {
       const user = userEvent.setup();
       render(<GlossariesCategoriesTerms {...defaultProps} />);
 
-      const sortButton = screen.getByText('Last Modified');
+      const sortButton = screen.getByText('Last modified');
 
       // Open
       await user.click(sortButton);
@@ -687,22 +674,18 @@ describe('GlossariesCategoriesTerms', () => {
   });
 
   describe('Sort Order Icon', () => {
-    it('toggles correctly with user interaction', async () => {
-      const user = userEvent.setup();
+    it('re-renders correctly when sortOrder prop changes', () => {
       const { rerender } = render(
         <GlossariesCategoriesTerms {...defaultProps} sortOrder="desc" />
       );
 
-      const sortOrderButton = screen.getByTestId('sort-order-toggle');
-      await user.click(sortOrderButton);
-
-      expect(mockOnSortOrderToggle).toHaveBeenCalled();
+      expect(screen.getByText('Last modified')).toBeInTheDocument();
 
       // Simulate parent updating the sortOrder
       rerender(<GlossariesCategoriesTerms {...defaultProps} sortOrder="asc" />);
 
       // Component should re-render with new sort order
-      expect(screen.getByText('Last Modified')).toBeInTheDocument();
+      expect(screen.getByText('Last modified')).toBeInTheDocument();
     });
   });
 
