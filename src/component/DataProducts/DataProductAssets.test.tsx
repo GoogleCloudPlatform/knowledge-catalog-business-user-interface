@@ -8,6 +8,36 @@ vi.mock('@mui/x-data-grid', () => ({
   DataGrid: () => <div data-testid="data-grid">DataGrid</div>
 }));
 
+// Mock react-router-dom
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+}));
+
+// Mock react-redux
+vi.mock('react-redux', () => ({
+  useDispatch: () => vi.fn(),
+}));
+
+// Mock entrySlice
+vi.mock('../../features/entry/entrySlice', () => ({
+  fetchEntry: vi.fn(),
+  clearHistory: vi.fn(),
+}));
+
+// Mock FilterBar to avoid deep rendering issues while satisfying the tests
+vi.mock('../Common/FilterBar', () => ({
+  __esModule: true,
+  default: (props: any) => (
+    <input
+      data-testid="mock-filter-bar"
+      placeholder={props.placeholder}
+      value={props.filterText}
+      onChange={(e) => props.onFilterTextChange(e.target.value)}
+    />
+  ),
+  FilterBarChips: () => <div data-testid="mock-filter-bar-chips" />
+}));
+
 // Capture props for child components
 let capturedResourceViewerProps: any = null;
 let capturedFilterDropdownProps: any = null;
@@ -932,8 +962,8 @@ describe('DataProductAssets', () => {
         height: '100%',
         border: 'none',
         margin: 0,
-        backgroundColor: '#fff',
-        width: '100%'
+        backgroundColor: '#F7F9F9',
+        width: 'auto'
       });
     });
 

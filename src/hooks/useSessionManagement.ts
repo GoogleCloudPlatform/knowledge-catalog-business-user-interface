@@ -58,14 +58,14 @@ export const useSessionManagement = (
    * Get time remaining until token expires (in milliseconds)
    */
   const getTimeUntilExpiry = useCallback((): number => {
-    const storedData = JSON.parse(localStorage.getItem('sessionUserData') || 'null');
-    if (!storedData?.tokenExpiry) {
+    const tokenExpiry = (user as any)?.tokenExpiry;
+    if (!tokenExpiry) {
       return 0;
     }
     const now = Math.floor(Date.now() / 1000);
-    const timeRemaining = (storedData.tokenExpiry - now) * 1000; // Convert to ms
+    const timeRemaining = (tokenExpiry - now) * 1000; // Convert to ms
     return Math.max(0, timeRemaining);
-  }, []);
+  }, [user]);
 
   /**
    * Handle session expiration (token expired)

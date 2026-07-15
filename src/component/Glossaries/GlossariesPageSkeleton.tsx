@@ -17,27 +17,38 @@ const GlossariesPageSkeleton: React.FC = () => {
           <Skeleton variant="rounded" width={105} height={32} sx={{ borderRadius: '59px' }} />
         </Box>
 
-        {/* Row 1: Title - icon + title */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '20px', padding: '20px 20px 0px' }}>
-          <Skeleton variant="rounded" width={48} height={48} sx={{ borderRadius: '10px', flexShrink: 0 }} />
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-              <Skeleton variant="text" width={300} height={36} />
-            </Box>
+        {/* Header Card (Matches the new Breadcrumbs/Title/Description wrapper) */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '24px',
+            gap: '20px',
+            margin: '20px 20px 15px 20px',
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #ECEEF4',
+          }}
+        >
+          {/* Row 1: Title - icon + title */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            {/* Adjusted to match the circular icon container / back button in the new UI */}
+            <Skeleton variant="circular" width={40} height={40} sx={{ flexShrink: 0 }} />
+            <Skeleton variant="text" width={300} height={36} />
           </Box>
-        </Box>
 
-        {/* Row 2: Description */}
-        <Box sx={{ padding: '16px 20px 0px', maxWidth: '800px' }}>
-          <Skeleton variant="text" width="80%" height={20} />
-          <Skeleton variant="text" width="50%" height={20} />
+          {/* Row 2: Description */}
+          <Box sx={{ maxWidth: '800px' }}>
+            <Skeleton variant="text" width="100%" height={20} />
+            <Skeleton variant="text" width="60%" height={20} />
+          </Box>
         </Box>
 
         {/* Row 3: Tabs */}
         <Box sx={{ display: 'flex', gap: '40px', paddingLeft: '36px', paddingBottom: '8px' }}>
-          <Skeleton variant="text" width={80} height={20} sx={{ borderRadius: '4px' }} />
-          <Skeleton variant="text" width={80} height={20} sx={{ borderRadius: '4px' }} />
-          <Skeleton variant="text" width={60} height={20} sx={{ borderRadius: '4px' }} />
+          <Skeleton variant="text" width={100} height={24} sx={{ borderRadius: '4px' }} />
+          <Skeleton variant="text" width={100} height={24} sx={{ borderRadius: '4px' }} />
+          <Skeleton variant="text" width={100} height={24} sx={{ borderRadius: '4px' }} />
         </Box>
         <Box sx={{ mx: '20px', borderBottom: '1px solid #DADCE0' }} />
       </Box>

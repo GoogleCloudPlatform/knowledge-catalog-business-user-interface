@@ -7,7 +7,6 @@ import {
 } from '@mui/material';
 import { useSelector } from 'react-redux';
 import DataProductAssets from './DataProductAssets';
-import ShimmerLoader from '../Shimmer/ShimmerLoader';
 import { useAuth } from '../../auth/AuthProvider';
 import axios from 'axios';
 
@@ -261,7 +260,7 @@ const Assets: React.FC<AssetsProps> = ({ entry, css, onAssetPreviewChange  }) =>
         sx={{ 
           flex: 1,
           borderRadius: '24px', 
-          backgroundColor: '#fff', 
+          backgroundColor: 'transparent', 
           border: 'transparent',
           display: 'flex', 
           flexDirection: 'column', 
@@ -291,7 +290,7 @@ const Assets: React.FC<AssetsProps> = ({ entry, css, onAssetPreviewChange  }) =>
                             color: '#5E5E5E',
                             '& fieldset': { borderColor: '#DADCE0' },
                             '&:hover fieldset': { borderColor: '#A8A8A8' },
-                            '&.Mui-focused fieldset': { borderColor: '#0E4DCA', borderWidth: '1.5px' },
+                            '&.Mui-focused fieldset': { borderColor: '#022FCD', borderWidth: '1.5px' },
                         },
                         width: '350px',
                         '& .MuiInputBase-input': {
@@ -329,7 +328,7 @@ const Assets: React.FC<AssetsProps> = ({ entry, css, onAssetPreviewChange  }) =>
                                 display: 'flex',
                                 alignItems: 'center',
                                 backgroundColor: false ? '#E7F0FE' : 'transparent',
-                                color: false ? '#0E4DCA' : '#1F1F1F',
+                                color: false ? '#022FCD' : '#1F1F1F',
                                 border: false ? 'none' : '1px solid #DADCE0',
                                 height: '32px',
                                 whiteSpace: 'nowrap'
@@ -412,29 +411,48 @@ const Assets: React.FC<AssetsProps> = ({ entry, css, onAssetPreviewChange  }) =>
             <Box sx={{
                 display: 'flex',
                 flexDirection: 'column',
-                padding: ' 0px 20px',
+                padding: '0px',
                 height: '100%',
-                overflowY: 'visible'
+                overflowY: 'visible',
+                backgroundColor: 'transparent'
             }}>
                 {
                     !assetListLoader && (
-                        <Box>
-                            {/* Header skeleton: Filter button + Search bar + controls */}
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '16px' }}>
+                        <Box sx={{ padding: '10px 20px', width: '100%', boxSizing: 'border-box' }}>
+                            {/* Header skeleton: Filter button + Search bar ONLY */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
                                 <Skeleton variant="rounded" width={85} height={32} sx={{ borderRadius: '59px' }} />
-                                <Skeleton variant="rounded" width={309} height={32} sx={{ borderRadius: '54px' }} />
-                                <Box sx={{ flex: 1 }} />
-                                <Skeleton variant="rounded" width={64} height={32} sx={{ borderRadius: '8px' }} />
-                                <Skeleton variant="rounded" width={120} height={20} sx={{ borderRadius: '4px' }} />
+                                <Skeleton variant="rounded" width={350} height={32} sx={{ borderRadius: '54px' }} />
                             </Box>
+                            
                             {/* Table skeleton */}
-                            <ShimmerLoader count={8} type="search-table" />
+                            <Box sx={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E8EEF5', width: '100%', overflow: 'hidden' }}>
+                                {/* Table Header */}
+                                <Box sx={{ display: 'flex', padding: '12px 20px', borderBottom: '1px solid #DADCE0', gap: '20px' }}>
+                                    <Skeleton variant="text" width="30%" height={20} />
+                                    <Skeleton variant="text" width="40%" height={20} />
+                                    <Skeleton variant="text" width="15%" height={20} />
+                                    <Skeleton variant="text" width="15%" height={20} />
+                                </Box>
+                                {/* Table Rows */}
+                                {Array.from({ length: 6 }).map((_, index) => (
+                                    <Box key={index} sx={{ display: 'flex', padding: '16px 20px', borderBottom: index < 5 ? '1px solid #E8EEF5' : 'none', gap: '20px', alignItems: 'center' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', width: '30%' }}>
+                                            <Skeleton variant="rounded" width={24} height={24} sx={{ borderRadius: '4px', flexShrink: 0 }} />
+                                            <Skeleton variant="text" width="70%" height={20} />
+                                        </Box>
+                                        <Skeleton variant="text" width="40%" height={20} />
+                                        <Skeleton variant="text" width="15%" height={20} />
+                                        <Skeleton variant="text" width="15%" height={20} />
+                                    </Box>
+                                ))}
+                            </Box>
                         </Box>
                     )
                 }
                 {(dataProductAssetsStatus === 'succeeded' || dataProductAssetsStatus === 'failed') && dataProductAssets.length === 0 && assetListLoader && (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 300px)', width: '100%' }}>
-                        <Typography sx={{ fontSize: '14px', color: '#575757' }}>No data product assets found</Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '85px', width: '100%' }}>
+                        <Typography variant="body1" sx={{ color: '#0C1226CC' }}>No Data Product Assets found.</Typography>
                     </Box>
                 )}
                 {dataProductAssetsStatus === 'succeeded' && dataProductAssets.length > 0 && assetListLoader && (

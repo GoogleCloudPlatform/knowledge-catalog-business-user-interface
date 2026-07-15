@@ -73,7 +73,7 @@ const Contract: React.FC<ContractProps> = ({ entry, css }) => {
                     //borderRadius: "8px",
                     padding: "0px 16px 16px 16px",
                     overflow: "hidden",
-                    backgroundColor: "#FFFFFF"
+                    backgroundColor: "transparent",
                 }}>
                         {hasContracts ? (
                         <>
@@ -105,12 +105,10 @@ const Contract: React.FC<ContractProps> = ({ entry, css }) => {
                                 <Typography
                                     component="span"
                                     variant="heading2Medium"
-                            sx={{
-                                        fontWeight: 400,
-                                        fontSize: "14px",
-                                        lineHeight: "1.33em",
-                                        color: "#1F1F1F",
-                                    }}
+                            sx={{fontWeight: 400,
+                                        fontSize: "13px",
+                                        lineHeight: "1rem",
+                                        color: "#0C1226CC",}}
                                 >
                                 Contract guarantees define the service level agreements and data quality commitments for this data product. These guarantees help consumers understand what to expect when using this data.
                             </Typography>
@@ -121,6 +119,7 @@ const Contract: React.FC<ContractProps> = ({ entry, css }) => {
                             css={{}}
                             expandedItems={expandedItems}
                             setExpandedItems={setExpandedItems}
+                            isDataProduct={true}
                           />
                         </Box>
                         </>
@@ -130,10 +129,10 @@ const Contract: React.FC<ContractProps> = ({ entry, css }) => {
                             flexDirection: "column",
                             alignItems: "center",
                             justifyContent: "center",
-                            padding: "40px 0",
+                            padding: "23px 0",
                             gap: 2,
                         }}>
-                            <Typography variant="body1" color="text.secondary">
+                            <Typography variant="body1" color="#0C1226CC">
                                 No contracts available for this data product.
                             </Typography>
                         </Box>

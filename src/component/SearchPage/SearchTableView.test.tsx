@@ -1250,8 +1250,8 @@ describe("SearchTableView", () => {
 
       // Check that tags have expected styling attributes
       expect(tags[0]).toHaveStyle({
-        backgroundColor: "#C2E7FF",
-        color: "#004A77",
+        background: "rgba(7, 106, 255, 0.1)", 
+        color: "#076AFF",
       });
     });
   });
@@ -1276,7 +1276,7 @@ describe("SearchTableView", () => {
       render(
         <SearchTableView {...defaultProps} resources={resourceWithLocation} />
       );
-      expect(screen.getByText("europe-west1")).toBeInTheDocument();
+      expect(screen.getByText("Europe-west1")).toBeInTheDocument();
     });
 
     it("renders '-' when location is missing", () => {

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import {
   Box,
   Typography,
@@ -70,19 +71,26 @@ const FilterAnnotationsMultiSelect: React.FC<FilterAnnotationsMultiSelectProps> 
 }) => {
   const mode = useSelector((state: any) => state.user.mode) as string;
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [localValue, setLocalValue] = useState<string[]>(value);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+  
   // Sync local state when prop value changes
   useEffect(() => {
     setLocalValue(value);
   }, [value]);
 
   const filteredOptions = useMemo(() => {
+    if (!debouncedSearch) return options;
     return options.filter((option: string) =>
-      option.toLowerCase().includes(searchTerm.toLowerCase())
+      option.toLowerCase().includes(debouncedSearch.toLowerCase())
     );
-  }, [options, searchTerm]);
+  }, [options, debouncedSearch]);
 
   const handleToggleOption = (option: string) => {
     setLocalValue(prev =>
@@ -238,7 +246,7 @@ const FilterAnnotationsMultiSelect: React.FC<FilterAnnotationsMultiSelectProps> 
                     width: '20px',
                     height: '20px',
                     borderRadius: '4px',
-                    backgroundColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
+                    backgroundColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -257,7 +265,7 @@ const FilterAnnotationsMultiSelect: React.FC<FilterAnnotationsMultiSelectProps> 
                     width: '20px',
                     height: '20px',
                     borderRadius: '4px',
-                    backgroundColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
+                    backgroundColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -311,6 +319,12 @@ const FilterAnnotationsMultiSelect: React.FC<FilterAnnotationsMultiSelectProps> 
                   letterSpacing: '0.83px',
                   flex: '1 1 auto'
                 },
+                '& .MuiInput-input::placeholder': {
+                  color: mode === 'dark' ? '#9aa0a6' : '#575757',
+                  opacity: 1,
+                  fontFamily: '"Google Sans Text", sans-serif',
+                  fontWeight: 400,
+                },
               }}
             />
           </Box>
@@ -318,108 +332,98 @@ const FilterAnnotationsMultiSelect: React.FC<FilterAnnotationsMultiSelectProps> 
           {/* Options List */}
           <Box
             sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-              padding: '18px',
               flex: 1,
-              overflow: 'auto',
-              '&::-webkit-scrollbar': {
-                width: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                background: 'transparent',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                background: mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.38)',
-                borderRadius: '31px',
-                opacity: 0.5,
-              },
-              '&::-webkit-scrollbar-thumb:hover': {
-                background: mode === 'dark' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
-              },
+              overflow: 'hidden',
+              backgroundColor: 'transparent',
             }}
           >
-            {filteredOptions.map((option) => (
-              <Box
-                key={option}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '9px',
-                  width: '100%',
-                  cursor: 'pointer',
-                  padding: '4px 0px'
+            {filteredOptions.length > 0 ? (
+              <Virtuoso
+                style={{ height: '100%', width: '100%' }}
+                totalCount={filteredOptions.length}
+                itemContent={(index) => {
+                  const option = filteredOptions[index];
+                  return (
+                    <Box
+                      key={option}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '9px',
+                        width: '100%',
+                        cursor: 'pointer',
+                        padding: '4px 18px',
+                      }}
+                      onClick={() => handleToggleOption(option)}
+                    >
+                      {localValue.includes(option) ? (
+                        <Box
+                          sx={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '4px',
+                            backgroundColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleOption(option);
+                          }}
+                        >
+                          <Check sx={{ fontSize: '14px', color: mode === 'dark' ? '#1e1f20' : '#FFFFFF' }} />
+                        </Box>
+                      ) : (
+                        <Box
+                          sx={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '4px',
+                            border: `2px solid ${mode === 'dark' ? '#9aa0a6' : '#575757'}`,
+                            cursor: 'pointer'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleOption(option);
+                          }}
+                        />
+                      )}
+                      <Typography
+                        sx={{
+                          fontWeight: 400,
+                          fontSize: '12px',
+                          lineHeight: '1.3333333333333333em',
+                          letterSpacing: '0.8333333457509676%',
+                          color: mode === 'dark' ? '#e3e3e3' : '#1F1F1F',
+                          flex: 1,
+                        }}
+                      >
+                        {option}
+                      </Typography>
+                      {filterType === 'Aspects' && (<EditNoteOutlinedIcon
+                        sx={{ fontSize: '20px', color: mode === 'dark' ? '#9aa0a6' : '#575757', cursor: 'pointer', flexShrink: 0 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const iconRect = e.currentTarget.getBoundingClientRect();
+                          const modalRect = containerRef.current?.getBoundingClientRect();
+                          onEditNote?.(option, iconRect.top, modalRect?.right ?? iconRect.right);
+                        }}
+                      />)}
+                    </Box>
+                  );
                 }}
-                onClick={() => handleToggleOption(option)}
-              >
-                {localValue.includes(option) ? (
-                  <Box
-                    sx={{
-                      width: '20px',
-                      height: '20px',
-                      borderRadius: '4px',
-                      backgroundColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer'
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleOption(option);
-                    }}
-                  >
-                    <Check sx={{ fontSize: '14px', color: mode === 'dark' ? '#1e1f20' : '#FFFFFF' }} />
-                  </Box>
-                ) : (
-                  <Box
-                    sx={{
-                      width: '20px',
-                      height: '20px',
-                      borderRadius: '4px',
-                      border: `2px solid ${mode === 'dark' ? '#9aa0a6' : '#575757'}`,
-                      cursor: 'pointer'
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleOption(option);
-                    }}
-                  />
-                )}
-                <Typography
-                  sx={{
-                    fontWeight: 400,
-                    fontSize: '12px',
-                    lineHeight: '1.3333333333333333em',
-                    letterSpacing: '0.8333333457509676%',
-                    color: mode === 'dark' ? '#e3e3e3' : '#1F1F1F',
-                    flex: 1,
-                  }}
-                >
-                  {option}
-                </Typography>
-                <EditNoteOutlinedIcon
-                  sx={{ fontSize: '20px', color: mode === 'dark' ? '#9aa0a6' : '#575757', cursor: 'pointer', flexShrink: 0 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const iconRect = e.currentTarget.getBoundingClientRect();
-                    const modalRect = containerRef.current?.getBoundingClientRect();
-                    onEditNote?.(option, iconRect.top, modalRect?.right ?? iconRect.right);
-                  }}
-                />
-              </Box>
-            ))}
-            {filteredOptions.length === 0 && (
+              />
+            ) : (
               <Typography
                 sx={{
                   fontWeight: 400,
                   fontSize: '12px',
                   lineHeight: '1.3333333333333333em',
-                  color: mode === 'dark' ? '#9aa0a6' : '#575757',
+                  color: mode === 'dark' ? '#9aa0a6' : '#0C1226CC',
                   padding: '16px',
                   textAlign: 'center',
-                  fontStyle: 'italic',
                 }}
               >
                 No {`${filterType.toLowerCase()}`} found
@@ -465,7 +469,7 @@ const FilterAnnotationsMultiSelect: React.FC<FilterAnnotationsMultiSelectProps> 
                 fontWeight: 500,
                 fontSize: '12px',
                 lineHeight: '1.3333333333333333em',
-                color: localValue.length > 0 ? (mode === 'dark' ? '#8ab4f8' : '#0E4DCA') : (mode === 'dark' ? '#5f6368' : '#9AA0A6'),
+                color: localValue.length > 0 ? (mode === 'dark' ? '#8ab4f8' : '#022FCD') : (mode === 'dark' ? '#5f6368' : '#9AA0A6'),
                 textTransform: 'none',
                 padding: '0',
                 minWidth: 'auto',
@@ -484,80 +488,70 @@ const FilterAnnotationsMultiSelect: React.FC<FilterAnnotationsMultiSelectProps> 
           {/* Selected Items List */}
           <Box
             sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-              padding: '18px',
               flex: 1,
-              overflow: 'auto',
-              '&::-webkit-scrollbar': {
-                width: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                background: 'transparent',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                background: mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.38)',
-                borderRadius: '31px',
-                opacity: 0.5,
-              },
-              '&::-webkit-scrollbar-thumb:hover': {
-                background: mode === 'dark' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
-              },
+              overflow: 'hidden',
+              backgroundColor: 'transparent',
             }}
           >
-            {localValue.map((selectedOption) => (
-              <Box
-                key={selectedOption}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '9px',
-                  width: '100%',
-                  padding: '4px 0px'
+            {localValue.length > 0 ? (
+              <Virtuoso
+                style={{ height: '100%', width: '100%' }}
+                totalCount={localValue.length}
+                itemContent={(index) => {
+                  const selectedOption = localValue[index];
+                  return (
+                    <Box
+                      key={selectedOption}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '9px',
+                        width: '100%',
+                        padding: '4px 18px'
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '4px',
+                          backgroundColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleOption(selectedOption);
+                        }}
+                      >
+                        <Check sx={{ fontSize: '14px', color: mode === 'dark' ? '#1e1f20' : '#FFFFFF' }} />
+                      </Box>
+                      <Typography
+                        sx={{
+                          fontWeight: 400,
+                          fontSize: '12px',
+                          lineHeight: '1.3333333333333333em',
+                          color: mode === 'dark' ? '#e3e3e3' : '#1F1F1F',
+                          flex: 1,
+                        }}
+                      >
+                        {selectedOption}
+                      </Typography>
+                    </Box>
+                  );
                 }}
-              >
-                <Box
-                  sx={{
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '4px',
-                    backgroundColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer'
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleOption(selectedOption);
-                  }}
-                >
-                  <Check sx={{ fontSize: '14px', color: mode === 'dark' ? '#1e1f20' : '#FFFFFF' }} />
-                </Box>
-                <Typography
-                  sx={{
-                    fontWeight: 400,
-                    fontSize: '12px',
-                    lineHeight: '1.3333333333333333em',
-                    color: mode === 'dark' ? '#e3e3e3' : '#1F1F1F',
-                    flex: 1,
-                  }}
-                >
-                  {selectedOption}
-                </Typography>
-              </Box>
-            ))}
-            {localValue.length === 0 && (
+              />
+            ) : (
               <Typography
                 sx={{
                   fontWeight: 400,
                   fontSize: '12px',
                   lineHeight: '1.3333333333333333em',
-                  color: mode === 'dark' ? '#9aa0a6' : '#575757',
+                  color: mode === 'dark' ? '#9aa0a6' : '#0C1226CC',
                   padding: '16px',
                   textAlign: 'center',
-                  fontStyle: 'italic',
                 }}
               >
                 No items selected
@@ -581,7 +575,7 @@ const FilterAnnotationsMultiSelect: React.FC<FilterAnnotationsMultiSelectProps> 
         <Button
           onClick={handleApply}
           sx={{
-            backgroundColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
+            backgroundColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
             color: mode === 'dark' ? '#1e1f20' : '#FFFFFF',
             fontSize: '0.875rem',
             fontWeight: 600,

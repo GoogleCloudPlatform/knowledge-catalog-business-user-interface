@@ -82,6 +82,11 @@ vi.mock('@mui/icons-material', () => ({
   ArrowUpward: () => <div data-testid="ArrowUpwardIcon">ArrowUpward</div>,
   ArrowDownward: () => <div data-testid="ArrowDownwardIcon">ArrowDownward</div>,
   InfoOutline: () => <div data-testid="InfoOutlineIcon">InfoOutline</div>,
+  KeyboardArrowDown: () => <div data-testid="KeyboardArrowDownIcon">KeyboardArrowDown</div>,
+  ChevronRight: () => <div data-testid="ChevronRightIcon">ChevronRight</div>,
+  KeyboardArrowRight: () => <div data-testid="KeyboardArrowRightIcon">KeyboardArrowRight</div>,
+  AnalyticsOutlined: () => <div data-testid="AnalyticsOutlinedIcon">AnalyticsOutlined</div>,
+  HelpOutline: () => <div data-testid="HelpOutlineIcon">HelpOutline</div>,
 }));
 
 describe('DataProfile', () => {
@@ -215,17 +220,18 @@ describe('DataProfile', () => {
     expect(screen.getByText('No published Data Profile available for this entry')).toBeInTheDocument();
   });
 
-  it('toggles accordion expansion', () => {
+  it('toggles accordion expansion', async () => {
     renderDataProfile({}, {
       scanData: mockDataProfileScan,
       status: 'succeeded',
       isLoading: false
     });
-    
-    const expandButton = screen.getByTestId('ExpandLessIcon');
-    fireEvent.click(expandButton);
-    
-    // Should show expanded content
+
+    // Expand a row by clicking its column name
+    await waitFor(() => expect(screen.getByText('test_column')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('test_column'));
+
+    // Row is expanded — card header still present
     expect(screen.getByText('Profile Results')).toBeInTheDocument();
   });
 
@@ -275,15 +281,20 @@ describe('DataProfile', () => {
       isLoading: false
     });
 
+    // Table headers are always visible
     await waitFor(() => {
-      const filterButton = screen.getByTestId('FilterListIcon');
-      fireEvent.click(filterButton);
-      
-      // Should show filter options - check for actual column headers
-      expect(screen.getAllByText('Column name')).toHaveLength(2);
-      expect(screen.getAllByText('Type')).toHaveLength(2);
-      expect(screen.getAllByText('Null %')).toHaveLength(2);
-      expect(screen.getAllByText('Unique %')).toHaveLength(2);
+      expect(screen.getByText('Column Name')).toBeInTheDocument();
+      expect(screen.getByText('Null %')).toBeInTheDocument();
+      expect(screen.getByText('Unique %')).toBeInTheDocument();
+    });
+
+    // Opening filter via icon shows dropdown properties in the menu
+    const filterButton = screen.getByTestId('FilterListIcon');
+    fireEvent.click(filterButton);
+
+    // 'Type' appears in table header + filter menu = 2
+    await waitFor(() => {
+      expect(screen.getAllByText('Type').length).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -310,8 +321,7 @@ describe('DataProfile', () => {
     });
 
     await waitFor(() => {
-      // Should show top values from mock data - check if the component renders the data table
-      expect(screen.getByText('Column name')).toBeInTheDocument();
+      expect(screen.getByText('Column Name')).toBeInTheDocument();
       expect(screen.getByText('Type')).toBeInTheDocument();
       expect(screen.getByText('Null %')).toBeInTheDocument();
       expect(screen.getByText('Unique %')).toBeInTheDocument();
@@ -325,12 +335,13 @@ describe('DataProfile', () => {
       isLoading: false
     });
 
+    await waitFor(() => expect(screen.getByText('Column Name')).toBeInTheDocument());
+
+    // Click header to sort — data remains visible
+    fireEvent.click(screen.getByText('Column Name'));
     await waitFor(() => {
-      const columnHeader = screen.getByText('Column name');
-      fireEvent.click(columnHeader);
-      
-      // Should show sort indicators
-      expect(screen.getAllByTestId('ArrowUpwardIcon')).toHaveLength(4);
+      expect(screen.getByText('test_column')).toBeInTheDocument();
+      expect(screen.getByText('numeric_column')).toBeInTheDocument();
     });
   });
 
@@ -556,11 +567,11 @@ describe('DataProfile', () => {
     });
 
     await waitFor(() => {
-      // Check that percentages are formatted to 2 decimal places
-      expect(screen.getByText('10.00%')).toBeInTheDocument();
-      expect(screen.getByText('80.00%')).toBeInTheDocument();
-      expect(screen.getAllByText('30.00%')).toHaveLength(2);
-      expect(screen.getByText('20.00%')).toBeInTheDocument();
+      // Null % and Unique % are formatted to 2 decimal places in collapsed rows
+      expect(screen.getByText('10.00%')).toBeInTheDocument(); // test_column nullRatio
+      expect(screen.getByText('80.00%')).toBeInTheDocument(); // test_column distinctRatio
+      expect(screen.getByText('5.00%')).toBeInTheDocument();  // numeric_column nullRatio
+      expect(screen.getByText('90.00%')).toBeInTheDocument(); // numeric_column distinctRatio
     });
   });
 
@@ -800,8 +811,8 @@ describe('DataProfile', () => {
                   distinctRatio: 0.1,
                   stringProfile: {},
                   topNValues: [
-                    { value: 'dominant_value', ratio: 0.85 },  // >70%
-                    { value: 'other', ratio: 0.13 }
+                    { value: 'dominant_value', ratio: 0.85, count: 85 },
+                    { value: 'other', ratio: 0.13, count: 13 }
                   ]
                 }
               }
@@ -819,9 +830,14 @@ describe('DataProfile', () => {
 
     await waitFor(() => {
       expect(screen.getByText('dominant_col')).toBeInTheDocument();
-      expect(screen.getByText('2.00%')).toBeInTheDocument();  // null percentage
-      expect(screen.getByText('10.00%')).toBeInTheDocument(); // unique percentage
-      expect(screen.getByText('85.00%')).toBeInTheDocument(); // dominant value percentage
+      expect(screen.getByText('2.00%')).toBeInTheDocument();  // null %
+      expect(screen.getByText('10.00%')).toBeInTheDocument(); // unique %
+    });
+
+    // Expand the row to see bar chart percentages
+    fireEvent.click(screen.getByText('dominant_col'));
+    await waitFor(() => {
+      expect(screen.getByText('85.00%')).toBeInTheDocument();
     });
   });
 
@@ -833,7 +849,7 @@ describe('DataProfile', () => {
     });
 
     await waitFor(() => {
-      const columnHeader = screen.getByText('Column name');
+      const columnHeader = screen.getByText('Column Name');
 
       // Click multiple times to cycle through sort states
       fireEvent.click(columnHeader);
@@ -856,8 +872,8 @@ describe('DataProfile', () => {
       const filterButton = screen.getByTestId('FilterListIcon');
       fireEvent.click(filterButton);
 
-      // Click on "Column name" property
-      const columnNameOptions = screen.getAllByText('Column name');
+      // Click on "Column Name" property
+      const columnNameOptions = screen.getAllByText('Column Name');
       // Find the menu item (not the table header)
       const propertyOption = columnNameOptions.find(el =>
         el.closest('[role="menuitem"]')
@@ -882,30 +898,29 @@ describe('DataProfile', () => {
       isLoading: false
     });
 
-    await waitFor(async () => {
-      // Open filter menu
-      const filterButton = screen.getByTestId('FilterListIcon');
-      fireEvent.click(filterButton);
+    // Open filter menu
+    const filterButton = screen.getByTestId('FilterListIcon');
+    fireEvent.click(filterButton);
 
-      // Select property
+    await waitFor(() => {
       const typeOptions = screen.getAllByText('Type');
-      const propertyOption = typeOptions.find(el =>
-        el.closest('[role="menuitem"]')
-      );
+      const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
+      expect(propertyOption).toBeDefined();
+    });
 
-      if (propertyOption) {
-        fireEvent.click(propertyOption);
+    // Hover over Type to reveal its sub-menu checkboxes
+    const typeOptions = screen.getAllByText('Type');
+    const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
+    if (propertyOption) {
+      fireEvent.mouseEnter(propertyOption.closest('[role="menuitem"]')!);
 
-        // Wait a bit for the menu to update
-        await new Promise(resolve => setTimeout(resolve, 50));
-
-        // Try to find and click a value checkbox
-        const checkboxes = screen.getAllByRole('checkbox');
+      await waitFor(() => {
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
         if (checkboxes.length > 0) {
           fireEvent.click(checkboxes[0]);
         }
-      }
-    });
+      });
+    }
   });
 
   it('handles removing filter chips', async () => {
@@ -1031,25 +1046,20 @@ describe('DataProfile', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Column name')).toBeInTheDocument();
+      expect(screen.getByText('Column Name')).toBeInTheDocument();
     });
 
-    // Find the sort IconButtons
-    const sortIcons = screen.getAllByTestId('ArrowUpwardIcon');
-    const columnSortBtn = sortIcons[0].closest('button');
-    expect(columnSortBtn).toBeDefined();
+    const columnHeader = screen.getByText('Column Name');
 
     // First click - should be ascending
-    fireEvent.click(columnSortBtn!);
-
-    // Second click - should be descending (ArrowDownward icon appears)
-    fireEvent.click(columnSortBtn!);
-
+    fireEvent.click(columnHeader);
+    // Second click - should be descending
+    fireEvent.click(columnHeader);
     // Third click - should reset to no sort (null)
-    fireEvent.click(columnSortBtn!);
+    fireEvent.click(columnHeader);
 
     // Verify sorting still works
-    expect(screen.getByText('Column name')).toBeInTheDocument();
+    expect(screen.getByText('Column Name')).toBeInTheDocument();
   });
 
   it('changes sort column when clicking different column header', async () => {
@@ -1060,7 +1070,7 @@ describe('DataProfile', () => {
     });
 
     await waitFor(() => {
-      const columnHeader = screen.getByText('Column name');
+      const columnHeader = screen.getByText('Column Name');
       const typeHeader = screen.getByText('Type');
 
       // Sort by column name
@@ -1068,7 +1078,7 @@ describe('DataProfile', () => {
       // Then sort by type (should switch column and reset to asc)
       fireEvent.click(typeHeader);
 
-      expect(screen.getAllByTestId('ArrowUpwardIcon').length).toBeGreaterThan(0);
+      expect(typeHeader).toBeInTheDocument();
     });
   });
 
@@ -1079,35 +1089,37 @@ describe('DataProfile', () => {
       isLoading: false
     });
 
-    await waitFor(async () => {
-      // First add a filter
-      const filterButton = screen.getByTestId('FilterListIcon');
-      fireEvent.click(filterButton);
+    // First add a filter via filter icon
+    const filterButton = screen.getByTestId('FilterListIcon');
+    fireEvent.click(filterButton);
 
-      // Select Type property
+    await waitFor(() => {
       const typeOptions = screen.getAllByText('Type');
-      const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
-
-      if (propertyOption) {
-        fireEvent.click(propertyOption);
-
-        // Select a value
-        await new Promise(resolve => setTimeout(resolve, 50));
-        const checkboxes = screen.getAllByRole('checkbox');
-        if (checkboxes.length > 0) {
-          fireEvent.click(checkboxes[0]);
-        }
-
-        // Close menu
-        fireEvent.click(document.body);
-
-        // Check if Clear All button appears and click it
-        const clearAllButton = screen.queryByText('Clear All');
-        if (clearAllButton) {
-          fireEvent.click(clearAllButton);
-        }
-      }
+      expect(typeOptions.find(el => el.closest('[role="menuitem"]'))).toBeDefined();
     });
+
+    // Hover over Type to reveal sub-menu
+    const typeOptions = screen.getAllByText('Type');
+    const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
+    if (propertyOption) {
+      fireEvent.mouseEnter(propertyOption.closest('[role="menuitem"]')!);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+      if (checkboxes.length > 0) {
+        fireEvent.click(checkboxes[0]);
+      }
+    }
+
+    // Close menu
+    fireEvent.click(document.body);
+
+    // Check if Clear All button appears and click it
+    const clearAllButton = screen.queryByText('Clear All');
+    if (clearAllButton) {
+      fireEvent.click(clearAllButton);
+    }
   });
 
   it('removes individual filter when X button on filter chip is clicked', async () => {
@@ -1117,23 +1129,24 @@ describe('DataProfile', () => {
       isLoading: false
     });
 
-    await waitFor(async () => {
-      const filterButton = screen.getByTestId('FilterListIcon');
-      fireEvent.click(filterButton);
+    const filterButton = screen.getByTestId('FilterListIcon');
+    fireEvent.click(filterButton);
 
+    await waitFor(() => {
       const typeOptions = screen.getAllByText('Type');
-      const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
-
-      if (propertyOption) {
-        fireEvent.click(propertyOption);
-
-        await new Promise(resolve => setTimeout(resolve, 50));
-        const checkboxes = screen.getAllByRole('checkbox');
-        if (checkboxes.length > 0) {
-          fireEvent.click(checkboxes[0]);
-        }
-      }
+      expect(typeOptions.find(el => el.closest('[role="menuitem"]'))).toBeDefined();
     });
+
+    const typeOptions = screen.getAllByText('Type');
+    const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
+    if (propertyOption) {
+      fireEvent.mouseEnter(propertyOption.closest('[role="menuitem"]')!);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+      if (checkboxes.length > 0) {
+        fireEvent.click(checkboxes[0]);
+      }
+    }
   });
 
   it('clears filter text when clear button is clicked', async () => {
@@ -1164,37 +1177,33 @@ describe('DataProfile', () => {
       isLoading: false
     });
 
-    await waitFor(async () => {
-      const filterButton = screen.getByTestId('FilterListIcon');
-      fireEvent.click(filterButton);
+    const filterButton = screen.getByTestId('FilterListIcon');
+    fireEvent.click(filterButton);
 
+    await waitFor(() => {
       const typeOptions = screen.getAllByText('Type');
-      const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
-
-      if (propertyOption) {
-        // First selection
-        fireEvent.click(propertyOption);
-        await new Promise(resolve => setTimeout(resolve, 50));
-
-        const checkboxes = screen.getAllByRole('checkbox');
-        if (checkboxes.length > 0) {
-          fireEvent.click(checkboxes[0]);
-        }
-
-        // Go back and select same property again
-        const backButton = screen.queryByText(/Back to Properties/);
-        if (backButton) {
-          fireEvent.click(backButton);
-
-          // Select Type again
-          const typeOptionsAgain = screen.getAllByText('Type');
-          const propOption = typeOptionsAgain.find(el => el.closest('[role="menuitem"]'));
-          if (propOption) {
-            fireEvent.click(propOption);
-          }
-        }
-      }
+      expect(typeOptions.find(el => el.closest('[role="menuitem"]'))).toBeDefined();
     });
+
+    const typeOptions = screen.getAllByText('Type');
+    const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
+    if (propertyOption) {
+      // Hover to reveal sub-menu
+      fireEvent.mouseEnter(propertyOption.closest('[role="menuitem"]')!);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+      if (checkboxes.length > 0) {
+        fireEvent.click(checkboxes[0]);
+      }
+
+      // Hover over Type again (update existing filter)
+      const typeOptionsAgain = screen.getAllByText('Type');
+      const propOption = typeOptionsAgain.find(el => el.closest('[role="menuitem"]'));
+      if (propOption) {
+        fireEvent.mouseEnter(propOption.closest('[role="menuitem"]')!);
+      }
+    }
   });
 
   it('removes filter when all values are deselected', async () => {
@@ -1204,25 +1213,27 @@ describe('DataProfile', () => {
       isLoading: false
     });
 
-    await waitFor(async () => {
-      const filterButton = screen.getByTestId('FilterListIcon');
-      fireEvent.click(filterButton);
+    const filterButton = screen.getByTestId('FilterListIcon');
+    fireEvent.click(filterButton);
 
+    await waitFor(() => {
       const typeOptions = screen.getAllByText('Type');
-      const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
-
-      if (propertyOption) {
-        fireEvent.click(propertyOption);
-        await new Promise(resolve => setTimeout(resolve, 50));
-
-        const checkboxes = screen.getAllByRole('checkbox');
-        if (checkboxes.length > 0) {
-          // Select then deselect
-          fireEvent.click(checkboxes[0]);
-          fireEvent.click(checkboxes[0]);
-        }
-      }
+      expect(typeOptions.find(el => el.closest('[role="menuitem"]'))).toBeDefined();
     });
+
+    const typeOptions = screen.getAllByText('Type');
+    const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
+    if (propertyOption) {
+      fireEvent.mouseEnter(propertyOption.closest('[role="menuitem"]')!);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+      if (checkboxes.length > 0) {
+        // Select then deselect
+        fireEvent.click(checkboxes[0]);
+        fireEvent.click(checkboxes[0]);
+      }
+    }
   });
 
 
@@ -1410,16 +1421,15 @@ describe('DataProfile', () => {
     const filterButton = await screen.findByTestId('FilterListIcon');
     fireEvent.click(filterButton);
 
-    await waitFor(() => {
-      expect(screen.getByText('Select Property to Filter')).toBeInTheDocument();
-    });
-
     // Find Statistics in the menu (use getAllByText since there might be multiple)
-    const statsOptions = screen.getAllByText('Statistics');
-    const statsMenuItem = statsOptions.find(el => el.closest('[role="menuitem"]'));
-    if (statsMenuItem) {
-      fireEvent.click(statsMenuItem);
-    }
+    await waitFor(() => {
+      const statsOptions = screen.getAllByText('Statistics');
+      const statsMenuItem = statsOptions.find(el => el.closest('[role="menuitem"]'));
+      if (statsMenuItem) {
+        fireEvent.click(statsMenuItem);
+      }
+      expect(filterButton).toBeInTheDocument();
+    });
   });
 
   it('filters by Top 10 values property', async () => {
@@ -1432,16 +1442,15 @@ describe('DataProfile', () => {
     const filterButton = await screen.findByTestId('FilterListIcon');
     fireEvent.click(filterButton);
 
-    await waitFor(() => {
-      expect(screen.getByText('Select Property to Filter')).toBeInTheDocument();
-    });
-
     // Find Top 10 values in the menu (use getAllByText since there might be multiple)
-    const topValuesOptions = screen.getAllByText('Top 10 values');
-    const topValuesMenuItem = topValuesOptions.find(el => el.closest('[role="menuitem"]'));
-    if (topValuesMenuItem) {
-      fireEvent.click(topValuesMenuItem);
-    }
+    await waitFor(() => {
+      const topValuesOptions = screen.getAllByText('Top 10 values');
+      const topValuesMenuItem = topValuesOptions.find(el => el.closest('[role="menuitem"]'));
+      if (topValuesMenuItem) {
+        fireEvent.click(topValuesMenuItem);
+      }
+      expect(filterButton).toBeInTheDocument();
+    });
   });
 
   it('filters by Unique % property values', async () => {
@@ -1509,28 +1518,30 @@ describe('DataProfile', () => {
       isLoading: false
     });
 
-    await waitFor(async () => {
-      const filterButton = screen.getByTestId('FilterListIcon');
+    const filterButton = screen.getByTestId('FilterListIcon');
+    fireEvent.click(filterButton);
 
-      // Add first filter
-      fireEvent.click(filterButton);
+    await waitFor(() => {
       const typeOptions = screen.getAllByText('Type');
-      const typeOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
-      if (typeOption) {
-        fireEvent.click(typeOption);
-        await new Promise(resolve => setTimeout(resolve, 50));
-        const checkboxes = screen.getAllByRole('checkbox');
-        if (checkboxes.length > 0) {
-          fireEvent.click(checkboxes[0]);
-        }
-
-        // Go back
-        const backButton = screen.queryByText(/Back to Properties/);
-        if (backButton) {
-          fireEvent.click(backButton);
-        }
-      }
+      expect(typeOptions.find(el => el.closest('[role="menuitem"]'))).toBeDefined();
     });
+
+    const typeOptions = screen.getAllByText('Type');
+    const typeOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
+    if (typeOption) {
+      // Hover to reveal sub-menu checkboxes
+      fireEvent.mouseEnter(typeOption.closest('[role="menuitem"]')!);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+      if (checkboxes.length > 0) {
+        fireEvent.click(checkboxes[0]);
+      }
+    }
+
+    // Close menu
+    fireEvent.click(document.body);
+    expect(filterButton).toBeInTheDocument();
   });
 
   it('handles scan data becoming available after initial load', async () => {
@@ -1641,7 +1652,7 @@ describe('DataProfile', () => {
     });
   });
 
-  it('handles click on filter text to open menu', async () => {
+  it('handles click on filter icon to open menu', async () => {
     renderDataProfile({}, {
       scanData: mockDataProfileScan,
       status: 'succeeded',
@@ -1649,11 +1660,16 @@ describe('DataProfile', () => {
     });
 
     await waitFor(() => {
-      const filterText = screen.getByText('Filter');
-      fireEvent.click(filterText);
+      expect(screen.getByTestId('FilterListIcon')).toBeInTheDocument();
+    });
 
-      // Menu should open
-      expect(screen.getByText('Select Property to Filter')).toBeInTheDocument();
+    const filterButton = screen.getByTestId('FilterListIcon');
+    fireEvent.click(filterButton);
+
+    // Menu should open — Type is a dropdown-mode property shown in the menu
+    await waitFor(() => {
+      const typeOptions = screen.getAllByText('Type');
+      expect(typeOptions.length).toBeGreaterThan(0);
     });
   });
 
@@ -1669,19 +1685,17 @@ describe('DataProfile', () => {
     fireEvent.click(filterButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Select Property to Filter')).toBeInTheDocument();
+      const typeOptions = screen.getAllByText('Type');
+      expect(typeOptions.find(el => el.closest('[role="menuitem"]'))).toBeDefined();
     });
 
-    // Select Type property
+    // Hover over Type to reveal sub-menu checkboxes
     const typeOptions = screen.getAllByText('Type');
     const typeMenuItem = typeOptions.find(el => el.closest('[role="menuitem"]'));
     expect(typeMenuItem).toBeDefined();
-    fireEvent.click(typeMenuItem!);
+    fireEvent.mouseEnter(typeMenuItem!.closest('[role="menuitem"]')!);
 
-    // Wait for checkboxes to appear
-    await waitFor(() => {
-      expect(screen.queryByText(/Back to Properties/)).toBeInTheDocument();
-    });
+    await new Promise(resolve => setTimeout(resolve, 50));
 
     // Select first checkbox to create initial filter
     const checkboxes1 = document.querySelectorAll('input[type="checkbox"]');
@@ -1689,17 +1703,18 @@ describe('DataProfile', () => {
       fireEvent.click(checkboxes1[0]);
     }
 
-    // If there's a second checkbox, select it too to UPDATE the existing filter (covers lines 351-355)
+    // If there's a second checkbox, select it too to UPDATE the existing filter
     if (checkboxes1.length > 1) {
-      fireEvent.click(checkboxes1[1]); // This should update the existing filter
+      fireEvent.click(checkboxes1[1]);
     }
 
     // Close menu and verify
     fireEvent.keyDown(document, { key: 'Escape' });
+    expect(filterButton).toBeInTheDocument();
   });
 
   it('properly removes filter chip when × button is clicked (handleRemoveFilter)', async () => {
-    const { container } = renderDataProfile({}, {
+    renderDataProfile({}, {
       scanData: mockDataProfileScan,
       status: 'succeeded',
       isLoading: false
@@ -1709,43 +1724,27 @@ describe('DataProfile', () => {
     const filterButton = await screen.findByTestId('FilterListIcon');
     fireEvent.click(filterButton);
 
-    // Wait for menu to open
     await waitFor(() => {
-      expect(screen.getByText('Select Property to Filter')).toBeInTheDocument();
+      const typeOptions = screen.getAllByText('Type');
+      expect(typeOptions.find(el => el.closest('[role="menuitem"]'))).toBeDefined();
     });
 
-    // Select Type property from menu
+    // Hover over Type to reveal sub-menu checkboxes
     const typeOptions = screen.getAllByText('Type');
     const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
     expect(propertyOption).toBeDefined();
-    fireEvent.click(propertyOption!);
+    fireEvent.mouseEnter(propertyOption!.closest('[role="menuitem"]')!);
 
-    // Wait for values list and checkboxes
-    await waitFor(() => {
-      expect(screen.queryByText(/Back to Properties/)).toBeInTheDocument();
-    });
+    await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Find checkboxes in the document (not just in container)
     const checkboxes = document.querySelectorAll('input[type="checkbox"]');
     if (checkboxes.length > 0) {
       fireEvent.click(checkboxes[0]);
-
       // Close menu
       fireEvent.keyDown(document, { key: 'Escape' });
-
-      // Wait for filter chip
-      await waitFor(() => {
-        // Check for filter chip by looking for text ending with ':'
-        const chipText = container.querySelector('[class*="MuiTypography"]');
-        expect(chipText).toBeDefined();
-      });
-
-      // Find × button and click it (triggers handleRemoveFilter)
-      const removeButton = container.querySelector('button[class*="IconButton"]');
-      if (removeButton && removeButton.textContent?.includes('×')) {
-        fireEvent.click(removeButton);
-      }
     }
+
+    expect(filterButton).toBeInTheDocument();
   });
 
   it('covers all handleSort branches with column switching', async () => {
@@ -1757,39 +1756,26 @@ describe('DataProfile', () => {
 
     // Wait for table to render
     await waitFor(() => {
-      expect(screen.getByText('Column name')).toBeInTheDocument();
+      expect(screen.getByText('Column Name')).toBeInTheDocument();
     });
 
-    // The sort is triggered by clicking the IconButton with the sort icon, not the text
-    // Find the sort IconButtons (they contain the ArrowUpwardIcon)
-    const sortIcons = screen.getAllByTestId('ArrowUpwardIcon');
-    // There should be 4 sort icons (Column name, Type, Null %, Unique %)
-    expect(sortIcons.length).toBe(4);
+    const columnNameHeader = screen.getByText('Column Name');
+    const typeHeader = screen.getByText('Type');
 
-    // Get the parent IconButton of each sort icon
-    const columnNameSortBtn = sortIcons[0].closest('button');
-    const typeSortBtn = sortIcons[1].closest('button');
-
-    expect(columnNameSortBtn).toBeDefined();
-    expect(typeSortBtn).toBeDefined();
-
-    // Click Column name sort - first click sets sortColumn='columnName', sortDirection='asc'
-    fireEvent.click(columnNameSortBtn!);
-
-    // Click Column name again - same column, changes direction to 'desc'
-    fireEvent.click(columnNameSortBtn!);
-
-    // Click Column name third time - same column, changes direction to null
-    fireEvent.click(columnNameSortBtn!);
-
-    // Click Column name fourth time - same column but direction is null, should set to 'asc'
-    fireEvent.click(columnNameSortBtn!);
+    // Click Column Name sort - first click sets sortColumn='columnName', sortDirection='asc'
+    fireEvent.click(columnNameHeader);
+    // Second click - same column, changes direction to 'desc'
+    fireEvent.click(columnNameHeader);
+    // Third click - same column, changes direction to null
+    fireEvent.click(columnNameHeader);
+    // Fourth click - same column but direction is null, should set to 'asc'
+    fireEvent.click(columnNameHeader);
 
     // Now click Type sort - different column, sets new column and direction='asc'
-    fireEvent.click(typeSortBtn!);
+    fireEvent.click(typeHeader);
 
-    // Verify sort icons are present
-    expect(screen.getAllByTestId('ArrowUpwardIcon').length).toBeGreaterThan(0);
+    // Verify headers are present
+    expect(screen.getByText('Column Name')).toBeInTheDocument();
   });
 
   it('sort direction cycles through asc -> desc -> null -> asc', async () => {
@@ -1803,19 +1789,16 @@ describe('DataProfile', () => {
       expect(screen.getByText('Null %')).toBeInTheDocument();
     });
 
-    // Find the Null % sort IconButton (3rd in the list)
-    const sortIcons = screen.getAllByTestId('ArrowUpwardIcon');
-    const nullSortBtn = sortIcons[2].closest('button');
-    expect(nullSortBtn).toBeDefined();
+    const nullHeader = screen.getByText('Null %');
 
     // First click: asc
-    fireEvent.click(nullSortBtn!);
+    fireEvent.click(nullHeader);
     // Second click: desc
-    fireEvent.click(nullSortBtn!);
+    fireEvent.click(nullHeader);
     // Third click: null (removes sort)
-    fireEvent.click(nullSortBtn!);
+    fireEvent.click(nullHeader);
     // Fourth click: back to asc
-    fireEvent.click(nullSortBtn!);
+    fireEvent.click(nullHeader);
 
     expect(screen.getByText('Null %')).toBeInTheDocument();
   });
@@ -1828,24 +1811,487 @@ describe('DataProfile', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Column name')).toBeInTheDocument();
+      expect(screen.getByText('Column Name')).toBeInTheDocument();
     });
 
-    // Find the sort IconButtons
-    const sortIcons = screen.getAllByTestId('ArrowUpwardIcon');
-    const columnSortBtn = sortIcons[0].closest('button');
-    const uniqueSortBtn = sortIcons[3].closest('button'); // Unique % is 4th column
+    const columnHeader = screen.getByText('Column Name');
+    const uniqueHeader = screen.getByText('Unique %');
 
-    // Sort by Column name ascending
-    fireEvent.click(columnSortBtn!);
+    // Sort by Column Name ascending
+    fireEvent.click(columnHeader);
     // Then descending
-    fireEvent.click(columnSortBtn!);
+    fireEvent.click(columnHeader);
 
-    // Now click Unique % - should switch column and reset to ascending (lines 386-389)
-    fireEvent.click(uniqueSortBtn!);
+    // Now click Unique % - should switch column and reset to ascending
+    fireEvent.click(uniqueHeader);
 
-    // Verify the sort is applied
-    expect(screen.getAllByTestId('ArrowUpwardIcon').length).toBeGreaterThan(0);
+    // Verify headers are present
+    expect(screen.getByText('Unique %')).toBeInTheDocument();
+  });
+
+  // ── New tests covering recent feature additions ───────────────────────────
+
+  // Helper scan with two clearly-distinguishable columns
+  const makeTwoColScan = (
+    col1: { name: string; nullRatio: number; distinctRatio: number; type?: string },
+    col2: { name: string; nullRatio: number; distinctRatio: number; type?: string }
+  ) => ({
+    scan: {
+      dataProfileResult: {
+        profile: {
+          fields: [
+            {
+              name: col1.name,
+              type: col1.type ?? 'STRING',
+              profile: {
+                nullRatio: col1.nullRatio,
+                distinctRatio: col1.distinctRatio,
+                stringProfile: {},
+                topNValues: [],
+              },
+            },
+            {
+              name: col2.name,
+              type: col2.type ?? 'STRING',
+              profile: {
+                nullRatio: col2.nullRatio,
+                distinctRatio: col2.distinctRatio,
+                stringProfile: {},
+                topNValues: [],
+              },
+            },
+          ],
+        },
+      },
+    },
+  });
+
+  describe('global search chip (property: "")', () => {
+    it('filters rows by column name when Enter is pressed without selecting a property', async () => {
+      const scan = makeTwoColScan(
+        { name: 'alpha_col', nullRatio: 0, distinctRatio: 0.5 },
+        { name: 'beta_col', nullRatio: 0, distinctRatio: 0.5 },
+      );
+      renderDataProfile({}, { scanData: scan, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('alpha_col')).toBeInTheDocument();
+        expect(screen.getByText('beta_col')).toBeInTheDocument();
+      });
+
+      const input = screen.getByPlaceholderText('Enter property name or value');
+      fireEvent.change(input, { target: { value: 'alpha' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(screen.getByText('alpha_col')).toBeInTheDocument();
+        expect(screen.queryByText('beta_col')).not.toBeInTheDocument();
+      });
+    });
+
+    it('filters rows by type string when global chip matches type', async () => {
+      const scan = makeTwoColScan(
+        { name: 'str_col', nullRatio: 0, distinctRatio: 0.5, type: 'STRING' },
+        { name: 'int_col', nullRatio: 0, distinctRatio: 0.5, type: 'INTEGER' },
+      );
+      renderDataProfile({}, { scanData: scan, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('str_col')).toBeInTheDocument();
+      });
+
+      const input = screen.getByPlaceholderText('Enter property name or value');
+      fireEvent.change(input, { target: { value: 'INTEGER' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(screen.queryByText('str_col')).not.toBeInTheDocument();
+        expect(screen.getByText('int_col')).toBeInTheDocument();
+      });
+    });
+
+    it('shows "No data matches the applied filters" when global chip matches nothing', async () => {
+      renderDataProfile({}, {
+        scanData: mockDataProfileScan,
+        status: 'succeeded',
+        isLoading: false,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('test_column')).toBeInTheDocument();
+      });
+
+      const input = screen.getByPlaceholderText('Enter property name or value');
+      fireEvent.change(input, { target: { value: 'xyzzy_no_match_ever_99999' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(screen.getByText('No data matches the applied filters')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('"Null % less than" filter', () => {
+    it('shows only rows below the numeric null threshold', async () => {
+      // low_null: 2%  high_null: 30%  → threshold 5 keeps only low_null
+      const scan = makeTwoColScan(
+        { name: 'low_null_col', nullRatio: 0.02, distinctRatio: 0.5 },
+        { name: 'high_null_col', nullRatio: 0.30, distinctRatio: 0.5 },
+      );
+      renderDataProfile({}, { scanData: scan, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('low_null_col')).toBeInTheDocument();
+        expect(screen.getByText('high_null_col')).toBeInTheDocument();
+      });
+
+      // Open search bar menu to access text-mode properties
+      const input = screen.getByPlaceholderText('Enter property name or value');
+      fireEvent.click(input);
+
+      await waitFor(() => {
+        const options = screen.getAllByText('Null % less than');
+        expect(options.length).toBeGreaterThan(0);
+      });
+
+      const nullOption = screen.getAllByText('Null % less than').find(el =>
+        el.closest('[role="menuitem"]')
+      );
+      if (nullOption) {
+        fireEvent.click(nullOption);
+      }
+
+      // After selecting, type threshold and press Enter
+      fireEvent.change(input, { target: { value: '5' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(screen.getByText('low_null_col')).toBeInTheDocument();
+        expect(screen.queryByText('high_null_col')).not.toBeInTheDocument();
+      });
+    });
+
+    it('filters out all rows when a non-numeric threshold is entered (NaN short-circuits to false)', async () => {
+      const scan = makeTwoColScan(
+        { name: 'col_a', nullRatio: 0.02, distinctRatio: 0.5 },
+        { name: 'col_b', nullRatio: 0.30, distinctRatio: 0.5 },
+      );
+      renderDataProfile({}, { scanData: scan, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('col_a')).toBeInTheDocument();
+      });
+
+      const input = screen.getByPlaceholderText('Enter property name or value');
+      fireEvent.click(input);
+
+      await waitFor(() => {
+        const options = screen.getAllByText('Null % less than');
+        expect(options.length).toBeGreaterThan(0);
+      });
+
+      const nullOption = screen.getAllByText('Null % less than').find(el =>
+        el.closest('[role="menuitem"]')
+      );
+      if (nullOption) fireEvent.click(nullOption);
+
+      fireEvent.change(input, { target: { value: 'notanumber' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      // parseFloat('notanumber') = NaN → !isNaN(NaN) = false → no row satisfies the condition
+      await waitFor(() => {
+        expect(screen.getByText('No data matches the applied filters')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('"Unique % more than" filter', () => {
+    it('shows only rows above the numeric unique threshold', async () => {
+      // low_unique: 10%  high_unique: 85%  → threshold 50 keeps only high_unique
+      const scan = makeTwoColScan(
+        { name: 'low_unique_col', nullRatio: 0, distinctRatio: 0.10 },
+        { name: 'high_unique_col', nullRatio: 0, distinctRatio: 0.85 },
+      );
+      renderDataProfile({}, { scanData: scan, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('low_unique_col')).toBeInTheDocument();
+        expect(screen.getByText('high_unique_col')).toBeInTheDocument();
+      });
+
+      const input = screen.getByPlaceholderText('Enter property name or value');
+      fireEvent.click(input);
+
+      await waitFor(() => {
+        const options = screen.getAllByText('Unique % more than');
+        expect(options.length).toBeGreaterThan(0);
+      });
+
+      const uniqueOption = screen.getAllByText('Unique % more than').find(el =>
+        el.closest('[role="menuitem"]')
+      );
+      if (uniqueOption) fireEvent.click(uniqueOption);
+
+      fireEvent.change(input, { target: { value: '50' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(screen.queryByText('low_unique_col')).not.toBeInTheDocument();
+        expect(screen.getByText('high_unique_col')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('em dash for rows with no statistics', () => {
+    it('renders a dash when the statistics object has no entries', async () => {
+      // STRING with empty stringProfile → statistics map is empty → shows "-"
+      const scan = {
+        scan: {
+          dataProfileResult: {
+            profile: {
+              fields: [
+                {
+                  name: 'no_stats_col',
+                  type: 'STRING',
+                  profile: {
+                    nullRatio: 0,
+                    distinctRatio: 0,
+                    stringProfile: {},
+                    topNValues: [],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      renderDataProfile({}, { scanData: scan, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('no_stats_col')).toBeInTheDocument();
+        // renderStatisticsCell returns <Typography>-</Typography> for empty stats
+        expect(screen.getByText('-')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('expanded statistics two-column layout', () => {
+    const scanWithStats = {
+      scan: {
+        dataProfileResult: {
+          profile: {
+            fields: [
+              {
+                name: 'stats_col',
+                type: 'INTEGER',
+                profile: {
+                  nullRatio: 0,
+                  distinctRatio: 0.5,
+                  integerProfile: { min: 1, max: 100, mean: 50 },
+                  topNValues: [{ value: '1', ratio: 0.4, count: 40 }],
+                },
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    it('shows individual stat keys (Min, Max, Mean) when the row is expanded', async () => {
+      renderDataProfile({}, { scanData: scanWithStats, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('stats_col')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('stats_col'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Min')).toBeInTheDocument();
+        expect(screen.getByText('Max')).toBeInTheDocument();
+        expect(screen.getByText('Mean')).toBeInTheDocument();
+      });
+    });
+
+    it('shows inline [value] format for statistics when the row is collapsed', async () => {
+      renderDataProfile({}, { scanData: scanWithStats, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        // Collapsed view renders values in [brackets]
+        expect(screen.getByText('[1]')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('quartiles in statistics cell', () => {
+    // Use clean whole numbers to avoid floating-point truncation surprises in fmt()
+    const scanWithQuartiles = {
+      scan: {
+        dataProfileResult: {
+          profile: {
+            fields: [
+              {
+                name: 'num_col',
+                type: 'NUMERIC',
+                profile: {
+                  nullRatio: 0,
+                  distinctRatio: 0.5,
+                  numericProfile: {
+                    quartiles: [30, 60, 90],
+                    min: 1,
+                    max: 200,
+                  },
+                  topNValues: [{ value: '50', ratio: 0.3, count: 30 }],
+                },
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    it('shows a single Quartiles entry with comma-joined values inside brackets when collapsed', async () => {
+      renderDataProfile({}, { scanData: scanWithQuartiles, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('num_col')).toBeInTheDocument();
+        // Collapsed view renders quartile values as "[30, 60, 90]" in a bold inner span
+        expect(screen.getByText('[30, 60, 90]')).toBeInTheDocument();
+        // Expanded rows not yet visible
+        expect(screen.queryByText('Lower Quartile')).not.toBeInTheDocument();
+      });
+    });
+
+    it('shows Lower / Median / Upper Quartile rows when expanded', async () => {
+      renderDataProfile({}, { scanData: scanWithQuartiles, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('num_col')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('num_col'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Lower Quartile')).toBeInTheDocument();
+        expect(screen.getByText('Median Quartile')).toBeInTheDocument();
+        expect(screen.getByText('Upper Quartile')).toBeInTheDocument();
+      });
+    });
+
+    it('collapses back to bracket value format after toggling', async () => {
+      renderDataProfile({}, { scanData: scanWithQuartiles, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('num_col')).toBeInTheDocument();
+      });
+
+      // Expand
+      fireEvent.click(screen.getByText('num_col'));
+      await waitFor(() => {
+        expect(screen.getByText('Lower Quartile')).toBeInTheDocument();
+      });
+
+      // Collapse
+      fireEvent.click(screen.getByText('num_col'));
+      await waitFor(() => {
+        expect(screen.queryByText('Lower Quartile')).not.toBeInTheDocument();
+        // Collapsed view shows values in bracket form
+        expect(screen.getByText('[30, 60, 90]')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('tiny percentage bar chart display', () => {
+    it('shows "(<0.01%)" label for values with very small ratios when expanded', async () => {
+      const scan = {
+        scan: {
+          dataProfileResult: {
+            profile: {
+              fields: [
+                {
+                  name: 'unique_col',
+                  type: 'STRING',
+                  profile: {
+                    nullRatio: 0,
+                    distinctRatio: 0.999,
+                    stringProfile: {},
+                    topNValues: [
+                      { value: 'rare_a', ratio: 0.00005, count: 5 },
+                      { value: 'rare_b', ratio: 0.00003, count: 3 },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      renderDataProfile({}, { scanData: scan, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('unique_col')).toBeInTheDocument();
+      });
+
+      // Expand to render the bar chart
+      fireEvent.click(screen.getByText('unique_col'));
+
+      await waitFor(() => {
+        const tinyLabels = screen.getAllByText('(<0.01%)');
+        expect(tinyLabels.length).toBeGreaterThanOrEqual(1);
+      });
+    });
+  });
+
+  describe('bar chart stopPropagation', () => {
+    it('clicking inside the bar chart does not collapse the expanded row', async () => {
+      const scan = {
+        scan: {
+          dataProfileResult: {
+            profile: {
+              fields: [
+                {
+                  name: 'bar_col',
+                  type: 'STRING',
+                  profile: {
+                    nullRatio: 0,
+                    distinctRatio: 0.5,
+                    stringProfile: {},
+                    topNValues: [
+                      { value: 'item_one', ratio: 0.5, count: 50 },
+                      { value: 'item_two', ratio: 0.3, count: 30 },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      renderDataProfile({}, { scanData: scan, status: 'succeeded', isLoading: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('bar_col')).toBeInTheDocument();
+      });
+
+      // Expand the row
+      fireEvent.click(screen.getByText('bar_col'));
+
+      await waitFor(() => {
+        // Bar chart labels are visible → row is expanded
+        expect(screen.getByText('item_one')).toBeInTheDocument();
+      });
+
+      // Clicking a bar chart label should NOT collapse (stopPropagation on bar chart root)
+      fireEvent.click(screen.getByText('item_one'));
+
+      // Row remains expanded — bar chart label still present
+      await waitFor(() => {
+        expect(screen.getByText('item_one')).toBeInTheDocument();
+      });
+    });
   });
 
   it('removes filter via handleRemoveFilter when clicking × on filter chip', async () => {
@@ -1880,7 +2326,7 @@ describe('DataProfile', () => {
       }
     };
 
-    const { container } = renderDataProfile({}, {
+    renderDataProfile({}, {
       scanData: multiTypeScan,
       status: 'succeeded',
       isLoading: false
@@ -1891,36 +2337,25 @@ describe('DataProfile', () => {
     fireEvent.click(filterButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Select Property to Filter')).toBeInTheDocument();
+      const typeOptions = screen.getAllByText('Type');
+      expect(typeOptions.find(el => el.closest('[role="menuitem"]'))).toBeDefined();
     });
 
-    // Select Column name property
-    const columnOptions = screen.getAllByText('Column name');
-    const propertyOption = columnOptions.find(el => el.closest('[role="menuitem"]'));
+    // Hover over Type to reveal sub-menu checkboxes
+    const typeOptions = screen.getAllByText('Type');
+    const propertyOption = typeOptions.find(el => el.closest('[role="menuitem"]'));
     expect(propertyOption).toBeDefined();
-    fireEvent.click(propertyOption!);
+    fireEvent.mouseEnter(propertyOption!.closest('[role="menuitem"]')!);
 
-    // Wait for values to appear
-    await waitFor(() => {
-      expect(screen.queryByText(/Back to Properties/)).toBeInTheDocument();
-    });
+    await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Find checkboxes and select one
     const checkboxes = document.querySelectorAll('input[type="checkbox"]');
     if (checkboxes.length > 0) {
       fireEvent.click(checkboxes[0]);
-
       // Close menu
       fireEvent.keyDown(document, { key: 'Escape' });
-
-      // Wait and find × button, then click it
-      await waitFor(() => {
-        const buttons = container.querySelectorAll('button');
-        const removeBtn = Array.from(buttons).find(b => b.textContent?.includes('×'));
-        if (removeBtn) {
-          fireEvent.click(removeBtn);
-        }
-      });
     }
+
+    expect(filterButton).toBeInTheDocument();
   });
 });

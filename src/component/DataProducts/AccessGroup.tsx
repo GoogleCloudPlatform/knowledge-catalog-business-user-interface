@@ -10,13 +10,15 @@ import {
   TableHead,
   TableRow,
   Tooltip,
+  Paper,
+  Skeleton
 } from '@mui/material';
 import FilterBar from '../Common/FilterBar';
 import type { ActiveFilter, PropertyConfig } from '../Common/FilterBar';
-import { EmailOutlined } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import ResizeHandle from '../Schema/ResizeHandle';
+
 
 // //interface for the filter dropdown Props
 interface AccessGroupProps {
@@ -40,6 +42,18 @@ const OverflowTooltip: React.FC<{ text: string; children: React.ReactElement<{ o
   );
 };
 
+const AVATAR_COLORS = [
+  { bg: 'linear-gradient(135deg, #1CB5E0 0%, #000851 100%)' },
+  { bg: 'linear-gradient(135deg, #56AB2F 0%, #A8E063 100%)' },
+  { bg: 'linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%)' },
+  { bg: 'linear-gradient(135deg, #F7971E 0%, #FFD200 100%)' },
+];
+
+const getAvatarColor = (email: string): string => {
+  const code = email.charCodeAt(0) || 0;
+  return AVATAR_COLORS[code % AVATAR_COLORS.length].bg;
+};
+
 // FilterDropdown component
 const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
 
@@ -56,10 +70,10 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
   // Column config for resize hook (SearchTableView pattern)
   const COLUMN_CONFIGS = React.useMemo(() => [
     { key: 'name', initialWidth: 200, minWidth: 100 },
-    { key: 'type', initialWidth: 120, minWidth: 80 },
-    { key: 'system', initialWidth: 120, minWidth: 80 },
+    { key: 'type', initialWidth: 180, minWidth: 80 },
+    { key: 'system', initialWidth: 180, minWidth: 80 },
     { key: 'sourceProject', initialWidth: 200, minWidth: 100 },
-    { key: 'mappedPermissions', initialWidth: 300, minWidth: 200 },
+    { key: 'mappedPermissions', initialWidth: 200, minWidth: 150 },
   ], []);
 
   const { columnWidths, activeIndex, handleMouseDown } = useColumnResize({
@@ -200,19 +214,26 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
           onActiveFiltersChange={setActiveFilters}
           defaultProperty={columnKeys[0]}
           placeholder="Enter property name or value"
-          marginLeft="20px"
+          marginLeft="0px"
+          sx={{ 
+            backgroundColor: '#F8F9FA', 
+            padding: '12px 0px', 
+          }}
         />
         {/* Table - SearchTableView pattern */}
         {displayedData.length === 0 && activeFilters.length > 0 ? (
-          <div style={{ padding: '48px', textAlign: 'center', fontSize: '14px', fontFamily: 'Google Sans, sans-serif', color: '#575757' }}>
+          <div style={{ padding: '48px', textAlign: 'center', fontSize: '14px', fontFamily: 'Google Sans, sans-serif', color: '#0C1226CC' }}>
             No data matches the applied filters
           </div>
         ) : (
         <TableContainer
+          component={Paper}
           sx={{
             backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E8EEF5',
             boxShadow: 'none',
-            maxHeight: '600px',
+            maxHeight: 'calc(100vh - 200px)',
             overflowY: 'auto',
             overflowX: 'auto',
             width: '100%',
@@ -239,21 +260,23 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                     content: '""',
                     position: 'absolute',
                     bottom: 0,
-                    left: '12px',
-                    right: '10px',
+                    left: '0px',
+                    right: '0px',
                     height: '1px',
-                    backgroundColor: '#DADCE0',
+                    backgroundColor: '#E8EEF5',
                   },
                 }}
               >
                 {/* Name */}
                 <TableCell
                   sx={{
-                    fontSize: '12px',
+                    fontSize: '14px',
                     fontWeight: '500',
                     color: '#444746',
                     fontFamily: '"Google Sans", sans-serif',
                     position: 'relative',
+                    lineHeight: '40px',
+                    padding: '0px !important',
                   }}
                 >
                   <Tooltip title={getSortTooltip('Name')} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
@@ -262,7 +285,8 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                       onClick={handleToggleSort('Name')}
                       sx={{
                         display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
-                        borderRadius: '4px', padding: '4px 8px', margin: '-4px -8px',
+                        height: '100%', width: '100%', borderRadius: '0px', 
+                        padding: '12px 20px 4px 20px', margin: '0px',
                         transition: 'background-color 0.2s ease',
                         '&:hover': { backgroundColor: '#F8F9FA' },
                       }}
@@ -291,8 +315,9 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                 {/* Type */}
                 <TableCell
                   sx={{
-                    fontSize: '12px', fontWeight: '500', color: '#444746',
+                    fontSize: '14px', fontWeight: '500', color: '#444746',
                     fontFamily: '"Google Sans", sans-serif', position: 'relative',
+                    lineHeight: '40px', padding: '0px !important',
                   }}
                 >
                   <Tooltip title={getSortTooltip('Type')} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
@@ -300,11 +325,12 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                       role="button"
                       onClick={handleToggleSort('Type')}
                       sx={{
-                        display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
-                        borderRadius: '4px', padding: '4px 8px', margin: '-4px -8px',
-                        transition: 'background-color 0.2s ease',
-                        '&:hover': { backgroundColor: '#F8F9FA' },
-                      }}
+                          display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
+                          height: '100%', width: '100%', borderRadius: '0px', 
+                          padding: '12px 20px 4px 20px', margin: '0px',
+                          transition: 'background-color 0.2s ease',
+                          '&:hover': { backgroundColor: '#F8F9FA' },
+                        }}
                     >
                       <span>Type</span>
                       <Box component="span" className="sort-btn" sx={{
@@ -330,8 +356,9 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                 {/* System */}
                 <TableCell
                   sx={{
-                    fontSize: '12px', fontWeight: '500', color: '#444746',
+                    fontSize: '14px', fontWeight: '500', color: '#444746',
                     fontFamily: '"Google Sans", sans-serif', position: 'relative',
+                    lineHeight: '40px', padding: '0px !important',
                   }}
                 >
                   <Tooltip title={getSortTooltip('System')} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
@@ -340,7 +367,8 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                       onClick={handleToggleSort('System')}
                       sx={{
                         display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
-                        borderRadius: '4px', padding: '4px 8px', margin: '-4px -8px',
+                        height: '100%', width: '100%', borderRadius: '0px', 
+                        padding: '12px 20px 4px 20px', margin: '0px',
                         transition: 'background-color 0.2s ease',
                         '&:hover': { backgroundColor: '#F8F9FA' },
                       }}
@@ -369,8 +397,9 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                 {/* Source-Project */}
                 <TableCell
                   sx={{
-                    fontSize: '12px', fontWeight: '500', color: '#444746',
+                    fontSize: '14px', fontWeight: '500', color: '#444746',
                     fontFamily: '"Google Sans", sans-serif', position: 'relative',
+                    lineHeight: '40px', padding: '0px !important',
                   }}
                 >
                   <Tooltip title={getSortTooltip('Source-Project')} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
@@ -379,7 +408,8 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                       onClick={handleToggleSort('Source-Project')}
                       sx={{
                         display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer',
-                        borderRadius: '4px', padding: '4px 8px', margin: '-4px -8px',
+                        height: '100%', width: '100%', borderRadius: '0px', 
+                        padding: '12px 20px 4px 20px', margin: '0px',
                         transition: 'background-color 0.2s ease',
                         '&:hover': { backgroundColor: '#F8F9FA' },
                       }}
@@ -408,7 +438,7 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                 {/* Mapped-Permissions (no sort, no resize on last) */}
                 <TableCell
                   sx={{
-                    fontSize: '12px', fontWeight: '500', color: '#444746',
+                    fontSize: '14px', fontWeight: '500', color: '#444746',
                     fontFamily: '"Google Sans", sans-serif',
                     textAlign: 'right',
                   }}
@@ -423,29 +453,20 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                     key={index}
                     sx={{
                       position: 'relative',
-                      height: 'auto',
+                      height: '60px',
                       backgroundColor: '#FFFFFF',
-                      '& .MuiTableCell-root': {
-                        borderBottom: 'none',
-                      },
-                      '&:hover .MuiTableCell-root': {
-                        backgroundColor: '#F8F9FA',
-                      },
-                      '&:hover .MuiTableCell-root:first-of-type': {
-                        background: 'linear-gradient(to right, transparent 12px, #F8F9FA 12px)',
-                      },
-                      '&:hover .MuiTableCell-root:last-of-type': {
-                        background: 'linear-gradient(to left, transparent 10px, #F8F9FA 10px)',
-                      },
+                      '& .MuiTableCell-root': { borderBottom: 'none' },
+                      '&:hover .MuiTableCell-root': { backgroundColor: '#F8F9FA' },
                       '&::after': {
                         content: '""',
                         position: 'absolute',
                         bottom: 0,
-                        left: '12px',
-                        right: '10px',
+                        left: '0px',
+                        right: '0px',
                         height: '1px',
-                        backgroundColor: '#DADCE0',
+                        backgroundColor: '#E8EEF5',
                       },
+                      '&:last-child::after': { display: 'none' }
                     }}
                   >
                     {/* Name */}
@@ -531,7 +552,7 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
           padding: "40px 0",
           gap: 2,
       }}>
-          <Typography variant="body1" color="text.secondary">
+          <Typography variant="body1" color="#0C1226CC">
               No asset permissions available for this data product.
           </Typography>
       </Box>
@@ -549,14 +570,21 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
             {/* left side  */}
             <Grid size={12} sx={{ padding: "0px 5px 10px 0px" }}>
                 <Box sx={{
-                    padding: "0px 16px 5px 16px",
-                    overflow: "hidden",
-                    backgroundColor: "#FFFFFF"
-                }}>
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-start",
+                          padding: "16px 20px",
+                          backgroundColor: "#FFFFFF",
+                          border: "1px solid #E8EEF5",
+                          borderRadius: "16px",
+                          overflow: "hidden",
+                          width: "calc(100% - 32px)",
+                          margin: "0 16px",
+                          boxSizing: "border-box",
+                      }}>
                         <Box sx={{
                             display: "flex",
                             alignItems: "center",
-                            gap: "8px"
                         }}>
                                 <Typography
                                     component="span"
@@ -585,7 +613,7 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                                 <Typography sx={{fontWeight: 400,
                                         fontSize: "13px",
                                         lineHeight: "2rem",
-                                        color: "#1F1F1F",}}>
+                                        color: "#0C1226CC",}}>
                                 Define access groups which will be used by Data product consumers to request access. Asset permissions will be assigned
                                 to the access groups defined here.
                                 </Typography>
@@ -602,45 +630,80 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                                           padding: "40px 0",
                                           gap: 2,
                                       }}>
-                                          <Typography variant="body1" color="text.secondary">
+                                          <Typography variant="body1" color="#0C1226CC">
                                               No access groups available for this data product.
                                           </Typography>
                                       </Box>
                                   )
                                 }
-                                { Object.keys(accessGroups).map((key:any) => (
-                                    <Grid
-                                        size={4}
-                                        key={accessGroups[key].id}
-                                        sx={{ marginTop: '5px', borderBottom: '1px solid #E0E0E0', paddingBottom: '2px' }}
-                                    >
-                                        <Box sx={{
-                                                height: '100%',
-                                                boxSizing: 'border-box',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                justifyContent: 'space-between'
-                                            }}
-                                        >
-                                            <Box sx={{ display: 'flex', alignItems: 'center', padding: '5px' }}>
-                                                <Typography variant="h6" sx={{ fontFamily: 'Google Sans', fontSize: '14px', fontWeight: 500, color: '#1F1F1F', textWrap: 'break-word', lineHeight:1.3, textTransform: 'capitalize' }}>
-                                                    {accessGroups[key].displayName} :
-                                                </Typography>
+                                { Object.keys(accessGroups).map((key: any) => {
+                                    const groupEmail = accessGroups[key]?.principal?.googleGroup || '';
+                                    const avatarChar = (groupEmail || accessGroups[key].displayName)
+                                      .charAt(0).toUpperCase();
 
-                                                <Box sx={{display: 'flex', alignItems: 'center', padding: '5px', gap: 0.5, color: '#575757', fontSize: '14px', marginLeft:'20px' }}>
-                                                    <EmailOutlined sx={{ color: '#575757', fontSize: '14px', fontWeight:500 }} />
-                                                    {`${accessGroups[key]?.principal?.googleGroup || 'No group defined'}`}
-                                                </Box>
-                                            </Box>
+                                    return (
+                                      <Grid
+                                        size="auto"
+                                        key={accessGroups[key].id}
+                                        sx={{ marginTop: '5px', paddingBottom: '8px' }}
+                                      >
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '5px' }}>
+                                          {/* Avatar — color/letter driven by email */}
+                                          <Box sx={{
+                                            width: '32px',
+                                            height: '32px',
+                                            borderRadius: '50%',
+                                            background: getAvatarColor(groupEmail),
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: '#FFFFFF',
+                                            fontSize: '13px',
+                                            fontWeight: 500,
+                                            fontFamily: 'Roboto, sans-serif',
+                                            flexShrink: 0,
+                                          }}>
+                                            {avatarChar}
+                                          </Box>
+
+                                          {/* Header (displayName) + footer (email) */}
+                                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px'}}>
+                                            <Typography sx={{
+                                              fontFamily: '"Google Sans", sans-serif',
+                                              fontWeight: 500,
+                                              fontSize: '14px',
+                                              color: '#7D7D7D',
+                                              textTransform: 'capitalize',
+                                              overflow: 'hidden',
+                                              textOverflow: 'ellipsis',
+                                              whiteSpace: 'nowrap',
+                                            }}>
+                                              {accessGroups[key].displayName}
+                                            </Typography>
+                                            <OverflowTooltip text={groupEmail || 'No group defined'}>
+                                              <Typography sx={{
+                                                fontFamily: '"Google Sans", sans-serif',
+                                                fontWeight: 500,
+                                                fontSize: '13px',
+                                                color: '#3D4151',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap',
+                                              }}>
+                                                {groupEmail || 'No group defined'}
+                                              </Typography>
+                                            </OverflowTooltip>
+                                          </Box>
                                         </Box>
-                                    </Grid>
-                                ))}
+                                      </Grid>
+                                    );
+                                })}
                             </Grid>
                 </Box>
                 <Box sx={{
-                    padding: "5px 16px 5px 16px",
+                    padding: "20px 16px 5px 16px",
                     overflow: "hidden",
-                    backgroundColor: "#FFFFFF"
+                    backgroundColor: "transparent"
                 }}>
                         <Box sx={{
                             display: "flex",
@@ -658,7 +721,7 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                                         textTransform: "capitalize",
                                     }}
                                 >
-                                Asset permissions
+                                Asset Permissions
                             </Typography>
                         </Box>
                         <Box
@@ -673,7 +736,7 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                             <Typography sx={{fontWeight: 400,
                                         fontSize: "13px",
                                         lineHeight: "2rem",
-                                        color: "#1F1F1F",}}>
+                                        color: "#0C1226CC",}}>
                                 View which permissions are mapped to each asset in this data product. Each asset shows the access groups and their corresponding IAM roles.
                             </Typography>
                         </Box>
@@ -682,9 +745,20 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                         display: 'flex',
                         flexDirection: 'column',
                         paddingTop: '0px',
-                        paddingLeft: '0px',
+                        paddingLeft: '16px',
+                        paddingRight: '16px',
                     }}>
-                        {dataProductAssetsStatus === 'succeeded' ? accessPermissionView : (
+                        {dataProductAssetsStatus === 'loading' ? (
+                            <Box sx={{ width: '100%', pt: 2 }}>
+                                {/* Filter bar skeleton */}
+                                <Skeleton variant="rounded" width="100%" height={40} sx={{ mb: 2, borderRadius: '8px' }} />
+                                
+                                {/* Table skeleton */}
+                                <Skeleton variant="rounded" width="100%" height={250} sx={{ borderRadius: '16px' }} />
+                            </Box>
+                        ) : dataProductAssetsStatus === 'succeeded' ? (
+                            accessPermissionView
+                        ) : (
                             <Box sx={{
                                 display: "flex",
                                 flexDirection: "column",
@@ -693,7 +767,7 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                                 padding: "40px 0",
                                 gap: 2,
                             }}>
-                                <Typography variant="body1" color="text.secondary">
+                                <Typography variant="body1" color="#0C1226CC">
                                     No asset permissions available for this data product.
                                 </Typography>
                             </Box>

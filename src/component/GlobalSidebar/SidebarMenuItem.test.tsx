@@ -38,12 +38,17 @@ describe('SidebarMenuItem', () => {
       expect(screen.getByText('Test Label')).toBeInTheDocument();
     });
 
-    it('renders icon inside menu-icon-container', () => {
+    it('renders icon inside the button', () => {
       render(<SidebarMenuItem {...defaultProps} />);
 
-      const iconContainer = document.querySelector('.menu-icon-container');
+      const button = screen.getByRole('button');
+      const iconSpan = button.querySelector('.sidebar-icon');
+      expect(iconSpan).toBeInTheDocument();
+      expect(iconSpan).toHaveTextContent('home');
+
+      const iconContainer = button.querySelector('.menu-icon-container');
       expect(iconContainer).toBeInTheDocument();
-      expect(iconContainer).toHaveTextContent('home');
+      expect(iconContainer?.contains(iconSpan)).toBe(true);
     });
 
     it('renders label inside menu-label span', () => {
@@ -66,8 +71,8 @@ describe('SidebarMenuItem', () => {
       render(<SidebarMenuItem icon="★" label="Star Menu" />);
 
       expect(screen.getByText('Star Menu')).toBeInTheDocument();
-      const iconContainer = document.querySelector('.menu-icon-container');
-      expect(iconContainer).toHaveTextContent('★');
+      const iconSpan = document.querySelector('.sidebar-icon');
+      expect(iconSpan).toHaveTextContent('★');
     });
 
     it('renders with material symbol icon name', () => {
@@ -86,12 +91,6 @@ describe('SidebarMenuItem', () => {
       expect(screen.getByRole('button')).toHaveClass('sidebar-menu-item');
     });
 
-    it('has single-line class by default', () => {
-      render(<SidebarMenuItem {...defaultProps} />);
-
-      expect(screen.getByRole('button')).toHaveClass('single-line');
-    });
-
     it('does not have active class by default', () => {
       render(<SidebarMenuItem {...defaultProps} />);
 
@@ -104,10 +103,21 @@ describe('SidebarMenuItem', () => {
       expect(screen.getByRole('button')).not.toHaveClass('disabled');
     });
 
-    it('does not have two-line class by default', () => {
+    it('defaults to single-line modifier', () => {
       render(<SidebarMenuItem {...defaultProps} />);
-
+      expect(screen.getByRole('button')).toHaveClass('single-line');
       expect(screen.getByRole('button')).not.toHaveClass('two-line');
+    });
+
+    it('adds two-line modifier when multiLine=true', () => {
+      render(<SidebarMenuItem {...defaultProps} multiLine={true} />);
+      expect(screen.getByRole('button')).toHaveClass('two-line');
+      expect(screen.getByRole('button')).not.toHaveClass('single-line');
+    });
+
+    it('keeps single-line modifier when multiLine=false', () => {
+      render(<SidebarMenuItem {...defaultProps} multiLine={false} />);
+      expect(screen.getByRole('button')).toHaveClass('single-line');
     });
   });
 
@@ -172,32 +182,6 @@ describe('SidebarMenuItem', () => {
       render(<SidebarMenuItem {...defaultProps} disabled={false} />);
 
       expect(screen.getByRole('button')).toHaveAttribute('aria-disabled', 'false');
-    });
-  });
-
-  describe('multiLine prop', () => {
-    it('adds two-line class when multiLine is true', () => {
-      render(<SidebarMenuItem {...defaultProps} multiLine={true} />);
-
-      expect(screen.getByRole('button')).toHaveClass('two-line');
-    });
-
-    it('does not add two-line class when multiLine is false', () => {
-      render(<SidebarMenuItem {...defaultProps} multiLine={false} />);
-
-      expect(screen.getByRole('button')).not.toHaveClass('two-line');
-    });
-
-    it('adds single-line class when multiLine is false', () => {
-      render(<SidebarMenuItem {...defaultProps} multiLine={false} />);
-
-      expect(screen.getByRole('button')).toHaveClass('single-line');
-    });
-
-    it('does not add single-line class when multiLine is true', () => {
-      render(<SidebarMenuItem {...defaultProps} multiLine={true} />);
-
-      expect(screen.getByRole('button')).not.toHaveClass('single-line');
     });
   });
 
@@ -400,37 +384,7 @@ describe('SidebarMenuItem', () => {
       expect(mockOnClick).not.toHaveBeenCalled();
     });
 
-    it('handles multiLine=true with isActive=true', () => {
-      render(
-        <SidebarMenuItem
-          {...defaultProps}
-          multiLine={true}
-          isActive={true}
-        />
-      );
-
-      const button = screen.getByRole('button');
-      expect(button).toHaveClass('two-line');
-      expect(button).toHaveClass('active');
-      expect(button).not.toHaveClass('single-line');
-    });
-
-    it('handles multiLine=true with disabled=true', () => {
-      render(
-        <SidebarMenuItem
-          {...defaultProps}
-          multiLine={true}
-          disabled={true}
-        />
-      );
-
-      const button = screen.getByRole('button');
-      expect(button).toHaveClass('two-line');
-      expect(button).toHaveClass('disabled');
-      expect(button).toHaveAttribute('tabIndex', '-1');
-    });
-
-    it('handles all props true', () => {
+    it('handles all boolean props true', () => {
       const mockOnClick = vi.fn();
       render(
         <SidebarMenuItem
@@ -438,7 +392,6 @@ describe('SidebarMenuItem', () => {
           label="All True"
           isActive={true}
           disabled={true}
-          multiLine={true}
           onClick={mockOnClick}
         />
       );
@@ -447,8 +400,6 @@ describe('SidebarMenuItem', () => {
       expect(button).toHaveClass('sidebar-menu-item');
       expect(button).toHaveClass('active');
       expect(button).toHaveClass('disabled');
-      expect(button).toHaveClass('two-line');
-      expect(button).not.toHaveClass('single-line');
       expect(button).toHaveAttribute('tabIndex', '-1');
       expect(button).toHaveAttribute('aria-disabled', 'true');
 
@@ -456,7 +407,7 @@ describe('SidebarMenuItem', () => {
       expect(mockOnClick).not.toHaveBeenCalled();
     });
 
-    it('handles all props false', () => {
+    it('handles all boolean props false', () => {
       const mockOnClick = vi.fn();
       render(
         <SidebarMenuItem
@@ -464,7 +415,6 @@ describe('SidebarMenuItem', () => {
           label="All False"
           isActive={false}
           disabled={false}
-          multiLine={false}
           onClick={mockOnClick}
         />
       );
@@ -473,8 +423,6 @@ describe('SidebarMenuItem', () => {
       expect(button).toHaveClass('sidebar-menu-item');
       expect(button).not.toHaveClass('active');
       expect(button).not.toHaveClass('disabled');
-      expect(button).not.toHaveClass('two-line');
-      expect(button).toHaveClass('single-line');
       expect(button).toHaveAttribute('tabIndex', '0');
       expect(button).toHaveAttribute('aria-disabled', 'false');
 
@@ -497,14 +445,6 @@ describe('SidebarMenuItem', () => {
       expect(button).not.toHaveClass('disabled');
       expect(button).toHaveAttribute('tabIndex', '0');
       expect(button).toHaveAttribute('aria-disabled', 'false');
-    });
-
-    it('multiLine defaults to false', () => {
-      render(<SidebarMenuItem icon="home" label="Test" />);
-
-      const button = screen.getByRole('button');
-      expect(button).not.toHaveClass('two-line');
-      expect(button).toHaveClass('single-line');
     });
 
     it('onClick defaults to undefined (no error on click)', () => {
@@ -554,7 +494,7 @@ describe('SidebarMenuItem', () => {
   });
 
   describe('DOM Structure', () => {
-    it('has correct DOM structure', () => {
+    it('has correct DOM structure with icon container and label', () => {
       render(<SidebarMenuItem {...defaultProps} />);
 
       const button = screen.getByRole('button');
@@ -574,6 +514,7 @@ describe('SidebarMenuItem', () => {
       const firstChild = button.children[0];
 
       expect(firstChild).toHaveClass('menu-icon-container');
+      expect(firstChild.querySelector('.sidebar-icon')).toBeInTheDocument();
     });
 
     it('label span is second child', () => {
@@ -618,19 +559,6 @@ describe('SidebarMenuItem', () => {
       const event = mockOnClick.mock.calls[0][0];
       expect(event.currentTarget).toBeDefined();
     });
-
-    it('event currentTarget is the button element', async () => {
-      const mockOnClick = vi.fn();
-      const user = userEvent.setup();
-      render(<SidebarMenuItem {...defaultProps} onClick={mockOnClick} />);
-
-      const button = screen.getByRole('button');
-      await user.click(button);
-
-      const event = mockOnClick.mock.calls[0][0];
-      // userEvent properly sets currentTarget during event propagation
-      expect(event.currentTarget).toBeDefined();
-    });
   });
 
   describe('Class Name String', () => {
@@ -639,16 +567,14 @@ describe('SidebarMenuItem', () => {
 
       const button = screen.getByRole('button');
       expect(button.className).toContain('sidebar-menu-item');
-      expect(button.className).toContain('single-line');
     });
 
-    it('generates correct class string when all optional props are true', () => {
+    it('generates correct class string when active and disabled', () => {
       render(
         <SidebarMenuItem
           {...defaultProps}
           isActive={true}
           disabled={true}
-          multiLine={true}
         />
       );
 
@@ -656,17 +582,13 @@ describe('SidebarMenuItem', () => {
       expect(button.className).toContain('sidebar-menu-item');
       expect(button.className).toContain('active');
       expect(button.className).toContain('disabled');
-      expect(button.className).toContain('two-line');
     });
 
-    it('class string contains expected base classes', () => {
+    it('class string contains expected base class', () => {
       render(<SidebarMenuItem {...defaultProps} />);
 
       const button = screen.getByRole('button');
-      // The component uses template literals with conditionals, which may create spaces
-      // Verify the essential classes are present
       expect(button.className).toContain('sidebar-menu-item');
-      expect(button.className).toContain('single-line');
       expect(button.className).not.toContain('active');
       expect(button.className).not.toContain('disabled');
     });
@@ -693,17 +615,6 @@ describe('SidebarMenuItem', () => {
 
       expect(screen.getByRole('button')).toHaveClass('disabled');
       expect(screen.getByRole('button')).toHaveAttribute('tabIndex', '-1');
-    });
-
-    it('updates when multiLine changes', () => {
-      const { rerender } = render(<SidebarMenuItem {...defaultProps} multiLine={false} />);
-
-      expect(screen.getByRole('button')).toHaveClass('single-line');
-
-      rerender(<SidebarMenuItem {...defaultProps} multiLine={true} />);
-
-      expect(screen.getByRole('button')).toHaveClass('two-line');
-      expect(screen.getByRole('button')).not.toHaveClass('single-line');
     });
 
     it('updates when label changes', () => {
@@ -741,7 +652,7 @@ describe('SidebarMenuItem', () => {
       rerender(<SidebarMenuItem {...defaultProps} onClick={mockOnClick2} />);
 
       fireEvent.click(screen.getByRole('button'));
-      expect(mockOnClick1).toHaveBeenCalledTimes(1); // Not called again
+      expect(mockOnClick1).toHaveBeenCalledTimes(1);
       expect(mockOnClick2).toHaveBeenCalledTimes(1);
     });
   });
@@ -760,16 +671,13 @@ describe('SidebarMenuItem', () => {
 
       const labelSpan = document.querySelector('.menu-label');
       expect(labelSpan).toBeInTheDocument();
-      // HTML normalizes whitespace in textContent, but the raw text is preserved
       expect(labelSpan?.textContent).toBe('   ');
     });
 
     it('handles empty icon string gracefully', () => {
       render(<SidebarMenuItem icon="" label="Null Icon" />);
 
-      const iconContainer = document.querySelector('.menu-icon-container');
-      expect(iconContainer).toBeInTheDocument();
-      const iconSpan = iconContainer?.querySelector('.sidebar-icon');
+      const iconSpan = document.querySelector('.sidebar-icon');
       expect(iconSpan).toBeInTheDocument();
       expect(iconSpan).toBeEmptyDOMElement();
     });

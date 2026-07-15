@@ -20,6 +20,8 @@ const {
   mockPerformSilentAuth,
   mockDispatch,
   axiosDefaultsHeaders,
+  mockUseAppSelector,
+  mockClearUserState,
 } = vi.hoisted(() => ({
   mockAxiosGet: vi.fn(),
   mockSetCredentials: vi.fn((payload: unknown) => ({ type: 'user/setCredentials', payload })),
@@ -33,6 +35,8 @@ const {
   mockPerformSilentAuth: vi.fn(),
   mockDispatch: vi.fn(),
   axiosDefaultsHeaders: { common: {} as Record<string, string> },
+  mockUseAppSelector: vi.fn(),
+  mockClearUserState: vi.fn(),
 }));
 
 // Mock axios
@@ -45,14 +49,19 @@ vi.mock('axios', () => ({
   },
 }));
 
-// Mock react-redux dispatch
+// Mock react-redux (keep Provider available for test wrappers)
 vi.mock('react-redux', async () => {
   const actual = await vi.importActual('react-redux');
   return {
     ...actual,
-    useDispatch: () => mockDispatch,
   };
 });
+
+// Mock ../app/store (useAppDispatch, useAppSelector)
+vi.mock('../app/store', () => ({
+  useAppDispatch: () => mockDispatch,
+  useAppSelector: (selector: any) => mockUseAppSelector(selector),
+}));
 
 // Mock userSlice
 vi.mock('../features/user/userSlice', () => ({
@@ -67,6 +76,7 @@ vi.mock('../features/projects/projectsSlice', () => ({
 // Mock persistence
 vi.mock('../utils/persistence', () => ({
   clearPersistedState: () => mockClearPersistedState(),
+  clearUserState: () => mockClearUserState(),
 }));
 
 // Mock NotificationContext
@@ -190,6 +200,12 @@ describe('AuthProvider', () => {
     localStorageMock.clear();
     mockStore = createMockStore();
     axiosDefaultsHeaders.common = {};
+    mockUseAppSelector.mockReset();
+    mockClearUserState.mockReset();
+    // Default: useAppSelector returns null (no user)
+    mockUseAppSelector.mockImplementation((selector: any) =>
+      selector({ user: { token: null, userData: null, mode: 'light' } })
+    );
   });
 
   afterEach(() => {
@@ -240,7 +256,7 @@ describe('AuthProvider', () => {
       expect(screen.getByTestId('user-name')).toHaveTextContent('No user');
     });
 
-    it('should initialize with stored user data', () => {
+    it('should initialize with stored user data from Redux', () => {
       const storedUser: User = {
         name: 'Stored User',
         email: 'stored@test.com',
@@ -253,7 +269,9 @@ describe('AuthProvider', () => {
         permissions: ['read'],
         appConfig: {},
       };
-      localStorageMock.setItem('sessionUserData', JSON.stringify(storedUser));
+      mockUseAppSelector.mockImplementation((selector: any) =>
+        selector({ user: { token: 'stored-token', userData: storedUser, mode: 'light' } })
+      );
 
       render(
         <Provider store={mockStore}>
@@ -264,106 +282,6 @@ describe('AuthProvider', () => {
       );
 
       expect(screen.getByTestId('user-name')).toHaveTextContent('Stored User');
-      expect(mockDispatch).toHaveBeenCalled();
-    });
-
-    it('should migrate legacy session data without token timestamps', () => {
-      const legacyUser = {
-        name: 'Legacy User',
-        email: 'legacy@test.com',
-        picture: 'legacy.jpg',
-        token: 'legacy-token',
-        hasRole: true,
-        roles: [],
-        permissions: [],
-        appConfig: {},
-      };
-      localStorageMock.setItem('sessionUserData', JSON.stringify(legacyUser));
-
-      const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-      render(
-        <Provider store={mockStore}>
-          <AuthProvider>
-            <AuthConsumerComponent />
-          </AuthProvider>
-        </Provider>
-      );
-
-      // Verify migration happened
-      const updatedData = JSON.parse(localStorageMock.getItem('sessionUserData') || '{}');
-      expect(updatedData.tokenIssuedAt).toBeDefined();
-      expect(updatedData.tokenExpiry).toBeDefined();
-      expect(consoleLog).toHaveBeenCalledWith(
-        '[AuthProvider] Migrated legacy session data with token timestamps'
-      );
-
-      consoleLog.mockRestore();
-    });
-
-    it('should not migrate data when token timestamps exist', () => {
-      const userWithTimestamps: User = {
-        name: 'User With Timestamps',
-        email: 'timestamps@test.com',
-        picture: 'timestamps.jpg',
-        token: 'token',
-        tokenExpiry: 1234567890,
-        tokenIssuedAt: 1234567800,
-        hasRole: true,
-        roles: [],
-        permissions: [],
-        appConfig: {},
-      };
-      localStorageMock.setItem('sessionUserData', JSON.stringify(userWithTimestamps));
-
-      const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-      render(
-        <Provider store={mockStore}>
-          <AuthProvider>
-            <AuthConsumerComponent />
-          </AuthProvider>
-        </Provider>
-      );
-
-      expect(consoleLog).not.toHaveBeenCalledWith(
-        '[AuthProvider] Migrated legacy session data with token timestamps'
-      );
-
-      consoleLog.mockRestore();
-    });
-
-    it('should migrate data when only tokenExpiry is missing', () => {
-      const partialUser = {
-        name: 'Partial User',
-        email: 'partial@test.com',
-        picture: 'partial.jpg',
-        token: 'partial-token',
-        tokenIssuedAt: 1234567800,
-        hasRole: true,
-        roles: [],
-        permissions: [],
-        appConfig: {},
-      };
-      localStorageMock.setItem('sessionUserData', JSON.stringify(partialUser));
-
-      const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-      render(
-        <Provider store={mockStore}>
-          <AuthProvider>
-            <AuthConsumerComponent />
-          </AuthProvider>
-        </Provider>
-      );
-
-      const updatedData = JSON.parse(localStorageMock.getItem('sessionUserData') || '{}');
-      expect(updatedData.tokenExpiry).toBeDefined();
-      expect(consoleLog).toHaveBeenCalledWith(
-        '[AuthProvider] Migrated legacy session data with token timestamps'
-      );
-
-      consoleLog.mockRestore();
     });
   });
 
@@ -399,7 +317,6 @@ describe('AuthProvider', () => {
       expect(mockDispatch).toHaveBeenCalled();
       expect(mockSetAuthNotificationShown).toHaveBeenCalledWith(false);
       expect(mockShowSuccess).toHaveBeenCalledWith('Successfully signed in!', 3000);
-      expect(localStorageMock.setItem).toHaveBeenCalled();
     });
 
     it('should handle login failure', async () => {
@@ -492,7 +409,9 @@ describe('AuthProvider', () => {
         permissions: [],
         appConfig: {},
       };
-      localStorageMock.setItem('sessionUserData', JSON.stringify(storedUser));
+      mockUseAppSelector.mockImplementation((selector: any) =>
+        selector({ user: { token: 'logout-token', userData: storedUser, mode: 'light' } })
+      );
 
       render(
         <Provider store={mockStore}>
@@ -514,7 +433,7 @@ describe('AuthProvider', () => {
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'projects/setIsLoaded', payload: { isloaded: false } })
       );
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('sessionUserData');
+      expect(mockClearUserState).toHaveBeenCalled();
       expect(mockClearPersistedState).toHaveBeenCalled();
       expect(mockShowInfo).toHaveBeenCalledWith('You have been signed out.', 3000);
     });
@@ -540,7 +459,6 @@ describe('AuthProvider', () => {
           payload: expect.objectContaining({ token: 'new-token' }),
         })
       );
-      expect(localStorageMock.setItem).toHaveBeenCalled();
     });
   });
 
@@ -596,7 +514,9 @@ describe('AuthProvider', () => {
         permissions: [],
         appConfig: {},
       };
-      localStorageMock.setItem('sessionUserData', JSON.stringify(storedUser));
+      mockUseAppSelector.mockImplementation((selector: any) =>
+        selector({ user: { token: 'old-token', userData: storedUser, mode: 'light' } })
+      );
 
       mockPerformSilentAuth.mockResolvedValue('new-silent-token');
 
@@ -654,7 +574,9 @@ describe('AuthProvider', () => {
         permissions: [],
         appConfig: {},
       };
-      localStorageMock.setItem('sessionUserData', JSON.stringify(storedUser));
+      mockUseAppSelector.mockImplementation((selector: any) =>
+        selector({ user: { token: 'old-token', userData: storedUser, mode: 'light' } })
+      );
 
       mockPerformSilentAuth.mockRejectedValue(new Error('Silent auth failed'));
 

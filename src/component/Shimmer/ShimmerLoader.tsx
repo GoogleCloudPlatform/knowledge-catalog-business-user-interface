@@ -1,6 +1,5 @@
 import React from 'react';
-import { Box } from '@mui/material';
-import { useSelector } from 'react-redux';
+import { Box, Skeleton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';import { useSelector } from 'react-redux';
 
 /**
  * @file ShimmerLoader.tsx
@@ -483,131 +482,122 @@ const ShimmerLoader: React.FC<ShimmerLoaderProps> = ({ count = 6, type = 'list' 
     </>
   );
 
-  const renderSearchTableShimmer = () => (
-    <Box
+ const renderSearchTableShimmer = () => (
+    <TableContainer
+      component={Paper}
       sx={{
-        backgroundColor: cardBg,
-        borderRadius: '8px',
+        backgroundColor: isDark ? '#131314' : '#FFFFFF',
+        borderRadius: '16px',
+        border: isDark ? '1px solid #3c4043' : '1px solid #E8EEF5',
         boxShadow: 'none',
+        maxHeight: 'calc(100vh - 200px)',
+        overflowY: 'auto',
+        overflowX: 'auto',
         width: '100%',
-        overflow: 'hidden',
+        maxWidth: '100%',
       }}
     >
-      {/* Header Row */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: '12px',
-            right: '10px',
-            height: '1px',
-            backgroundColor: borderColor,
-          },
-        }}
-      >
-        {/* Name header - 25% */}
-        <Box sx={{ width: '25%', padding: '12px 20px 4px' }}>
-          <Box sx={{ width: '40px', height: '12px', backgroundColor: shapeBg, borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
-            <Box sx={{ position: 'absolute', top: 0, left: '-100%', width: '100%', height: '100%', background: shimmerGradient, animation: 'shimmer 1.5s infinite', '@keyframes shimmer': { '0%': { left: '-100%' }, '100%': { left: '100%' } } }} />
-          </Box>
-        </Box>
-        {/* Description header - 30% */}
-        <Box sx={{ width: '30%', padding: '12px 20px 4px' }}>
-          <Box sx={{ width: '72px', height: '12px', backgroundColor: shapeBg, borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
-            <Box sx={{ position: 'absolute', top: 0, left: '-100%', width: '100%', height: '100%', background: shimmerGradient, animation: 'shimmer 1.5s infinite', '@keyframes shimmer': { '0%': { left: '-100%' }, '100%': { left: '100%' } } }} />
-          </Box>
-        </Box>
-        {/* Type header - 17% */}
-        <Box sx={{ width: '17%', padding: '12px 20px 4px' }}>
-          <Box sx={{ width: '32px', height: '12px', backgroundColor: shapeBg, borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
-            <Box sx={{ position: 'absolute', top: 0, left: '-100%', width: '100%', height: '100%', background: shimmerGradient, animation: 'shimmer 1.5s infinite', '@keyframes shimmer': { '0%': { left: '-100%' }, '100%': { left: '100%' } } }} />
-          </Box>
-        </Box>
-        {/* Location header - 13% */}
-        <Box sx={{ width: '13%', padding: '12px 20px 4px' }}>
-          <Box sx={{ width: '52px', height: '12px', backgroundColor: shapeBg, borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
-            <Box sx={{ position: 'absolute', top: 0, left: '-100%', width: '100%', height: '100%', background: shimmerGradient, animation: 'shimmer 1.5s infinite', '@keyframes shimmer': { '0%': { left: '-100%' }, '100%': { left: '100%' } } }} />
-          </Box>
-        </Box>
-        {/* Last Modified header - 15% */}
-        <Box sx={{ width: '15%', padding: '12px 20px 4px', display: 'flex', justifyContent: 'flex-end' }}>
-          <Box sx={{ width: '84px', height: '12px', backgroundColor: shapeBg, borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
-            <Box sx={{ position: 'absolute', top: 0, left: '-100%', width: '100%', height: '100%', background: shimmerGradient, animation: 'shimmer 1.5s infinite', '@keyframes shimmer': { '0%': { left: '-100%' }, '100%': { left: '100%' } } }} />
-          </Box>
-        </Box>
-      </Box>
-
-      {/* Data Rows */}
-      {[...Array(count)].map((_, index) => (
-        <Box
-          key={index}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            height: '40px',
-            position: 'relative',
-            overflow: 'hidden',
-            '&::after': {
-              content: '""',
-              position: 'absolute',
-              bottom: 0,
-              left: '12px',
-              right: '10px',
-              height: '1px',
-              backgroundColor: borderColor,
-            },
-          }}
-        >
-          {/* Shimmer Animation */}
-          <Box
+      <Table sx={{ width: '100%', tableLayout: 'fixed' }} aria-label="search results table skeleton">
+        <colgroup>
+          <col style={{ width: '25%' }} />
+          <col style={{ width: '30%' }} />
+          <col style={{ width: '17%' }} />
+          <col style={{ width: '13%' }} />
+          <col style={{ width: '15%' }} />
+        </colgroup>
+        <TableHead>
+          <TableRow
             sx={{
-              position: 'absolute',
-              top: 0,
-              left: '-100%',
-              width: '100%',
-              height: '100%',
-              background: shimmerGradient,
-              animation: 'shimmer 1.5s infinite',
-              '@keyframes shimmer': { '0%': { left: '-100%' }, '100%': { left: '100%' } },
-              zIndex: 1,
+              position: 'relative',
+              height: '48px',
+              '& .MuiTableCell-root': {
+                borderBottom: 'none',
+                padding: '12px 20px 4px',
+              },
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                bottom: 0,
+                left: '0px',
+                right: '0px',
+                height: '1px',
+                backgroundColor: isDark ? '#3c4043' : '#DADCE0',
+              },
             }}
-          />
+          >
+            {['Name', 'Description', 'Type', 'Location', 'Last modified'].map((header) => (
+              <TableCell
+                key={header}
+                sx={{
+                  fontFamily: '"Google Sans", sans-serif',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: isDark ? '#dedfe0' : '#444746',
+                  whiteSpace: 'nowrap',
+                  ...(header === 'Last modified' && { textAlign: 'right' }),
+                }}
+              >
+                {header}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {Array.from({ length: count }).map((_, index) => (
+            <TableRow
+              key={index}
+              sx={{
+                position: 'relative',
+                height: '60px',
+                '& .MuiTableCell-root': {
+                  borderBottom: 'none',
+                },
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  bottom: 0,
+                  left: '0px',
+                  right: '0px',
+                  height: '1px',
+                  backgroundColor: isDark ? '#3c4043' : '#E8EEF5',
+                },
+                '&:last-child::after': { display: 'none' }
+              }}
+            >
+              {/* Name */}
+              <TableCell sx={{ padding: '10px 20px' }}>
+                <Skeleton variant="text" width={`${60 + (index % 3) * 15}%`} height={20} />
+              </TableCell>
 
-          {/* Name cell - 25% */}
-          <Box sx={{ width: '25%', padding: '10px 20px' }}>
-            <Box sx={{ width: `${60 + (index % 3) * 15}%`, height: '18px', backgroundColor: shapeBg, borderRadius: '4px' }} />
-          </Box>
+              {/* Description */}
+              <TableCell sx={{ padding: '10px 20px' }}>
+                <Skeleton variant="text" width={`${70 + (index % 2) * 10}%`} height={20} />
+              </TableCell>
 
-          {/* Description cell - 30% */}
-          <Box sx={{ width: '30%', padding: '10px 20px' }}>
-            <Box sx={{ width: `${70 + (index % 2) * 10}%`, height: '14px', backgroundColor: shapeBg, borderRadius: '4px' }} />
-          </Box>
+              {/* Type */}
+              <TableCell sx={{ padding: '10px 20px' }}>
+                <Box sx={{ display: 'flex', gap: '8px' }}>
+                  <Skeleton variant="rounded" width={56} height={20} sx={{ borderRadius: '8px' }} />
+                  <Skeleton variant="rounded" width={48} height={20} sx={{ borderRadius: '8px' }} />
+                </Box>
+              </TableCell>
 
-          {/* Type cell - 17% */}
-          <Box sx={{ width: '17%', padding: '10px 20px' }}>
-            <Box sx={{ display: 'flex', gap: '8px' }}>
-              <Box sx={{ width: '56px', height: '20px', backgroundColor: shapeBg, borderRadius: '8px' }} />
-              <Box sx={{ width: '48px', height: '20px', backgroundColor: shapeBg, borderRadius: '8px' }} />
-            </Box>
-          </Box>
+              {/* Location */}
+              <TableCell sx={{ padding: '10px 20px' }}>
+                <Skeleton variant="rounded" width={80} height={24} sx={{ borderRadius: '12px' }} />
+              </TableCell>
 
-          {/* Location cell - 13% */}
-          <Box sx={{ width: '13%', padding: '10px 20px' }}>
-            <Box sx={{ width: '70%', height: '14px', backgroundColor: shapeBg, borderRadius: '4px' }} />
-          </Box>
-
-          {/* Last Modified cell - 15% */}
-          <Box sx={{ width: '15%', padding: '10px 20px', display: 'flex', justifyContent: 'flex-end' }}>
-            <Box sx={{ width: '80%', height: '14px', backgroundColor: shapeBg, borderRadius: '4px' }} />
-          </Box>
-        </Box>
-      ))}
-    </Box>
+              {/* Last Modified */}
+              <TableCell sx={{ padding: '10px 20px' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Skeleton variant="text" width="80%" height={20} />
+                </Box>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 
   const renderPreviewSchemaShimmer = () => (

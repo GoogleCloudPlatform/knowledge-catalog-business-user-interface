@@ -192,7 +192,7 @@ const PreviewSchema: React.FC<PreviewSchemaProps> = ({ entry, sx }) => {
 
   if (rows.length === 0) {
     return (
-      <div style={{ padding: '48px', textAlign: 'center', fontSize: '14px', fontFamily: 'Google Sans, sans-serif', color: isDark ? '#9aa0a6' : '#575757' }}>
+      <div style={{ padding: '48px', textAlign: 'center', fontSize: '14px', fontFamily: 'Google Sans, sans-serif', color: isDark ? '#9aa0a6' : '#0C1226CC' }}>
         No data matches the applied filters
       </div>
     );

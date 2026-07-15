@@ -3,7 +3,7 @@ import ArticleOutlined from '@mui/icons-material/ArticleOutlined';
 import CategoryOutlined from '@mui/icons-material/CategoryOutlined';
 
 export const GLOSSARY_COLORS = {
-  glossary: '#1A73E8',
+  glossary: '#022FCD',
   category: '#34A853',
   term: '#F9AB00',
 } as const;

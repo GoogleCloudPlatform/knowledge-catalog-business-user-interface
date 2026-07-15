@@ -7,7 +7,7 @@
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background-color: #FFFFFF;
+  background-color: #EEF2F7;
 }
 
 /* Main content area takes remaining space */
@@ -44,6 +44,6 @@
 /* Tablet adjustments */
 @media (max-width: 1024px) and (min-width: 769px) {
   .main-content-area {
-    width: calc(100% - 64px);
+    width: calc(100% - 96px);
   }
 }

@@ -336,7 +336,7 @@ useEffect(() => {
         justifyContent: 'center',
         ...css 
       }}>
-        <Typography variant="body2" color="text.secondary">No entry selected</Typography>
+        <Typography variant="body2" color="#0C1226CC">No entry selected</Typography>
       </Box>
     );
   }

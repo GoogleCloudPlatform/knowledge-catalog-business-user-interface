@@ -12,46 +12,33 @@
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
-  DialogContent,
-  DialogActions,
   Typography,
   Button,
   CircularProgress,
   Alert,
   Box,
-  Avatar,
-  Zoom,
-  Fade,
 } from '@mui/material';
-import {
-  AccessTime,
-  Login,
-  Logout,
-  ReportProblem,
-} from '@mui/icons-material';
 import { useGoogleLogin } from '@react-oauth/google';
 import axios from 'axios';
 import { useAuth } from '../../auth/AuthProvider';
 
-// Material Design red color palette (matching SessionExpired)
-const redTheme = {
-  main: '#D32F2F',
-  light: '#EF5350',
-  dark: '#C62828',
-  lighter: '#FFEBEE',
-  lightest: '#FFF5F5',
-  contrastText: '#FFFFFF',
+// M3 design tokens
+const m3 = {
+  cardBg: '#FFFFFF',
+  cardShadow:
+    '0px 1px 2px rgba(0, 0, 0, 0.3), 0px 2px 6px 2px rgba(0, 0, 0, 0.15)',
+  iconBg: 'rgba(14, 77, 202, 0.16)',
+  iconColor: '#022FCD',
+  iconBgExpired: 'rgba(179, 38, 30, 0.16)',
+  iconColorExpired: '#B3261E',
+  titleColor: '#1F1F1F',
+  bodyColor: '#5F6367',
+  buttonBg: '#022FCD',
+  buttonText: '#FFFFFF',
+  dividerColor: '#E9EEF6',
+  footerColor: '#5F6367',
 };
 
-// Professional neutral shadows
-const shadows = {
-  card: '0 4px 24px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04)',
-  button: '0 2px 8px rgba(0, 0, 0, 0.1)',
-  buttonHover: '0 4px 12px rgba(0, 0, 0, 0.15)',
-  avatar: '0 2px 12px rgba(0, 0, 0, 0.1)',
-};
-
-// Google Fonts configuration
 const googleFonts = {
   display: '"Google Sans", "Roboto", "Helvetica", "Arial", sans-serif',
   body: '"Google Sans Text", "Roboto", "Helvetica", "Arial", sans-serif',
@@ -164,245 +151,250 @@ export const SessionWarningModal: React.FC<SessionWarningModalProps> = ({
     googleLogin();
   };
 
+  const isExpired = modalState.mode === 'expired';
+
   return (
     <Dialog
       open={open}
       onClose={(_, reason) => {
-        // Prevent closing by clicking backdrop or pressing ESC
         if (reason === 'backdropClick' || reason === 'escapeKeyDown') {
           return;
         }
       }}
       disableEscapeKeyDown
-      maxWidth="xs"
-      fullWidth
+      maxWidth={false}
       PaperProps={{
         sx: {
-          borderRadius: 4,
-          overflow: 'hidden',
-          boxShadow: shadows.card,
+          width: 580,
+          maxWidth: '100%',
+          borderRadius: '24px',
+          boxShadow: m3.cardShadow,
+          py: '40px',
+          backgroundColor: m3.cardBg,
         },
       }}
     >
-      {/* Top accent bar */}
+      {/* Content area */}
       <Box
         sx={{
-          height: 4,
-          background: `linear-gradient(90deg, ${redTheme.dark} 0%, ${redTheme.light} 100%)`,
-        }}
-      />
-
-      <DialogContent sx={{ textAlign: 'center', pt: 4, pb: 3 }}>
-        {/* Icon with Avatar and Zoom animation */}
-        <Zoom in={open} timeout={400}>
-          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
-            <Avatar
-              sx={{
-                width: 72,
-                height: 72,
-                bgcolor: redTheme.main,
-                boxShadow: shadows.avatar,
-              }}
-            >
-              {modalState.mode === 'expired' ? (
-                <ReportProblem sx={{ fontSize: 36, color: redTheme.contrastText }} />
-              ) : (
-                <AccessTime sx={{ fontSize: 36, color: redTheme.contrastText }} />
-              )}
-            </Avatar>
-          </Box>
-        </Zoom>
-
-        {/* Title with Fade animation */}
-        <Fade in={open} timeout={500} style={{ transitionDelay: '100ms' }}>
-          <Typography
-            variant="h5"
-            component="h2"
-            sx={{
-              fontFamily: googleFonts.display,
-              fontWeight: 600,
-              color: redTheme.dark,
-              mb: 1.5,
-            }}
-          >
-            {modalState.mode === 'expired' ? 'Session Expired' : 'Session Expiring Soon'}
-          </Typography>
-        </Fade>
-
-        {/* Content based on mode */}
-        <Fade in={open} timeout={500} style={{ transitionDelay: '200ms' }}>
-          <Box>
-            {modalState.mode === 'warning' && (
-              <Typography
-                variant="body1"
-                sx={{
-                  fontFamily: googleFonts.body,
-                  color: 'text.secondary',
-                  lineHeight: 1.6,
-                }}
-              >
-                Your session is about to expire in{' '}
-                <Box
-                  component="span"
-                  sx={{
-                    fontWeight: 700,
-                    color: redTheme.main,
-                    fontFamily: googleFonts.display,
-                  }}
-                >
-                  {formatTime(remainingTime)}
-                </Box>
-                . Please log in again to continue.
-              </Typography>
-            )}
-
-            {modalState.mode === 'loading' && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <CircularProgress size={28} sx={{ color: redTheme.main }} />
-                <Typography
-                  variant="body1"
-                  sx={{
-                    fontFamily: googleFonts.body,
-                    color: 'text.secondary',
-                  }}
-                >
-                  Opening login window...
-                </Typography>
-              </Box>
-            )}
-
-            {modalState.mode === 'expired' && (
-              <Typography
-                variant="body1"
-                sx={{
-                  fontFamily: googleFonts.body,
-                  color: 'text.secondary',
-                  lineHeight: 1.6,
-                }}
-              >
-                Your session has expired. Please sign in again to continue.
-              </Typography>
-            )}
-          </Box>
-        </Fade>
-
-        {modalState.error && (
-          <Fade in timeout={300}>
-            <Alert
-              severity="error"
-              sx={{
-                mt: 2,
-                fontFamily: googleFonts.body,
-                borderRadius: 2,
-              }}
-            >
-              {modalState.error}
-            </Alert>
-          </Fade>
-        )}
-      </DialogContent>
-
-      <DialogActions
-        sx={{
-          justifyContent: 'center',
-          gap: 2,
-          px: 3,
-          pb: 3,
-          pt: 0,
+          px: '40px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          gap: '20px',
         }}
       >
-        <Fade in={open} timeout={500} style={{ transitionDelay: '300ms' }}>
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {modalState.mode === 'loading' ? null : modalState.mode === 'warning' ? (
-              <>
-                <Button
-                  variant="contained"
-                  onClick={handleStayLoggedIn}
-                  startIcon={<Login />}
-                  sx={{
-                    fontFamily: googleFonts.display,
-                    bgcolor: redTheme.main,
-                    color: redTheme.contrastText,
-                    px: 3,
-                    py: 1.25,
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.95rem',
-                    boxShadow: shadows.button,
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      bgcolor: redTheme.dark,
-                      boxShadow: shadows.buttonHover,
-                      transform: 'translateY(-1px)',
-                    },
-                    '&:active': {
-                      transform: 'translateY(0)',
-                    },
-                  }}
-                >
-                  Stay Logged In
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={onLogOut}
-                  startIcon={<Logout />}
-                  sx={{
-                    fontFamily: googleFonts.display,
-                    borderColor: redTheme.main,
-                    color: redTheme.main,
-                    px: 3,
-                    py: 1.25,
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.95rem',
-                    borderWidth: 1.5,
-                    transition: 'all 0.2s ease-in-out',
-                    '&:hover': {
-                      borderColor: redTheme.dark,
-                      borderWidth: 1.5,
-                      bgcolor: redTheme.lighter,
-                      transform: 'translateY(-1px)',
-                    },
-                  }}
-                >
-                  Log Out
-                </Button>
-              </>
-            ) : (
+        {/* Icon circle */}
+        <Box
+          sx={{
+            width: 64,
+            height: 64,
+            borderRadius: '50%',
+            backgroundColor: isExpired ? m3.iconBgExpired : m3.iconBg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <span
+            className="material-symbols-outlined"
+            style={{
+              fontSize: 36,
+              color: isExpired ? m3.iconColorExpired : m3.iconColor,
+            }}
+          >
+            {isExpired ? 'report' : 'history_2'}
+          </span>
+        </Box>
+
+        {/* Title */}
+        <Typography
+          component="h2"
+          sx={{
+            fontFamily: googleFonts.display,
+            fontSize: 36,
+            fontWeight: 500,
+            lineHeight: '44px',
+            color: m3.titleColor,
+          }}
+        >
+          {isExpired ? 'Session Expired' : 'Session Expiring Soon'}
+        </Typography>
+
+        {/* Message */}
+        {modalState.mode === 'warning' && (
+          <Typography
+            sx={{
+              fontFamily: googleFonts.body,
+              fontSize: 16,
+              fontWeight: 400,
+              lineHeight: '24px',
+              letterSpacing: '0.5px',
+              color: m3.bodyColor,
+            }}
+          >
+            Your session is about to expire in {formatTime(remainingTime)}.
+            <br />
+            Please log in again to continue.
+          </Typography>
+        )}
+
+        {modalState.mode === 'loading' && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <CircularProgress size={24} sx={{ color: m3.buttonBg }} />
+            <Typography
+              sx={{
+                fontFamily: googleFonts.body,
+                fontSize: 16,
+                fontWeight: 400,
+                lineHeight: '24px',
+                color: m3.bodyColor,
+              }}
+            >
+              Opening login window...
+            </Typography>
+          </Box>
+        )}
+
+        {isExpired && (
+          <Typography
+            sx={{
+              fontFamily: googleFonts.body,
+              fontSize: 16,
+              fontWeight: 400,
+              lineHeight: '24px',
+              letterSpacing: '0.5px',
+              color: m3.bodyColor,
+            }}
+          >
+            Your session has expired. Please sign in again to continue.
+          </Typography>
+        )}
+
+        {modalState.error && (
+          <Alert
+            severity="error"
+            sx={{
+              width: '100%',
+              fontFamily: googleFonts.body,
+              borderRadius: 2,
+            }}
+          >
+            {modalState.error}
+          </Alert>
+        )}
+
+        {/* Button row */}
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            width: '100%',
+            gap: 2,
+          }}
+        >
+          {modalState.mode === 'warning' && (
+            <>
               <Button
                 variant="contained"
-                onClick={onLogOut}
-                startIcon={<Login />}
+                onClick={handleStayLoggedIn}
                 sx={{
                   fontFamily: googleFonts.display,
-                  bgcolor: redTheme.main,
-                  color: redTheme.contrastText,
-                  px: 3.5,
-                  py: 1.25,
-                  borderRadius: 2,
+                  backgroundColor: m3.buttonBg,
+                  color: m3.buttonText,
+                  borderRadius: '100px',
+                  height: 56,
+                  minWidth: 99,
                   textTransform: 'none',
-                  fontWeight: 600,
-                  fontSize: '0.95rem',
-                  boxShadow: shadows.button,
-                  transition: 'all 0.2s ease-in-out',
+                  fontWeight: 500,
+                  fontSize: 16,
+                  letterSpacing: '0.15px',
+                  boxShadow: 'none',
                   '&:hover': {
-                    bgcolor: redTheme.dark,
-                    boxShadow: shadows.buttonHover,
-                    transform: 'translateY(-1px)',
-                  },
-                  '&:active': {
-                    transform: 'translateY(0)',
+                    backgroundColor: '#0B3DA2',
+                    boxShadow: 'none',
                   },
                 }}
               >
-                Sign In Again
+                Stay Signed In
               </Button>
-            )}
-          </Box>
-        </Fade>
-      </DialogActions>
+              <Button
+                variant="text"
+                onClick={onLogOut}
+                sx={{
+                  fontFamily: googleFonts.display,
+                  color: m3.buttonBg,
+                  borderRadius: '100px',
+                  height: 56,
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  fontSize: 16,
+                  letterSpacing: '0.15px',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    backgroundColor: 'transparent',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                  },
+                }}
+              >
+                Log out
+              </Button>
+            </>
+          )}
+
+          {isExpired && (
+            <Button
+              variant="contained"
+              onClick={onLogOut}
+              sx={{
+                fontFamily: googleFonts.display,
+                backgroundColor: m3.buttonBg,
+                color: m3.buttonText,
+                borderRadius: '100px',
+                height: 56,
+                minWidth: 99,
+                textTransform: 'none',
+                fontWeight: 500,
+                fontSize: 16,
+                letterSpacing: '0.15px',
+                boxShadow: 'none',
+                '&:hover': {
+                  backgroundColor: '#0B3DA2',
+                  boxShadow: 'none',
+                },
+              }}
+            >
+              Sign In Again
+            </Button>
+          )}
+        </Box>
+      </Box>
+
+      {/* Divider + Footer */}
+      <Box
+        sx={{
+          mt: '20px',
+          pt: '20px',
+          mx: '40px',
+          borderTop: `1px solid ${m3.dividerColor}`,
+        }}
+      >
+        <Typography
+          sx={{
+            fontFamily: googleFonts.body,
+            fontSize: 12,
+            fontWeight: 400,
+            lineHeight: '16px',
+            letterSpacing: '0.4px',
+            textAlign: 'center',
+            color: m3.footerColor,
+          }}
+        >
+          If you continue to experience issues, please contact your system
+          administrator.
+        </Typography>
+      </Box>
     </Dialog>
   );
 };

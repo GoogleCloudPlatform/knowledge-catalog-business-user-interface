@@ -6,9 +6,10 @@ export default class Api {
         return '/api/v1';
     }
     static async headers() {
-        const token = localStorage.getItem('token') || '';
-        return { 
-            'Authorization': token,
+        // Token is managed via Redux store and axios defaults (set in AuthProvider)
+        const token = axios.defaults.headers.common['Authorization'] || '';
+        return {
+            'Authorization': token as string,
             'Content-Type': 'application/json'
         };
     }

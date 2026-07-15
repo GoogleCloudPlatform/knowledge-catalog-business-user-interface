@@ -85,8 +85,8 @@ const UserAccountDropdown: React.FC<UserAccountDropdownProps> = ({
       open={open}
       anchorEl={anchorEl}
       onClose={onClose}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'left' }}
       transitionDuration={0}
       sx={{
         '& .MuiPopover-paper': {
@@ -95,7 +95,8 @@ const UserAccountDropdown: React.FC<UserAccountDropdownProps> = ({
             ? '0 4px 24px rgba(0,0,0,0.5)'
             : '0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15)',
           width: '360px',
-          marginTop: '8px',
+          marginTop: '45px',
+          marginLeft: '5px',
           backgroundColor: isDark ? '#2a3a4a' : '#e8edf6',
           overflow: 'hidden',
         },

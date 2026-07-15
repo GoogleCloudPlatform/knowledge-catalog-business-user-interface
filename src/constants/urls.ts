@@ -10,6 +10,7 @@ export const URLS = {
     GET_ENTRY: '/get-entry',
     CHECK_ENTRY_ACCESS: '/check-entry-access',
     GET_ENTRY_BY_FQN: '/get-entry-by-fqn',
+    LOOKUP_ENTRY_LINKS: '/lookup-entry-links',
     GET_SAMPLE_DATA: '/get-sample-data',
     BATCH_ASPECTS: '/batch-aspects',
     LINEAGE_SEARCH: '/lineage',

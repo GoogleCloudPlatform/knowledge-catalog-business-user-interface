@@ -3,12 +3,16 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import GlobalSidebar from './GlobalSidebar';
 
-// Mock dependencies
 const mockNavigate = vi.fn();
 const mockDispatch = vi.fn();
 let mockLocation = { pathname: '/home' };
 let mockIsAccessPanelOpen = false;
-let mockUser: { token: string } | null = { token: 'test-token' };
+let mockUser: { token: string; name?: string; email?: string; picture?: string } | null = {
+  token: 'test-token',
+  name: 'Test User',
+  email: 'test@example.com',
+  picture: '',
+};
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal() as object;
@@ -60,10 +64,8 @@ vi.mock('../../features/glossaries/glossariesSlice', async (importOriginal) => {
   };
 });
 
-// Mock child components
 vi.mock('./SidebarMenuItem', () => ({
-  default: vi.fn(({ icon, label, isActive, onClick, disabled, multiLine }) => {
-    // Extract text from label (handles both string and JSX)
+  default: vi.fn(({ icon, label, isActive, onClick, disabled }) => {
     const getLabelText = (l: any): string => {
       if (typeof l === 'string') return l;
       try {
@@ -78,7 +80,6 @@ vi.mock('./SidebarMenuItem', () => ({
         data-testid={`sidebar-menu-item-${testIdSuffix}`}
         data-active={isActive}
         data-disabled={disabled}
-        data-multiline={multiLine}
         onClick={onClick}
         role="button"
       >
@@ -94,7 +95,7 @@ describe('GlobalSidebar', () => {
     vi.clearAllMocks();
     mockLocation = { pathname: '/home' };
     mockIsAccessPanelOpen = false;
-    mockUser = { token: 'test-token' };
+    mockUser = { token: 'test-token', name: 'Test User', email: 'test@example.com', picture: '' };
   });
 
   afterEach(() => {
@@ -115,60 +116,61 @@ describe('GlobalSidebar', () => {
 
     it('renders all menu items', () => {
       render(<GlobalSidebar />);
-      expect(screen.getByTestId('sidebar-menu-item-home')).toBeInTheDocument();
+      expect(screen.queryByTestId('sidebar-menu-item-home')).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-menu-item-search')).toBeInTheDocument();
       expect(screen.getByTestId('sidebar-menu-item-glossaries')).toBeInTheDocument();
       expect(screen.getByTestId('sidebar-menu-item-aspects')).toBeInTheDocument();
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toBeInTheDocument();
     });
+
+    it('renders the version number', () => {
+      render(<GlobalSidebar />);
+      const versionEl = document.querySelector('.sidebar-version');
+      expect(versionEl).toBeInTheDocument();
+    });
+
+    it('does not render an in-sidebar user card', () => {
+      render(<GlobalSidebar />);
+      expect(screen.queryByTestId('sidebar-user-card')).not.toBeInTheDocument();
+    });
   });
 
   describe('Home Menu Item', () => {
-    it('renders Home menu item', () => {
+    it('does not render Home menu item', () => {
       render(<GlobalSidebar />);
-      expect(screen.getByText('Home')).toBeInTheDocument();
+      expect(screen.queryByTestId('sidebar-menu-item-home')).not.toBeInTheDocument();
+      expect(screen.queryByText('Home')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Search Menu Item', () => {
+    it('renders Search menu item', () => {
+      render(<GlobalSidebar />);
+      expect(screen.getByText('Search')).toBeInTheDocument();
     });
 
-    it('Home click navigates to /home', async () => {
+    it('Search click navigates to /home', async () => {
       const user = userEvent.setup();
       render(<GlobalSidebar />);
-
-      await user.click(screen.getByTestId('sidebar-menu-item-home'));
-
+      await user.click(screen.getByTestId('sidebar-menu-item-search'));
       expect(mockNavigate).toHaveBeenCalledWith('/home');
     });
 
-    it('Home is active when pathname is /home', () => {
+    it('Search is active when pathname is /home', () => {
       mockLocation = { pathname: '/home' };
       render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'true');
+      expect(screen.getByTestId('sidebar-menu-item-search')).toHaveAttribute('data-active', 'true');
     });
 
-    it('Home is not active when pathname is /search', () => {
-      mockLocation = { pathname: '/search' };
-      render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
-    });
-
-    it('Home is not active when pathname is /view-details', () => {
-      mockLocation = { pathname: '/view-details' };
-      render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
-    });
-
-    it('Home is not active when on other paths', () => {
+    it('Search is not active when pathname is /glossaries', () => {
       mockLocation = { pathname: '/glossaries' };
       render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
+      expect(screen.getByTestId('sidebar-menu-item-search')).toHaveAttribute('data-active', 'false');
     });
 
-    it('Home icon is rendered with correct size', () => {
+    it('Search icon is rendered', () => {
       render(<GlobalSidebar />);
-      const iconContainer = screen.getByTestId('icon-home');
-      expect(iconContainer).toBeInTheDocument();
+      expect(screen.getByTestId('icon-search')).toBeInTheDocument();
     });
   });
 
@@ -181,9 +183,7 @@ describe('GlobalSidebar', () => {
     it('Glossaries click navigates to /glossaries and dispatches fetchGlossaries', async () => {
       const user = userEvent.setup();
       render(<GlobalSidebar />);
-
       await user.click(screen.getByTestId('sidebar-menu-item-glossaries'));
-
       expect(mockDispatch).toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith('/glossaries');
     });
@@ -191,21 +191,13 @@ describe('GlobalSidebar', () => {
     it('Glossaries is active when pathname is /glossaries', () => {
       mockLocation = { pathname: '/glossaries' };
       render(<GlobalSidebar />);
-
       expect(screen.getByTestId('sidebar-menu-item-glossaries')).toHaveAttribute('data-active', 'true');
     });
 
     it('Glossaries is not active when on other paths', () => {
       mockLocation = { pathname: '/home' };
       render(<GlobalSidebar />);
-
       expect(screen.getByTestId('sidebar-menu-item-glossaries')).toHaveAttribute('data-active', 'false');
-    });
-
-    it('Glossaries icon is rendered', () => {
-      render(<GlobalSidebar />);
-      const iconContainer = screen.getByTestId('icon-glossaries');
-      expect(iconContainer).toBeInTheDocument();
     });
   });
 
@@ -218,30 +210,20 @@ describe('GlobalSidebar', () => {
     it('Aspects click navigates to /browse-by-annotation', async () => {
       const user = userEvent.setup();
       render(<GlobalSidebar />);
-
       await user.click(screen.getByTestId('sidebar-menu-item-aspects'));
-
       expect(mockNavigate).toHaveBeenCalledWith('/browse-by-annotation');
     });
 
     it('Aspects is active when pathname is /browse-by-annotation', () => {
       mockLocation = { pathname: '/browse-by-annotation' };
       render(<GlobalSidebar />);
-
       expect(screen.getByTestId('sidebar-menu-item-aspects')).toHaveAttribute('data-active', 'true');
     });
 
     it('Aspects is not active when on other paths', () => {
       mockLocation = { pathname: '/home' };
       render(<GlobalSidebar />);
-
       expect(screen.getByTestId('sidebar-menu-item-aspects')).toHaveAttribute('data-active', 'false');
-    });
-
-    it('Aspects icon is rendered', () => {
-      render(<GlobalSidebar />);
-      const iconContainer = screen.getByTestId('icon-aspects');
-      expect(iconContainer).toBeInTheDocument();
     });
   });
 
@@ -254,20 +236,16 @@ describe('GlobalSidebar', () => {
     it('Data Products click dispatches action and navigates', async () => {
       const user = userEvent.setup();
       render(<GlobalSidebar />);
-
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-
       expect(mockDispatch).toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith('/data-products');
     });
 
     it('Data Products click dispatches action with user token', async () => {
       const user = userEvent.setup();
-      mockUser = { token: 'my-special-token' };
+      mockUser = { token: 'my-special-token', name: 'Test', email: 'test@test.com', picture: '' };
       render(<GlobalSidebar />);
-
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'dataProducts/fetchDataProductsList',
@@ -280,9 +258,7 @@ describe('GlobalSidebar', () => {
       const user = userEvent.setup();
       mockUser = null;
       render(<GlobalSidebar />);
-
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: { id_token: undefined },
@@ -294,34 +270,19 @@ describe('GlobalSidebar', () => {
     it('Data Products is active when pathname starts with /data-products', () => {
       mockLocation = { pathname: '/data-products' };
       render(<GlobalSidebar />);
-
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'true');
     });
 
     it('Data Products is active when on nested data-products path', () => {
       mockLocation = { pathname: '/data-products/some-product' };
       render(<GlobalSidebar />);
-
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'true');
     });
 
     it('Data Products is not active when on other paths', () => {
       mockLocation = { pathname: '/home' };
       render(<GlobalSidebar />);
-
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'false');
-    });
-
-    it('Data Products menu item is not disabled', () => {
-      render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-disabled', 'false');
-    });
-
-    it('Data Products menu item is multi line', () => {
-      render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-multiline', 'true');
     });
   });
 
@@ -329,7 +290,6 @@ describe('GlobalSidebar', () => {
     it('has higher z-index when access panel is closed', () => {
       mockIsAccessPanelOpen = false;
       render(<GlobalSidebar />);
-
       const nav = screen.getByRole('navigation');
       expect(nav).toHaveStyle({ zIndex: 1200 });
     });
@@ -337,90 +297,17 @@ describe('GlobalSidebar', () => {
     it('has lower z-index when access panel is open', () => {
       mockIsAccessPanelOpen = true;
       render(<GlobalSidebar />);
-
       const nav = screen.getByRole('navigation');
       expect(nav).toHaveStyle({ zIndex: 999 });
     });
   });
 
-  describe('Active State Icon Variants', () => {
-    it('renders active Glossaries icon when on /glossaries', () => {
-      mockLocation = { pathname: '/glossaries' };
-      render(<GlobalSidebar />);
-
-      const iconContainer = screen.getByTestId('icon-glossaries');
-      expect(iconContainer).toBeInTheDocument();
-      expect(iconContainer.textContent).toBeTruthy();
-    });
-
-    it('renders Aspects icon when on /browse-by-annotation', () => {
-      mockLocation = { pathname: '/browse-by-annotation' };
-      render(<GlobalSidebar />);
-
-      const iconContainer = screen.getByTestId('icon-aspects');
-      expect(iconContainer).toBeInTheDocument();
-    });
-
-    it('renders Home icon when on /home', () => {
-      mockLocation = { pathname: '/home' };
-      render(<GlobalSidebar />);
-
-      const iconContainer = screen.getByTestId('icon-home');
-      expect(iconContainer).toBeInTheDocument();
-    });
-
-    it('renders active Data Products icon when on /data-products', () => {
-      mockLocation = { pathname: '/data-products' };
-      render(<GlobalSidebar />);
-
-      const iconContainer = screen.getByTestId('icon-data-products');
-      expect(iconContainer).toBeInTheDocument();
-    });
-
-    it('renders inactive Data Products icon when not on /data-products', () => {
-      mockLocation = { pathname: '/home' };
-      render(<GlobalSidebar />);
-
-      const iconContainer = screen.getByTestId('icon-data-products');
-      expect(iconContainer).toBeInTheDocument();
-    });
-  });
-
-  describe('Navigation Flows', () => {
-    it('multiple home clicks work correctly', async () => {
-      const user = userEvent.setup();
-      render(<GlobalSidebar />);
-
-      const homeItem = screen.getByTestId('sidebar-menu-item-home');
-
-      await user.click(homeItem);
-      await user.click(homeItem);
-      await user.click(homeItem);
-
-      expect(mockNavigate).toHaveBeenCalledTimes(3);
-      expect(mockNavigate).toHaveBeenNthCalledWith(1, '/home');
-      expect(mockNavigate).toHaveBeenNthCalledWith(2, '/home');
-      expect(mockNavigate).toHaveBeenNthCalledWith(3, '/home');
-    });
-
-    it('navigating to data products after home works', async () => {
-      const user = userEvent.setup();
-      render(<GlobalSidebar />);
-
-      await user.click(screen.getByTestId('sidebar-menu-item-home'));
-      await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-
-      expect(mockNavigate).toHaveBeenNthCalledWith(1, '/home');
-      expect(mockNavigate).toHaveBeenNthCalledWith(2, '/data-products');
-    });
-  });
-
   describe('Combined Active States', () => {
-    it('only Home is active on /home', () => {
+    it('only Search is active on /home', () => {
       mockLocation = { pathname: '/home' };
       render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'true');
+      expect(screen.queryByTestId('sidebar-menu-item-home')).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-menu-item-search')).toHaveAttribute('data-active', 'true');
       expect(screen.getByTestId('sidebar-menu-item-glossaries')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-aspects')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'false');
@@ -429,8 +316,8 @@ describe('GlobalSidebar', () => {
     it('only Glossaries is active on /glossaries', () => {
       mockLocation = { pathname: '/glossaries' };
       render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
+      expect(screen.queryByTestId('sidebar-menu-item-home')).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-menu-item-search')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-glossaries')).toHaveAttribute('data-active', 'true');
       expect(screen.getByTestId('sidebar-menu-item-aspects')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'false');
@@ -439,8 +326,8 @@ describe('GlobalSidebar', () => {
     it('only Aspects is active on /browse-by-annotation', () => {
       mockLocation = { pathname: '/browse-by-annotation' };
       render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
+      expect(screen.queryByTestId('sidebar-menu-item-home')).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-menu-item-search')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-glossaries')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-aspects')).toHaveAttribute('data-active', 'true');
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'false');
@@ -449,8 +336,8 @@ describe('GlobalSidebar', () => {
     it('only Data Products is active on /data-products', () => {
       mockLocation = { pathname: '/data-products' };
       render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
+      expect(screen.queryByTestId('sidebar-menu-item-home')).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-menu-item-search')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-glossaries')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-aspects')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'true');
@@ -459,8 +346,8 @@ describe('GlobalSidebar', () => {
     it('no menu is active on unknown path', () => {
       mockLocation = { pathname: '/unknown-page' };
       render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
+      expect(screen.queryByTestId('sidebar-menu-item-home')).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-menu-item-search')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-glossaries')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-aspects')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'false');
@@ -489,66 +376,53 @@ describe('GlobalSidebar', () => {
     it('menu items have button role', () => {
       render(<GlobalSidebar />);
       const buttons = screen.getAllByRole('button');
-      // Should have Home, Glossaries, Aspects, Data Products
       expect(buttons.length).toBeGreaterThanOrEqual(4);
     });
   });
 
-  describe('Edge Cases', () => {
-    it('handles rapid clicks on different menu items', async () => {
+  describe('Navigation Flows', () => {
+    it('multiple search clicks work correctly', async () => {
       const user = userEvent.setup();
       render(<GlobalSidebar />);
-
-      await user.click(screen.getByTestId('sidebar-menu-item-home'));
-      await user.click(screen.getByTestId('sidebar-menu-item-glossaries'));
-      await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('/home');
-      expect(mockNavigate).toHaveBeenCalledWith('/glossaries');
-      expect(mockNavigate).toHaveBeenCalledWith('/data-products');
-      expect(mockDispatch).toHaveBeenCalled();
+      const searchItem = screen.getByTestId('sidebar-menu-item-search');
+      await user.click(searchItem);
+      await user.click(searchItem);
+      await user.click(searchItem);
+      expect(mockNavigate).toHaveBeenCalledTimes(3);
+      expect(mockNavigate).toHaveBeenNthCalledWith(1, '/home');
+      expect(mockNavigate).toHaveBeenNthCalledWith(2, '/home');
+      expect(mockNavigate).toHaveBeenNthCalledWith(3, '/home');
     });
 
-    it('handles fireEvent for Home click', () => {
+    it('navigating to data products after search works', async () => {
+      const user = userEvent.setup();
       render(<GlobalSidebar />);
+      await user.click(screen.getByTestId('sidebar-menu-item-search'));
+      await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
+      expect(mockNavigate).toHaveBeenNthCalledWith(1, '/home');
+      expect(mockNavigate).toHaveBeenNthCalledWith(2, '/data-products');
+    });
 
-      fireEvent.click(screen.getByTestId('sidebar-menu-item-home'));
-
+    it('handles fireEvent for Search click', () => {
+      render(<GlobalSidebar />);
+      fireEvent.click(screen.getByTestId('sidebar-menu-item-search'));
       expect(mockNavigate).toHaveBeenCalledWith('/home');
     });
 
     it('handles fireEvent for Data Products click', () => {
       render(<GlobalSidebar />);
-
       fireEvent.click(screen.getByTestId('sidebar-menu-item-data-products'));
-
       expect(mockDispatch).toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith('/data-products');
-    });
-
-    it('handles path with trailing slash', () => {
-      mockLocation = { pathname: '/data-products/' };
-      render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'true');
-    });
-
-    it('handles path /data-products-extra (should be active)', () => {
-      mockLocation = { pathname: '/data-products-extra' };
-      render(<GlobalSidebar />);
-
-      expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'true');
     });
   });
 
   describe('User token handling', () => {
     it('dispatches with user token when available', async () => {
       const user = userEvent.setup();
-      mockUser = { token: 'abc123' };
+      mockUser = { token: 'abc123', name: 'Test', email: 'test@test.com', picture: '' };
       render(<GlobalSidebar />);
-
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: { id_token: 'abc123' },
@@ -560,9 +434,7 @@ describe('GlobalSidebar', () => {
       const user = userEvent.setup();
       mockUser = null;
       render(<GlobalSidebar />);
-
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: { id_token: undefined },
@@ -572,11 +444,9 @@ describe('GlobalSidebar', () => {
 
     it('handles user with empty token', async () => {
       const user = userEvent.setup();
-      mockUser = { token: '' };
+      mockUser = { token: '', name: 'Test', email: 'test@test.com', picture: '' };
       render(<GlobalSidebar />);
-
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: { id_token: '' },
@@ -586,28 +456,18 @@ describe('GlobalSidebar', () => {
   });
 
   describe('Path matching edge cases', () => {
-    it('/home matches isHomeActive', () => {
+    it('/home matches isSearchActive only', () => {
       mockLocation = { pathname: '/home' };
       render(<GlobalSidebar />);
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'true');
+      expect(screen.queryByTestId('sidebar-menu-item-home')).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-menu-item-search')).toHaveAttribute('data-active', 'true');
     });
 
-    it('/search does not match isHomeActive', () => {
-      mockLocation = { pathname: '/search' };
+    it('/home-page does not render a Home item', () => {
+      mockLocation = { pathname: '/home-page' };
       render(<GlobalSidebar />);
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
-    });
-
-    it('/view-details does not match isHomeActive', () => {
-      mockLocation = { pathname: '/view-details' };
-      render(<GlobalSidebar />);
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
-    });
-
-    it('/home-extra does not match isHomeActive', () => {
-      mockLocation = { pathname: '/home-extra' };
-      render(<GlobalSidebar />);
-      expect(screen.getByTestId('sidebar-menu-item-home')).toHaveAttribute('data-active', 'false');
+      expect(screen.queryByTestId('sidebar-menu-item-home')).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-menu-item-search')).toHaveAttribute('data-active', 'false');
     });
 
     it('/glossaries matches isGlossariesActive', () => {
@@ -622,7 +482,7 @@ describe('GlobalSidebar', () => {
       expect(screen.getByTestId('sidebar-menu-item-aspects')).toHaveAttribute('data-active', 'true');
     });
 
-    it('/glossaries-extra does not match isGlossariesActive (exact match)', () => {
+    it('/glossaries-extra does not match isGlossariesActive', () => {
       mockLocation = { pathname: '/glossaries-extra' };
       render(<GlobalSidebar />);
       expect(screen.getByTestId('sidebar-menu-item-glossaries')).toHaveAttribute('data-active', 'false');
@@ -630,6 +490,12 @@ describe('GlobalSidebar', () => {
 
     it('/data-products/id/details matches isDataProductsActive', () => {
       mockLocation = { pathname: '/data-products/id/details' };
+      render(<GlobalSidebar />);
+      expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'true');
+    });
+
+    it('/data-products/ matches isDataProductsActive', () => {
+      mockLocation = { pathname: '/data-products/' };
       render(<GlobalSidebar />);
       expect(screen.getByTestId('sidebar-menu-item-data-products')).toHaveAttribute('data-active', 'true');
     });

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Box, IconButton, Skeleton, Tab, Tabs, Tooltip } from '@mui/material'
-import { ArrowBack, KeyboardArrowUp, KeyboardArrowDown, LockOutlined } from '@mui/icons-material'
+import { Box, IconButton, Skeleton, Tab, Tabs } from '@mui/material'
+import { KeyboardArrowUp, KeyboardArrowDown, DashboardOutlined, Inventory2Outlined, GroupsOutlined, ArticleOutlined } from '@mui/icons-material'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import CustomTabPanel from '../TabPanel/CustomTabPanel'
@@ -8,7 +8,7 @@ import PreviewAnnotation from '../Annotation/PreviewAnnotation'
 import AnnotationFilter from '../Annotation/AnnotationFilter'
 import type { AppDispatch } from '../../app/store'
 import { useAuth } from '../../auth/AuthProvider'
-import { getEntryType, getMimeType, getName, hasValidAnnotationData  } from '../../utils/resourceUtils'
+import { getMimeType, getName  } from '../../utils/resourceUtils'
 import { fetchDataProductsAssetsList, fetchDataProductsList, getDataProductDetails, setDataProductsDetailTabValue } from '../../features/dataProducts/dataProductsSlice'
 import Assets from './Assets'
 import AccessGroup from './AccessGroup'
@@ -20,6 +20,10 @@ import { useAccessRequest } from '../../contexts/AccessRequestContext'
 import ResourcePreview from '../Common/ResourcePreview'
 import { fetchEntry, clearHistory } from '../../features/entry/entrySlice'
 import { useNotification } from '../../contexts/NotificationContext'
+import DataProductsInsight from './DataProductsInsight'
+import AccessRequests from './AccessRequests'
+import RequestAccessButton from './RequestAccessButton'
+import axios from '../../utils/apiInterceptor'
 // import { useFavorite } from '../../hooks/useFavorite'
 
 /**
@@ -106,9 +110,54 @@ const DataProductsDetailView: React.FC<DataProductsDetailViewProps> = ({ onReque
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const id_token = user?.token || '';
 
+  const isOwner = React.useMemo(() => {
+    const currentUserEmail = user?.email?.trim().toLowerCase();
+    if (!currentUserEmail) return false;
+
+    const ownerEmails: string[] = [];
+
+    // Owner emails carried over from the list/card selection (set on card click).
+    try {
+      const stored = JSON.parse(localStorage.getItem('selectedDataProduct') || '{}');
+      if (Array.isArray(stored?.ownerEmails)) {
+        ownerEmails.push(...stored.ownerEmails);
+      }
+    } catch {
+      // Ignore malformed localStorage value.
+    }
+
+    // Owner emails from the fetched detail entry's contacts aspect (covers deep links/refresh).
+    const number = selectedDataProductDetails?.entryType?.split('/')?.[1] ?? '0';
+    const identities: Array<{ role?: string; name?: string }> =
+      selectedDataProductDetails?.aspects?.[`${number}.global.contacts`]?.data?.identities ?? [];
+    identities
+      .filter((contact) => typeof contact?.role === 'string' && /owner/i.test(contact.role))
+      .forEach((contact) => {
+        const rawName: string = contact?.name ?? '';
+        const email = rawName.includes('<') ? rawName.split('<')[1].slice(0, -1) : rawName;
+        if (email) ownerEmails.push(email);
+      });
+
+    return ownerEmails.some((email) => email.trim().toLowerCase() === currentUserEmail);
+  }, [selectedDataProductDetails, user?.email]);
+  const [changeRequests, setChangeRequests] = useState<any | []>([]);
+  const [changeRequestStatus, setChangeRequestStatus] = useState<'loading' | 'success' | 'error'>('loading');
+
+
+  const requestedGroupIds = React.useMemo(() => {
+    if (!user?.email || changeRequestStatus !== 'success') return new Set();
+    
+    return new Set(
+      changeRequests
+        .filter((cr: any) => cr?.author?.toLowerCase() === user?.email?.toLowerCase() && cr?.state !== 'REJECTED')
+        .map((cr: any) => cr?.dataProductAccessRequest?.accessGroupId)
+        .filter(Boolean)
+    );
+  }, [changeRequests, user?.email, changeRequestStatus]);
+
   const handleScroll = useCallback(() => {
     if (scrollContainerRef.current) {
-      setIsScrolled(scrollContainerRef.current.scrollTop > 0);
+      setIsScrolled(scrollContainerRef.current.scrollTop > 200);
     }
   }, []);
 
@@ -159,25 +208,41 @@ const DataProductsDetailView: React.FC<DataProductsDetailViewProps> = ({ onReque
   };
   
   const handleAnnotationExpandAll = () => {
-    if (selectedDataProductDetails?.aspects) {
-    const number = getEntryType(selectedDataProductDetails.name, '/');
-    const annotationKeys = Object.keys(selectedDataProductDetails.aspects)
-        .filter(key =>
-        key !== `${number}.global.schema` &&
-        key !== `${number}.global.overview` &&
-        key !== `${number}.global.contacts` &&
-        key !== `${number}.global.usage`
-        )
-        .filter(key => hasValidAnnotationData(selectedDataProductDetails.aspects![key])); // Only expand those with data
-    setExpandedAnnotations(new Set(annotationKeys));
-    }
-  };
+  if (selectedDataProductDetails?.aspects) {
+    setExpandedAnnotations(new Set(Object.keys(selectedDataProductDetails.aspects)));
+  }
+};
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     console.log("Tab changed to:", event);
     setIsAssetPreviewOpen(false);
     setAssetPreviewData(null);
     setTabValue(newValue);
+  };
+
+  const loadChangeRequests = async () => {
+    setChangeRequestStatus('loading');
+    axios.get(`https://dataplex.googleapis.com/v1/projects/${selectedDataProductDetails.name.split('/')[1]}/locations/${selectedDataProductDetails.name.split('/')[3]}/changeRequests`, {
+          headers: {
+            Authorization: `Bearer ${id_token}`,
+          },       
+          params: {
+            filter: `resource="//dataplex.googleapis.com/${selectedDataProductDetails.name.split('/entryGroups/')[0]}/dataProducts/${selectedDataProductDetails.name.split('/dataProducts/')[1]}" AND changeType="REQUEST_DATA_PRODUCT_ACCESS"`
+          }
+          }).then((response:any) => {           
+            const changeRequests = response.data.changeRequests || [];
+            if (changeRequests.length > 0) {
+              setChangeRequests(changeRequests);
+              // Auto-hide notification after 5 seconds
+            }else{
+              setChangeRequests([]);
+            }
+            console.log("Fetched change requests:", changeRequests);
+            setChangeRequestStatus('success');
+        }).catch((error:any) => {
+          console.error("Error fetching change requests:", error);
+          setChangeRequestStatus('error');
+        });
   };
 
 
@@ -225,11 +290,21 @@ const tabProps = (index: number)  => {
       setAccessPanelOpen(isSubmitAccessOpen);
     }, [isSubmitAccessOpen, setAccessPanelOpen]);
 
+    useEffect(() => {
+      if(selectedDataProductStatus=== 'succeeded'){
+        loadChangeRequests();
+      }
+    }, [selectedDataProductStatus, selectedDataProductDetails]);
+
+
     const handleCloseSubmitAccess = () => {
     setIsSubmitAccessOpen(false);
   };
 
   const handleSubmitSuccess = (_assetName: string) => {
+    // After successful access request submission, refresh the change requests list to show the new request
+    loadChangeRequests();
+    
     setIsSubmitAccessOpen(false);
     setNotificationMessage(`Request sent`);
     setIsNotificationVisible(true);
@@ -291,13 +366,14 @@ const tabProps = (index: number)  => {
 
   let annotationTab = <PreviewAnnotation
     entry={filteredEntry || selectedDataProductDetails}
-    css={{width:"100%", borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px', borderTopLeftRadius: '0px', borderTopRightRadius: '0px', marginRight: '8px'}}
+    css={{width:"100%"}}
     isTopComponent={true} 
     expandedItems={expandedAnnotations}
     setExpandedItems={setExpandedAnnotations}
+    isDataProduct={true}
   />;
   
-  let overviewTab = <DataProductOverviewNew entry={selectedDataProductDetails} entryType={'data-product'} css={{width:"100%"}} />;
+  let overviewTab = <DataProductOverviewNew entry={selectedDataProductDetails} entryType={'data-product'} labels={selectedDataProduct?.labels} css={{width:"100%"}} />;
   let assetsTab = <Assets 
     entry={selectedDataProductDetails} css={{width:"100%"}} 
     onAssetPreviewChange={(data) => {
@@ -307,6 +383,8 @@ const tabProps = (index: number)  => {
   />;
   let accessGroupTab = <AccessGroup entry={selectedDataProductDetails} css={{width:"100%"}} />;
   let contractTab = <Contract entry={selectedDataProductDetails} css={{width:"100%"}} />;
+  let insightsTab = <DataProductsInsight entry={selectedDataProductDetails} css={{width:"100%"}} />;
+  let accessRequestTab = <AccessRequests entry={selectedDataProductDetails} changeRequests={changeRequests} css={{width:"100%"}} />;
 
 
   const handleRequestAccess = (data: any) => {
@@ -320,173 +398,351 @@ const tabProps = (index: number)  => {
  
 
 
-  const headerDescription = selectedDataProductDetails?.entrySource?.description || '';
+  const headerDescription = (selectedDataProductDetails?.entrySource?.description || '').trim();
 
   return selectedDataProductStatus == 'succeeded' ? (
-    <div ref={scrollContainerRef} onScroll={handleScroll} style={{display: "flex", flexDirection: "column", padding: "0px 0", background:"#FFFFFF", height: "100%", overflowY: "auto" }}>
+    <div ref={scrollContainerRef} onScroll={handleScroll} style={{display: "flex", flexDirection: "column", padding: "0px 0", background:"#F8FAFC", height: "100%", overflowY: "auto" }}>
       {/* Primary Title Bar - sticky, direct child of scroll container */}
       <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "20px 20px 12px 20px",
-          position: "sticky",
-          top: 0,
-          backgroundColor: "#ffffff",
-          zIndex: 1001,
-          boxShadow: isScrolled ? "0px 2px 4px rgba(0, 0, 0, 0.12)" : "none",
-          transition: "box-shadow 0.2s ease",
+        display: "flex",
+        flexDirection: isScrolled ? "column" : "row",
+        alignItems: isScrolled ? "flex-start" : "center",
+        padding: isScrolled ? "8px 20px 0px" : "16px 20px 8px 20px",
+        gap: isScrolled ? "12px" : "0px",
+        position: "sticky",
+        top: 0,
+        backgroundColor: isScrolled ? "#F9F9FC" : "#F7F9F9",
+        zIndex: 1001,
+        boxShadow: isScrolled ? "0px 1px 6.6px rgba(171, 171, 179, 0.5)" : "none",
+        transition: "all 0.2s ease",
+        boxSizing: "border-box",
+        width: "100%",
+        height: isScrolled ? "100px" : "auto",
+        minHeight: isScrolled ? "100px" : "auto"
       }}>
-          {/* Left Side - Back Arrow, Icon, Title, and Tags */}
+        {isScrolled ? (
           <div style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column"
+          }}>
+            {/* Scrolled State: Compact Header */}
+            <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", width: "100%", gap: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", width: "100%", gap: "16px" }}>
+                <IconButton
+                  onClick={() => { navigate('/data-products'); }}
+                  sx={{ p: '4px', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' } }}
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7.825 13L13.425 18.6L12 20L4 12L12 4L13.425 5.4L7.825 11H20V13H7.825Z" fill="#1F1F1F"/>
+                  </svg>
+                </IconButton>
+
+                <Box sx={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '8px',
+                  background: '#EAEEFA',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  border: '1.25px solid #FFFFFF',
+                  overflow: 'hidden',
+                }}>
+                  {selectedDataProduct.icon ? (
+                    <img
+                      src={`data:${getMimeType(selectedDataProduct.icon)};base64,${selectedDataProduct.icon}`}
+                      alt={selectedDataProductDetails.entrySource?.displayName}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <svg width="42" height="42" viewBox="0 0 54 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, transform: 'translate(0px, -1px)' }}>
+                      <g filter="url(#filter0_d_11345_132122)">
+                        <rect x="2.7002" y="1.69995" width="48" height="48" rx="8" fill="url(#paint0_linear_11345_132122)" shape-rendering="crispEdges"/>
+                        <path d="M25.4277 11.8923C26.2307 11.5023 27.1697 11.5023 27.9727 11.8923L40.2197 17.8435C40.5683 18.0129 40.7926 18.3624 40.7998 18.7488C40.8068 19.1351 40.5959 19.4925 40.2539 19.6746L35.5039 22.2019L40.2197 24.4939C40.5683 24.6633 40.7926 25.0128 40.7998 25.3992C40.8068 25.7854 40.5959 26.143 40.2539 26.325L35.5029 28.8523L40.2197 31.1443C40.5683 31.3136 40.7928 31.6631 40.7998 32.0496C40.807 32.4359 40.596 32.7934 40.2539 32.9753L28.0674 39.4587C27.2132 39.9134 26.1872 39.9133 25.333 39.4587L13.1465 32.9753C12.8044 32.7934 12.5935 32.4359 12.6006 32.0496C12.6077 31.6632 12.8321 31.3137 13.1807 31.1443L17.8965 28.8523L13.1465 26.325C12.8044 26.143 12.5935 25.7854 12.6006 25.3992C12.6077 25.0128 12.8321 24.6633 13.1807 24.4939L17.8955 22.2019L13.1465 19.6746C12.8044 19.4925 12.5935 19.1351 12.6006 18.7488C12.6077 18.3623 12.8321 18.0129 13.1807 17.8435L25.4277 11.8923ZM28.0674 32.8083C27.213 33.2629 26.1874 33.2629 25.333 32.8083L20.1445 30.0486L15.9033 32.1091L26.3066 37.6453C26.5521 37.7759 26.8473 37.7757 27.0928 37.6453L37.4961 32.1091L33.2539 30.0486L28.0674 32.8083ZM28.0674 26.158C27.213 26.6124 26.1874 26.6124 25.333 26.158L20.1445 23.3982L15.9033 25.4587L26.3066 30.9949C26.5522 31.1256 26.8482 31.1256 27.0938 30.9949L37.4961 25.4587L33.2549 23.3982L28.0674 26.158ZM27.0664 13.741C26.8357 13.6288 26.5647 13.6288 26.334 13.741L15.9033 18.8083L26.3066 24.3445C26.5522 24.4752 26.8482 24.4752 27.0938 24.3445L37.4961 18.8083L27.0664 13.741Z" fill="white" stroke="white" stroke-width="0.2"/>
+                      </g>
+                      <defs>
+                        <filter id="filter0_d_11345_132122" x="0.000195265" y="-4.88758e-05" width="53.4" height="53.4" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+                          <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+                          <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+                          <feOffset dy="1"/>
+                          <feGaussianBlur stdDeviation="1.35"/>
+                          <feComposite in2="hardAlpha" operator="out"/>
+                          <feColorMatrix type="matrix" values="0 0 0 0 0.43645 0 0 0 0 0.530791 0 0 0 0 0.813815 0 0 0 0.4 0"/>
+                          <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_11345_132122"/>
+                          <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_11345_132122" result="shape"/>
+                        </filter>
+                        <linearGradient id="paint0_linear_11345_132122" x1="11.7002" y1="-10.3" x2="46.7002" y2="53.7" gradientUnits="userSpaceOnUse">
+                          <stop stop-color="#73C9FF"/>
+                          <stop offset="1" stop-color="#7B88FF"/>
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  )}
+                </Box>
+
+                <label style={{
+                  fontFamily: '"Google Sans", sans-serif',
+                  color: "#1F1F1F",
+                  fontSize: "20px",
+                  fontWeight: "500",
+                  lineHeight: "28px",
+                }}>
+                  {selectedDataProductDetails.entrySource?.displayName?.length > 0 ? selectedDataProductDetails.entrySource.displayName : getName(selectedDataProductDetails.name || '', '/')}
+                </label>
+              </div>
+
+              {changeRequestStatus === 'loading' ? (
+                  <Skeleton variant="rounded" width={140} height={36} sx={{ borderRadius: '100px' }} />
+                ) : (
+                  <RequestAccessButton
+                    entry={selectedDataProductDetails}
+                    onRequestAccess={handleRequestAccess}
+                    changeRequests={changeRequests}
+                    changeRequestStatus={changeRequestStatus}
+                    userEmail={user?.email}
+                    variant="compact"
+                    totalAccessGroups={Object.keys(accessGroups).length}
+                  />
+                )}
+            </div>
+
+            {/* Scrolled State: Tabs Container */}
+            <Box sx={{
+              width: "100%",
+              marginTop: "auto",
+              "& .MuiTabs-root": { minHeight: "47px", height: "47px" },
+              "& .MuiTab-root": {
+                fontFamily: '"Google Sans", sans-serif',
+                fontSize: "14px",
+                fontWeight: 500,
+                color: "#0C1226",
+                textTransform: "none",
+                minHeight: "47px",
+                padding: "0px 16px",
+                "&.Mui-selected": { color: "#022FCD" },
+              },
+              "& .MuiTabs-indicator": { backgroundColor: "#022FCD", height: "3px", borderRadius: "3px 3px 0 0" },
+            }}>
+              <Tabs value={tabValue} onChange={handleTabChange}>
+                <Tab icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />
+                <Tab icon={<Inventory2Outlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Assets" {...tabProps(1)} />
+                {isOwner && (
+                  <Tab value={2} icon={<GroupsOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Access Groups & Permissions" {...tabProps(2)} />
+                )}
+                <Tab icon={<ArticleOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Contracts" {...tabProps(3)} />
+                {isOwner && (
+                    <Tab value={4} icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>lock_open</span>} iconPosition="start" label="Access Requests" {...tabProps(4)} />
+                  )}
+                <Tab icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>newsmode</span>} iconPosition="start" label="Aspects" {...tabProps(5)} />
+                <Tab icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>query_stats</span>} iconPosition="start" label="Insights" {...tabProps(6)} />
+              </Tabs>
+            </Box>
+          </div>
+        ) : (
+          /* Unscrolled State: Just the Custom Back Button */
+          <>
+          <div 
+            onClick={() => { navigate(-1); }} 
+            style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: "4px", 
+              cursor: "pointer" 
+            }}
+          >
+          <IconButton
+            sx={{
+              p: '4px',
+              width: '30px',
+              height: '30px',
+              borderRadius: '50%',
+              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+            }}
+          >
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M7.825 13L13.425 18.6L12 20L4 12L12 4L13.425 5.4L7.825 11H20V13H7.825Z" fill="#1F1F1F"/>
+            </svg>
+          </IconButton>
+          </div>
+          <span style={{
+              width: "300px",
+              height: "40px",
+              marginLeft: "8px",
+              fontFamily: "'Product Sans Medium', 'Google Sans', sans-serif",
+              fontStyle: "normal",
+              fontWeight: 500,
+              fontSize: "14px",
+              lineHeight: "40px",
               display: "flex",
               alignItems: "center",
-              gap: "20px"
-          }}>
-              <IconButton
-                  onClick={() => { navigate(-1); }}
-                  sx={{
-                      p: '4px',
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      color: '#0B57D0',
-                      transition: 'background-color 0.2s',
-                      '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
-                  }}
-              >
-                  <ArrowBack style={{fontSize: "24px"}} />
-              </IconButton>
-              {/* Product Image */}
-              <img
-                  src={selectedDataProduct.icon ? `data:${getMimeType(selectedDataProduct.icon)};base64,${selectedDataProduct.icon}` : '/assets/images/data-product-card.png'}
-                  alt={selectedDataProductDetails.entrySource?.displayName}
-                  style={{ width: '48px', height: '48px', border: '1.25px solid #FFFFFF', borderRadius: '8px' }}
-              />
-              {/* Title and Tags Column */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
-                      <Tooltip
-                        title={
-                          selectedDataProductDetails.entrySource?.displayName?.length > 0
-                          ? selectedDataProductDetails.entrySource.displayName
-                          : getName(selectedDataProductDetails.name || '', '/')
-                        }
-                        arrow placement='top'
-                      >
-                      <label style={{
-                          fontFamily: '"Google Sans", sans-serif',
-                          color: "#1F1F1F",
-                          fontSize: "28px",
-                          fontWeight: "400",
-                          lineHeight: "36px",
-                      }}>
-                          {selectedDataProductDetails.entrySource?.displayName?.length > 0 ? selectedDataProductDetails.entrySource.displayName : getName(selectedDataProductDetails.name || '', '/')}
-                      </label>
-                      </Tooltip>
-                  </div>
-              </div>
-          </div>
-      </div>
-
-      <div style={{display: "flex", flexDirection: "row", gap: "2px"}}>
-        <div style={{display: "flex", flexDirection: "column", flex: 1, minWidth: 0}}>
-          <div style={{padding:"0px 0rem", display: "flex", flexDirection: "column"}}>
-            {/* Header Container */}
-            <div style={{
-                flexShrink: 0,
-                backgroundColor: '#ffffff',
-                zIndex: 1000,
+              color: "#1F1F1F",
+              userSelect: "none"
             }}>
-
-              {/* Description Section */}
-              <div style={{ padding: "8px 20px 0px", maxWidth: "800px" }}>
-                {headerDescription ? (
-                  <>
-                    <div style={{
-                        fontFamily: '"Google Sans", sans-serif',
-                        fontSize: "14px",
-                        lineHeight: "20px",
-                        color: "#575757",
-                        fontWeight: 400,
-                        maxHeight: descriptionExpanded ? "none" : "60px",
-                        overflow: "hidden",
-                        position: "relative"
-                    }}>
-                        {headerDescription}
-                    </div>
-                    {headerDescription.length > 200 && (
-                        <button
-                            onClick={() => setDescriptionExpanded(!descriptionExpanded)}
-                            style={{
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                padding: "6px 0px",
-                                color: "#0B57D0",
-                                fontFamily: '"Google Sans", sans-serif',
-                                fontSize: "14px",
-                                fontWeight: 500,
-                                lineHeight: "20px"
-                            }}
-                        >
-                            {descriptionExpanded ? <KeyboardArrowUp sx={{ fontSize: "20px" }} /> : <KeyboardArrowDown sx={{ fontSize: "20px" }} />}
-                            {descriptionExpanded ? 'Show less' : 'Show more'}
-                        </button>
-                    )}
-                  </>
-                ) : (
-                  <div style={{
-                      fontFamily: '"Google Sans", sans-serif',
-                      fontSize: "14px",
-                      lineHeight: "20px",
-                      color: "#575757",
-                      fontWeight: 400,
-                      fontStyle: "italic",
-                  }}>
-                      No description provided for this data product.
+              Back to Data Products
+            </span>
+          </>
+        )}
+      </div>
+        <div style={{display: "flex", flexDirection: "row", gap: "2px"}}>
+          <div style={{display: "flex", flexDirection: "column", flex: 1, minWidth: 0}}>
+            <div style={{padding:"0px 20px", display: "flex", flexDirection: "column"}}>
+              
+              {/* New Recreated Data Product Card Layout */}
+              <div style={{
+                  position: "relative",
+                  boxSizing: "border-box",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  alignItems: "flex-start",
+                  padding: "24px",
+                  gap: "20px",
+                  background: "linear-gradient(88.29deg, #F6F7FF 0%, #F6FFFC 105.88%)",
+                  borderRadius: "16px",
+                  width: "100%",
+                  border: "1px solid #E2E8F0",
+                  boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.04)"
+              }}>
+                  {/* Top Row: Icon and Title */}
+                  <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", width: "100%", gap: "20px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                          <Box sx={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '8px',
+                            background: '#EAEEFA',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            border: '1.25px solid #FFFFFF',
+                            overflow: 'hidden',
+                          }}>
+                            {selectedDataProduct.icon ? (
+                              <img
+                                src={`data:${getMimeType(selectedDataProduct.icon)};base64,${selectedDataProduct.icon}`}
+                                alt={selectedDataProductDetails.entrySource?.displayName}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <svg width="52" height="52" viewBox="0 0 54 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, transform: 'translate(0px, -1px)' }}>
+                                <g filter="url(#filter0_d_11345_132122)">
+                                  <rect x="2.7002" y="1.69995" width="48" height="48" rx="8" fill="url(#paint0_linear_11345_132122)" shape-rendering="crispEdges"/>
+                                  <path d="M25.4277 11.8923C26.2307 11.5023 27.1697 11.5023 27.9727 11.8923L40.2197 17.8435C40.5683 18.0129 40.7926 18.3624 40.7998 18.7488C40.8068 19.1351 40.5959 19.4925 40.2539 19.6746L35.5039 22.2019L40.2197 24.4939C40.5683 24.6633 40.7926 25.0128 40.7998 25.3992C40.8068 25.7854 40.5959 26.143 40.2539 26.325L35.5029 28.8523L40.2197 31.1443C40.5683 31.3136 40.7928 31.6631 40.7998 32.0496C40.807 32.4359 40.596 32.7934 40.2539 32.9753L28.0674 39.4587C27.2132 39.9134 26.1872 39.9133 25.333 39.4587L13.1465 32.9753C12.8044 32.7934 12.5935 32.4359 12.6006 32.0496C12.6077 31.6632 12.8321 31.3137 13.1807 31.1443L17.8965 28.8523L13.1465 26.325C12.8044 26.143 12.5935 25.7854 12.6006 25.3992C12.6077 25.0128 12.8321 24.6633 13.1807 24.4939L17.8955 22.2019L13.1465 19.6746C12.8044 19.4925 12.5935 19.1351 12.6006 18.7488C12.6077 18.3623 12.8321 18.0129 13.1807 17.8435L25.4277 11.8923ZM28.0674 32.8083C27.213 33.2629 26.1874 33.2629 25.333 32.8083L20.1445 30.0486L15.9033 32.1091L26.3066 37.6453C26.5521 37.7759 26.8473 37.7757 27.0928 37.6453L37.4961 32.1091L33.2539 30.0486L28.0674 32.8083ZM28.0674 26.158C27.213 26.6124 26.1874 26.6124 25.333 26.158L20.1445 23.3982L15.9033 25.4587L26.3066 30.9949C26.5522 31.1256 26.8482 31.1256 27.0938 30.9949L37.4961 25.4587L33.2549 23.3982L28.0674 26.158ZM27.0664 13.741C26.8357 13.6288 26.5647 13.6288 26.334 13.741L15.9033 18.8083L26.3066 24.3445C26.5522 24.4752 26.8482 24.4752 27.0938 24.3445L37.4961 18.8083L27.0664 13.741Z" fill="white" stroke="white" stroke-width="0.2"/>
+                                </g>
+                                <defs>
+                                  <filter id="filter0_d_11345_132122" x="0.000195265" y="-4.88758e-05" width="53.4" height="53.4" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+                                    <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+                                    <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+                                    <feOffset dy="1"/>
+                                    <feGaussianBlur stdDeviation="1.35"/>
+                                    <feComposite in2="hardAlpha" operator="out"/>
+                                    <feColorMatrix type="matrix" values="0 0 0 0 0.43645 0 0 0 0 0.530791 0 0 0 0 0.813815 0 0 0 0.4 0"/>
+                                    <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_11345_132122"/>
+                                    <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_11345_132122" result="shape"/>
+                                  </filter>
+                                  <linearGradient id="paint0_linear_11345_132122" x1="11.7002" y1="-10.3" x2="46.7002" y2="53.7" gradientUnits="userSpaceOnUse">
+                                    <stop stop-color="#73C9FF"/>
+                                    <stop offset="1" stop-color="#7B88FF"/>
+                                  </linearGradient>
+                                </defs>
+                              </svg>
+                            )}
+                          </Box>
+                          <label style={{
+                              fontFamily: '"Google Sans", sans-serif',
+                              color: "#1F1F1F",
+                              fontSize: "24px",
+                              fontWeight: "500",
+                              lineHeight: "32px",
+                          }}>
+                              {selectedDataProductDetails.entrySource?.displayName?.length > 0 ? selectedDataProductDetails.entrySource.displayName : getName(selectedDataProductDetails.name || '', '/')}
+                          </label>
+                      </div>
                   </div>
-                )}
-              </div>
 
-              {/* Request Access Button - below description, left-aligned */}
-              <div style={{ padding: "12px 20px 0px" }}>
-                  <Box
-                      component="button"
-                      data-testid="cta-button"
-                      onClick={() => {handleRequestAccess(selectedDataProductDetails)}}
-                      sx={{
-                        fontFamily: '"Google Sans", sans-serif',
-                        backgroundColor: '#0B57D0',
-                        color: '#FFFFFF',
-                        borderRadius: '100px',
-                        padding: '10px 16px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        border: 'none',
-                        height: '40px',
-                        whiteSpace: 'nowrap',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textTransform: 'none',
-                        gap: '8px',
-                        width: 'fit-content',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.2s ease',
-                        '&:hover': { backgroundColor: '#1A5CD8' },
-                      }}
-                  >
-                      <LockOutlined style={{ fontSize: "18px" }} />
-                      Request Access
-                  </Box>
+                  {/* Middle Row: Action Button */}
+                  <div style={{
+                      position: "absolute",
+                      top: "24px",
+                      right: "24px",
+                  }}>
+                    {changeRequestStatus === 'loading' ? (
+                      <Skeleton variant="rounded" width={160} height={40} sx={{ borderRadius: '100px' }} />
+                    ) : (
+                      <RequestAccessButton
+                        entry={selectedDataProductDetails}
+                        onRequestAccess={handleRequestAccess}
+                        changeRequests={changeRequests}
+                        changeRequestStatus={changeRequestStatus}
+                        userEmail={user?.email}
+                        variant="card"
+                        totalAccessGroups={Object.keys(accessGroups).length}
+                      />
+                    )}
+                  </div>
+                  {/* Bottom Row: Description text block */}
+                  <div style={{ width: "100%" }}>
+                    {headerDescription ? (
+                      <>
+                        <div style={{
+                            fontFamily: '"Google Sans", sans-serif',
+                            fontSize: "14px",
+                            lineHeight: "20px",
+                            color: "#0C1226",
+                            fontWeight: 400,
+                            maxHeight: descriptionExpanded ? "none" : "60px",
+                            overflow: "hidden",
+                            position: "relative"
+                        }}>
+                            {headerDescription}
+                        </div>
+                        {headerDescription.length > 200 && (
+                            <button
+                                onClick={() => setDescriptionExpanded(!descriptionExpanded)}
+                                style={{
+                                    background: "none",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    padding: "6px 0px",
+                                    color: "#0B57D0",
+                                    fontFamily: '"Google Sans", sans-serif',
+                                    fontSize: "14px",
+                                    fontWeight: 500,
+                                }}
+                            >
+                                {descriptionExpanded ? <KeyboardArrowUp sx={{ fontSize: "20px" }} /> : <KeyboardArrowDown sx={{ fontSize: "20px" }} />}
+                                {descriptionExpanded ? 'Show less' : 'Show more'}
+                            </button>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{
+                          fontFamily: '"Google Sans", sans-serif',
+                          fontSize: "14px",
+                          lineHeight: "20px",
+                          color: "#0C1226CC",
+                          fontStyle: "italic",
+                      }}>
+                          No description provided for this data product.
+                      </div>
+                    )}
+                  </div>
               </div>
 
               {/* Navigation Tab Bar */}
-              <div style={{ paddingTop: "12px", marginTop: "0px" }}>
+              <div style={{ 
+                paddingTop: "12px",
+                opacity: isScrolled ? 0 : 1, 
+                marginTop: "0px",
+                transition: "opacity 0.2s ease",
+                pointerEvents: isScrolled ? "none" : "auto" }}>
                 <Box
                   sx={{
                     width: "100%",
@@ -494,20 +750,37 @@ const tabProps = (index: number)  => {
                 >
                   <Box
                     sx={{
-                      paddingLeft: "1.75rem",
                       position: "relative",
                       "& .MuiTabs-root": {
-                        minHeight: "48px",
+                        minHeight: "47px",
+                        height: "47px",
+                        display: "flex",
+                        flexDirection: "row",
+                        alignItems: "flex-start",
+                        padding: "0px",
+                        width: "1203px",
+                        maxWidth: "100%",
+                        "& .MuiTabs-flexContainer": {
+                          gap: "4px",
+                        }
                       },
                       "& .MuiTab-root": {
-                        fontFamily: '"Product Sans Regular", sans-serif',
+                        fontFamily: '"Google Sans", sans-serif',
                         fontSize: "14px",
-                        color: "#575757",
+                        fontWeight: 500,
+                        color: "#0C1226",
                         textTransform: "none",
-                        minHeight: "48px",
-                        padding: "12px 20px 16px",
+                        minHeight: "47px",
+                        padding: "0px 16px",
+                        display: "inline-flex",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "1px",
+                        textAlign: "center",
+                        verticalAlign: "middle",
                         "&.Mui-selected": {
-                          color: "#0E4DCA",
+                          color: "#022FCD",
                         },
                       },
                       "& .MuiTabs-indicator": {
@@ -515,33 +788,53 @@ const tabProps = (index: number)  => {
                         "&::after": {
                           content: '""',
                           position: "absolute",
-                          left: "20px",
-                          right: "20px",
-                          bottom: "-2px",
-                          height: "5px",
-                          backgroundColor: "white",
-                          borderTop: "3px solid #0E4DCA",
-                          borderRadius: "2.5px 2.5px 0 0",
+                          left: "16px",
+                          right: "16px",
+                          bottom: "0px",
+                          height: "3px",
+                          backgroundColor: "#022FCD",
+                          borderRadius: "3px 3px 0 0",
                         },
                       },
                     }}>
-                        <Tabs value={tabValue}
+                        <Tabs 
+                          value={tabValue}
                           onChange={handleTabChange}
                           aria-label="basic tabs"
                           TabIndicatorProps={{
                             children: <span className="indicator" />,
                           }}
                         >
-                            <Tab key="overview" label="Overview" {...tabProps(0)} />
-                            <Tab key="assets" label="Assets" {...tabProps(1)} />
-                            <Tab key="accessGroup&Permission" label="Access Groups & Permissions" {...tabProps(2)} />
-                            <Tab key="contract" label="Contract" {...tabProps(3)} />
-                            <Tab key="annotations" label="Aspects" {...tabProps(4)} />
-                        </Tabs>
-                    </Box>
-                </Box>
-              </div>
-            </div>
+                            <Tab value={0} key="overview" icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />
+                            <Tab value={1} key="assets" icon={<Inventory2Outlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Assets" {...tabProps(1)} />
+                            {isOwner && (
+                              <Tab value={2} key="accessGroup&Permission" icon={<GroupsOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Access Groups & Permissions" {...tabProps(2)} />
+                            )}
+                            <Tab value={3} key="contract" icon={<ArticleOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Contracts" {...tabProps(3)} />
+                            {isOwner && (
+                              <Tab value={4} key="Access Requests" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>lock_open</span>} iconPosition="start" label="Access Requests" {...tabProps(4)} />
+                            )}
+                            <Tab 
+                                value={5}
+                                key="annotations" 
+                                icon={
+                                  <span 
+                                    className="material-symbols-outlined" 
+                                    style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}
+                                  >
+                                    newsmode
+                                  </span>
+                                } 
+                                iconPosition="start" 
+                                label="Aspects" 
+                                {...tabProps(5)} 
+                              />
+                            <Tab value={6} key="insights" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>query_stats</span>} iconPosition="start" label="Insights" {...tabProps(6)} />
+                          </Tabs>
+                        </Box>
+                      </Box>
+                    </div>
+                  </div>
 
             {/* Tab Content - Scrollable */}
             <div style={{paddingTop:"0px", marginTop:"0px", marginLeft: "20px", marginRight: "20px", paddingBottom: "2rem", borderTop: "1px solid #E0E0E0"}}>
@@ -560,14 +853,67 @@ const tabProps = (index: number)  => {
                         {contractTab}
                     </CustomTabPanel>
                     <CustomTabPanel value={tabValue} index={4}>
-                        <AnnotationFilter
-                            entry={selectedDataProductDetails}
-                            onFilteredEntryChange={setFilteredEntry}
-                            sx={{width: "100%" }}
-                            onCollapseAll={handleAnnotationCollapseAll}
-                            onExpandAll={handleAnnotationExpandAll}
-                        />
-                        {annotationTab}
+                        <div style={{ marginTop: "-18px" }}>
+                            {accessRequestTab}
+                        </div>
+                    </CustomTabPanel>
+                    <CustomTabPanel value={tabValue} index={5}>
+                        {(() => {
+                            const entryToUse = filteredEntry || selectedDataProductDetails;
+                            const number = entryToUse?.entryType?.split('/')?.[1] ?? '0';
+                            const aspects = entryToUse?.aspects || {};
+                            
+                            const displayableKeys = Object.keys(aspects).filter(key => {
+                                const isSchema = key === `${number}.global.schema`;
+                                const isOverview = key.endsWith('.global.overview');
+                                const isContacts = key === `${number}.global.contacts`;
+                                const isUsage = key === `${number}.global.usage`;
+                                const isGlossaryTermAspect = key.endsWith('.global.glossary-term-aspect');
+                                const isDataProductAspect = key.endsWith('.data-product');
+                                const isQueries = key.endsWith('.queries');
+                                const isRefreshCadence = key === `${number}.global.refresh-cadence`;
+                                
+                                return !(isSchema || isOverview || isContacts || isUsage || isGlossaryTermAspect || isDataProductAspect || isQueries || isRefreshCadence);
+                            });
+                            if (displayableKeys.length === 0) {
+                                return (
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        height: '200px',
+                                        color: '#0C1226CC',
+                                        fontSize: '16px',
+                                        fontFamily: '"Google Sans", sans-serif',
+                                        marginTop: '-65px'
+                                    }}>
+                                        No aspects available for this data product.
+                                    </div>
+                                );
+                            }
+                            return (
+                                <>
+                                    <AnnotationFilter
+                                        entry={selectedDataProductDetails}
+                                        onFilteredEntryChange={setFilteredEntry}
+                                        sx={{width: "100%", backgroundColor: "transparent"}}
+                                        onCollapseAll={handleAnnotationCollapseAll}
+                                        onExpandAll={handleAnnotationExpandAll}
+                                    />
+                                    <Box sx={{ 
+                                        border: '1px solid #DADCE0', 
+                                        borderRadius: '12px', 
+                                        overflow: 'hidden', 
+                                        backgroundColor: '#FFFFFF' 
+                                    }}>
+                                        {annotationTab}
+                                    </Box>
+                                </>
+                            );
+                        })()}
+                    </CustomTabPanel>
+                    <CustomTabPanel value={tabValue} index={6}>
+                        {insightsTab}
                     </CustomTabPanel>
             </div>
           </div>
@@ -606,7 +952,10 @@ const tabProps = (index: number)  => {
           isCalledFromDataProducts={true}
           dataProductsDescription={selectedDataProductDetails?.entrySource?.description || ''}
           assetCounts={selectedDataProduct.assetCount || 0}
-          accessGroups={Object.values(accessGroups) || []}
+          accessGroups={Object.entries(accessGroups)
+            .map(([key, value]) => ({ id: key, ...(typeof value === 'object' ? value : {}) }))
+            .filter(group => !requestedGroupIds.has(group.id))
+          }
         />)}
 
         {/* Notification Bar */}
@@ -659,56 +1008,73 @@ const tabProps = (index: number)  => {
         />
       </Box>
     </div>
-    </div>
   ):(
-    <div style={{display: "flex", flexDirection: "column", padding: "0px 0", background:"#FFFFFF", height: "100vh", overflow: "hidden" }}>
+    <div style={{display: "flex", flexDirection: "column", padding: "0px 0", background:"#F7F9F9", height: "100vh", overflow: "hidden" }}>
+      {/* 1. Unscrolled Sticky Header Skeleton (Back Button) */}
+      <div style={{ padding: "16px 20px 8px 20px", display: "flex", alignItems: "center", gap: "8px" }}>
+        <Skeleton variant="circular" width={24} height={24} />
+        <Skeleton variant="text" width={150} height={24} />
+      </div>
+
       <Box sx={{ padding: "0px 20px", display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
-        {/* Row 1: Title Bar Skeleton */}
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '20px',
-          padding: '20px 0px 0px 0px'
+        
+        {/* 2. Recreated Data Product Card Layout Skeleton */}
+        <div style={{
+            position: "relative",
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            padding: "24px",
+            gap: "20px",
+            background: "linear-gradient(88.29deg, #F6F7FF 0%, #F6FFFC 105.88%)",
+            borderRadius: "16px",
+            width: "100%",
+            border: "1px solid #E2E8F0",
+            boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.04)"
         }}>
-          <Skeleton variant="circular" width={32} height={32} sx={{ flexShrink: 0 }} />
-          <Skeleton variant="rounded" width={48} height={48} sx={{ borderRadius: '8px', flexShrink: 0 }} />
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-              <Skeleton variant="text" width={300} height={36} />
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Skeleton variant="rounded" width={120} height={22} sx={{ borderRadius: '8px' }} />
-                <Skeleton variant="rounded" width={55} height={20} sx={{ borderRadius: '8px' }} />
-              </Box>
+            {/* Top Row: Icon + Title */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%' }}>
+              <Skeleton variant="rounded" width={48} height={48} sx={{ borderRadius: '8px', flexShrink: 0 }} />
+              <Skeleton variant="text" width={350} height={40} />
             </Box>
-          </Box>
-        </Box>
 
-        {/* Row 2: Description Skeleton */}
-        <Box sx={{ padding: '20px 0px 0px 0px' }}>
-          <Skeleton variant="text" width="80%" height={20} />
-          <Skeleton variant="text" width="50%" height={20} />
-        </Box>
+            {/* Middle Row: Request Access Button */}
+            <Skeleton 
+              variant="rounded" 
+              width={160} 
+              height={40} 
+              sx={{ 
+                borderRadius: '100px',
+                position: 'absolute', 
+                top: '24px', 
+                right: '24px' 
+              }} 
+            />
 
-        {/* Row 3: Request Access Button Skeleton */}
-        <Box sx={{ padding: '20px 0px 0px 0px' }}>
-          <Skeleton variant="rounded" width={164} height={40} sx={{ borderRadius: '100px' }} />
-        </Box>
+            {/* Bottom Row: Description text block */}
+            <Box sx={{ width: '100%' }}>
+              <Skeleton variant="text" width="80%" height={20} />
+              <Skeleton variant="text" width="60%" height={20} />
+            </Box>
+        </div>
 
-        {/* Row 4: Tab Bar Skeleton */}
+        {/* 3. Navigation Tab Bar Skeleton */}
         <Box sx={{
           display: 'flex',
-          gap: '24px',
-          paddingBottom: '12px',
+          gap: '32px',
+          paddingTop: '12px',
           borderBottom: '1px solid #E0E0E0'
         }}>
-          <Skeleton variant="text" width={80} height={20} />
-          <Skeleton variant="text" width={50} height={20} />
-          <Skeleton variant="text" width={170} height={20} />
-          <Skeleton variant="text" width={65} height={20} />
-          <Skeleton variant="text" width={55} height={20} />
+          <Skeleton variant="text" width={90} height={30} />
+          <Skeleton variant="text" width={70} height={30} />
+          <Skeleton variant="text" width={210} height={30} />
+          <Skeleton variant="text" width={90} height={30} />
+          <Skeleton variant="text" width={80} height={30} />
         </Box>
 
-        {/* Row 6: Body Skeleton */}
+        {/* 4. Tab Content Body Skeleton */}
         <Box sx={{ paddingTop: '20px', flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: '2rem' }}>
           <Skeleton variant="rounded" width="100%" height={400} sx={{ borderRadius: '12px' }} />
         </Box>

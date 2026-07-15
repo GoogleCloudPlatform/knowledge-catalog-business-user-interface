@@ -25,6 +25,8 @@ export interface GlossaryItem {
   entryType?: string;
   aspects?: Record<string, any>;
   linkedAssets?: any[];
+  // Column-level link paths (e.g. ["Schema.salary"]) from lookupEntryLinks
+  linkedPaths?: string[];
   // Structure
   children?: GlossaryItem[];
   relations?: GlossaryRelation[];

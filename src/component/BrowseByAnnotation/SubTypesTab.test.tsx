@@ -55,7 +55,7 @@ describe('SubTypesTab', () => {
     it('should render empty state when no items are provided', () => {
       render(<SubTypesTab {...defaultProps} items={[]} />);
 
-      expect(screen.getByText('No sub types available')).toBeInTheDocument();
+      expect(screen.getByText('No Sub Types Available.')).toBeInTheDocument();
     });
 
     it('should render empty state when filter yields no results', async () => {
@@ -70,7 +70,7 @@ describe('SubTypesTab', () => {
       await user.click(nameOption);
       await user.type(searchInput, 'nonexistent{Enter}');
 
-      expect(screen.getByText('No sub types match the filter criteria')).toBeInTheDocument();
+      expect(screen.getByText('No sub types match the filter criteria.')).toBeInTheDocument();
     });
 
     it('should display correct asset count labels', () => {
@@ -88,19 +88,6 @@ describe('SubTypesTab', () => {
       expect(images.length).toBe(mockItems.length);
     });
 
-    it('should display sort order icon correctly for asc order', () => {
-      render(<SubTypesTab {...defaultProps} sortOrder="asc" />);
-
-      const sortToggle = screen.getByTestId('sort-order-toggle');
-      expect(sortToggle).toBeInTheDocument();
-    });
-
-    it('should display sort order icon correctly for desc order', () => {
-      render(<SubTypesTab {...defaultProps} sortOrder="desc" />);
-
-      const sortToggle = screen.getByTestId('sort-order-toggle');
-      expect(sortToggle).toBeInTheDocument();
-    });
   });
 
   describe('search functionality', () => {
@@ -175,10 +162,10 @@ describe('SubTypesTab', () => {
       const searchInput = screen.getByPlaceholderText('Filter Sub Types');
       await user.click(searchInput);
 
-      // Should show filter field options
+      // Should show text-mode filter field options (dropdown-only properties are hidden in search bar)
       expect(screen.getByRole('menuitem', { name: 'Name' })).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: 'Description' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Type' })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: 'Type' })).not.toBeInTheDocument();
     });
   });
 
@@ -199,18 +186,6 @@ describe('SubTypesTab', () => {
       render(<SubTypesTab {...defaultProps} sortBy="type" />);
 
       expect(screen.getByText('Type')).toBeInTheDocument();
-    });
-
-    it('should call onSortOrderToggle when sort order button is clicked', async () => {
-      const user = userEvent.setup();
-      const onSortOrderToggle = vi.fn();
-
-      render(<SubTypesTab {...defaultProps} onSortOrderToggle={onSortOrderToggle} />);
-
-      const sortOrderButton = screen.getByTestId('sort-order-toggle');
-      await user.click(sortOrderButton);
-
-      expect(onSortOrderToggle).toHaveBeenCalledTimes(1);
     });
 
     it('should open sort menu when sort button is clicked', async () => {
@@ -1106,11 +1081,15 @@ describe('SubTypesTab', () => {
       expect(searchInput.tagName).toBe('INPUT');
     });
 
-    it('should have clickable sort controls', () => {
+    it('should have clickable sort controls', async () => {
+      const user = userEvent.setup();
       render(<SubTypesTab {...defaultProps} />);
 
-      expect(screen.getByTestId('sort-order-toggle')).toBeInTheDocument();
-      expect(screen.getByText('Name')).toBeInTheDocument();
+      const sortByButton = screen.getByText('Name');
+      expect(sortByButton).toBeInTheDocument();
+
+      await user.click(sortByButton);
+      expect(screen.getByRole('menuitem', { name: 'Name' })).toBeInTheDocument();
     });
 
     it('should have proper menu items in sort dropdown', async () => {

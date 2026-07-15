@@ -79,7 +79,7 @@
   height: 5.45rem;
   object-fit: contain;
   flex: 0 0 auto;
-  fill: #0E4DCA;
+  fill: #022FCD;
 }
 
 .logo-text-container {
@@ -96,7 +96,7 @@
   font-weight: 700;
   font-size: 2.1875rem; /* 19px */
   line-height: 1.265em;
-  color: #0E4DCA;
+  color: #022FCD;
   text-align: left;
   flex: 0 0 auto;
 }
@@ -107,7 +107,7 @@
   font-size: 1.75rem; /* 12px */
   line-height: 1.265em;
   letter-spacing: 0.03em; /* 3% */
-  color: #0E4DCA;
+  color: #022FCD;
   text-align: left;
   flex: 0 0 auto;
 }
@@ -124,7 +124,7 @@
   font-weight: 700;
   font-size: 1.265rem; /* 20.23px */
   line-height: 1.213;
-  color: #0E4DCA;
+  color: #022FCD;
   text-align: left;
   vertical-align: middle;
   flex: 1 1 auto;

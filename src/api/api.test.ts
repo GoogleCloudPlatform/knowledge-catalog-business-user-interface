@@ -8,6 +8,17 @@ import type { AxiosResponseHeaders } from 'axios';
 vi.mock('axios');
 const mockedAxios = vi.mocked(axios);
 
+// Ensure axios.defaults.headers.common exists for token storage
+if (!axios.defaults) {
+  (axios as unknown as { defaults: Record<string, unknown> }).defaults = {};
+}
+if (!axios.defaults.headers) {
+  (axios as unknown as { defaults: { headers: Record<string, unknown> } }).defaults.headers = {};
+}
+if (!axios.defaults.headers.common) {
+  (axios as unknown as { defaults: { headers: { common: Record<string, unknown> } } }).defaults.headers.common = {};
+}
+
 // Mock localStorage
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -47,6 +58,7 @@ describe('Api', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorageMock.clear();
+    delete (axios.defaults.headers.common as Record<string, unknown>)['Authorization'];
   });
 
   afterEach(() => {
@@ -60,8 +72,8 @@ describe('Api', () => {
   });
 
   describe('headers', () => {
-    it('should return headers with token from localStorage', async () => {
-      localStorageMock.setItem('token', 'test-token-123');
+    it('should return headers with token from axios defaults', async () => {
+      axios.defaults.headers.common['Authorization'] = 'test-token-123';
       const headers = await Api.headers();
 
       expect(headers).toEqual({
@@ -70,7 +82,7 @@ describe('Api', () => {
       });
     });
 
-    it('should return headers with empty token when not in localStorage', async () => {
+    it('should return headers with empty token when not in axios defaults', async () => {
       const headers = await Api.headers();
 
       expect(headers).toEqual({
@@ -128,7 +140,7 @@ describe('Api', () => {
   });
 
   describe('HTTP methods', () => {
-    const mockResponse: HttpResponse<any> = {
+    const mockResponse: HttpResponse<Record<string, unknown>> = {
       data: { message: 'success' },
       status: 200,
       statusText: 'OK',
@@ -202,7 +214,7 @@ describe('Api', () => {
 
   describe('xhr', () => {
     beforeEach(() => {
-      localStorageMock.setItem('token', 'auth-token');
+      axios.defaults.headers.common['Authorization'] = 'auth-token';
     });
 
     it('should make a GET request with encoded URL params', async () => {
@@ -446,8 +458,8 @@ describe('Api', () => {
 
         await Api.xhr('/test', null, 'GET');
 
-        const callArgs = mockedAxios.mock.calls[0][0] as any;
-        expect(callArgs.validateStatus()).toBe(true);
+        const callArgs = mockedAxios.mock.calls[0][0] as unknown as Record<string, unknown>;
+        expect((callArgs.validateStatus as () => boolean)()).toBe(true);
       });
 
       it('should always return true for validateStatus in arraybuffer request', async () => {
@@ -462,8 +474,8 @@ describe('Api', () => {
 
         await Api.xhr('/download', { option: { content_type: 'excel' } }, 'POST');
 
-        const callArgs = mockedAxios.mock.calls[0][0] as any;
-        expect(callArgs.validateStatus()).toBe(true);
+        const callArgs = mockedAxios.mock.calls[0][0] as unknown as Record<string, unknown>;
+        expect((callArgs.validateStatus as () => boolean)()).toBe(true);
       });
     });
 
@@ -519,7 +531,7 @@ describe('Api', () => {
           url: '/api/v1/test?id=123',
         }));
         // Verify data is not set (because params was set to null)
-        const callArgs = mockedAxios.mock.calls[0][0] as any;
+        const callArgs = mockedAxios.mock.calls[0][0] as unknown as Record<string, unknown>;
         expect(callArgs.data).toBeUndefined();
       });
     });
@@ -527,7 +539,7 @@ describe('Api', () => {
 
   describe('integration tests', () => {
     it('should complete a full GET request flow', async () => {
-      localStorageMock.setItem('token', 'integration-token');
+      axios.defaults.headers.common['Authorization'] = 'integration-token';
       const mockResponse = {
         data: { users: [{ id: 1, name: 'John' }] },
         status: 200,
@@ -551,7 +563,7 @@ describe('Api', () => {
     });
 
     it('should complete a full POST request flow', async () => {
-      localStorageMock.setItem('token', 'integration-token');
+      axios.defaults.headers.common['Authorization'] = 'integration-token';
       const mockResponse = {
         data: { id: 1, name: 'New User' },
         status: 201,
@@ -572,7 +584,7 @@ describe('Api', () => {
     });
 
     it('should complete a full PUT request flow', async () => {
-      localStorageMock.setItem('token', 'integration-token');
+      axios.defaults.headers.common['Authorization'] = 'integration-token';
       const mockResponse = {
         data: { id: 1, name: 'Updated User' },
         status: 200,
@@ -588,7 +600,7 @@ describe('Api', () => {
     });
 
     it('should complete a full DELETE request flow', async () => {
-      localStorageMock.setItem('token', 'integration-token');
+      axios.defaults.headers.common['Authorization'] = 'integration-token';
       const mockResponse = {
         data: null,
         status: 204,

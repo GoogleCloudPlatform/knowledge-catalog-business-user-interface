@@ -1,11 +1,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios, { AxiosError } from 'axios';
 
-const getProjectNumber = (projectId: string) => {
-  let session = localStorage.getItem('sessionUserData');
-  let appConfig = session ? JSON.parse(session)?.appConfig : null;
-  
-  let projects:any[] = appConfig.projects;
+const getProjectNumber = (projectId: string, appConfig: any) => {
+  let projects:any[] = appConfig?.projects ?? [];
   let projectName:string = projects.find((p) => p.projectId === projectId)?.name || '';
   return projectName.split('/').length > 0 ? projectName.split('/')[1] : '';
 }
@@ -41,7 +38,7 @@ export const fetchDataProductsList = createAsyncThunk('dataProducts/fetchDataPro
   }
 });
 
-export const getDataProductDetails = createAsyncThunk('dataProducts/getDataProductDetails', async (requestData: any , { rejectWithValue }) => {
+export const getDataProductDetails = createAsyncThunk('dataProducts/getDataProductDetails', async (requestData: any , { rejectWithValue, getState }) => {
   // If the requestData is empty, we are returning an empty list.
   if (!requestData) {
     return [];
@@ -53,7 +50,8 @@ export const getDataProductDetails = createAsyncThunk('dataProducts/getDataProdu
     
     const project = requestData.dataProductId.split('/')[1];
     const location = requestData.dataProductId.split('/')[3];
-    const finalEntryName = `projects/${project}/locations/${location}/entryGroups/@dataplex/entries/projects/${getProjectNumber(project)}/locations/${location}/dataProducts/${requestData.dataProductId.split('/')[5]}`;
+    const appConfig = (getState() as any).user.userData?.appConfig;
+    const finalEntryName = `projects/${project}/locations/${location}/entryGroups/@dataplex/entries/projects/${getProjectNumber(project, appConfig)}/locations/${location}/dataProducts/${requestData.dataProductId.split('/')[5]}`;
     const lookupUrl = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:lookupEntry`;
 
     const response = await axios.get(lookupUrl, {

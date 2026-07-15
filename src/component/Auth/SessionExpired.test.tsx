@@ -59,7 +59,7 @@ describe('SessionExpired', () => {
           'Your session has expired. Please sign in again to continue using the application.'
         )
       ).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /sign in again/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^sign in$/i })).toBeInTheDocument();
     });
 
     it('should render footer text', () => {
@@ -83,11 +83,11 @@ describe('SessionExpired', () => {
       expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
     });
 
-    it('should render both Sign In Again and Try Again buttons when onRetry is provided', () => {
+    it('should render both Sign In and Try Again buttons when onRetry is provided', () => {
       const onRetry = vi.fn();
       renderWithStore(<SessionExpired onRetry={onRetry} />);
 
-      expect(screen.getByRole('button', { name: /sign in again/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^sign in$/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
     });
   });
@@ -177,37 +177,36 @@ describe('SessionExpired', () => {
   });
 
   describe('getIcon function - renders correct icon based on reason', () => {
-    it('should render ReportProblem icon for session_expired reason', () => {
+    it('should render report icon for session_expired reason', () => {
       renderWithStore(<SessionExpired reason="session_expired" />);
 
-      // Check that the avatar container exists (icon is inside avatar)
-      const avatar = document.querySelector('.MuiAvatar-root');
-      expect(avatar).toBeInTheDocument();
-
-      // Check for the ReportProblem icon by its test id or svg
-      const icon = document.querySelector('[data-testid="ReportProblemIcon"]');
+      const icon = document.querySelector('.material-symbols-outlined');
       expect(icon).toBeInTheDocument();
+      expect(icon).toHaveTextContent('report');
     });
 
-    it('should render AccessTime icon for token_expired reason', () => {
+    it('should render history_2 icon for token_expired reason', () => {
       renderWithStore(<SessionExpired reason="token_expired" />);
 
-      const icon = document.querySelector('[data-testid="AccessTimeIcon"]');
+      const icon = document.querySelector('.material-symbols-outlined');
       expect(icon).toBeInTheDocument();
+      expect(icon).toHaveTextContent('history_2');
     });
 
-    it('should render GppBad icon for unauthorized reason', () => {
+    it('should render gpp_bad icon for unauthorized reason', () => {
       renderWithStore(<SessionExpired reason="unauthorized" />);
 
-      const icon = document.querySelector('[data-testid="GppBadIcon"]');
+      const icon = document.querySelector('.material-symbols-outlined');
       expect(icon).toBeInTheDocument();
+      expect(icon).toHaveTextContent('gpp_bad');
     });
 
-    it('should render ReportProblem icon when no reason is provided (default)', () => {
+    it('should render report icon when no reason is provided (default)', () => {
       renderWithStore(<SessionExpired />);
 
-      const icon = document.querySelector('[data-testid="ReportProblemIcon"]');
+      const icon = document.querySelector('.material-symbols-outlined');
       expect(icon).toBeInTheDocument();
+      expect(icon).toHaveTextContent('report');
     });
   });
 
@@ -216,7 +215,7 @@ describe('SessionExpired', () => {
       const user = userEvent.setup();
       renderWithStore(<SessionExpired />);
 
-      const signInButton = screen.getByRole('button', { name: /sign in again/i });
+      const signInButton = screen.getByRole('button', { name: /^sign in$/i });
       await user.click(signInButton);
 
       expect(mockLogout).toHaveBeenCalledTimes(1);
@@ -232,7 +231,7 @@ describe('SessionExpired', () => {
       const user = userEvent.setup();
       renderWithStore(<SessionExpired />);
 
-      const signInButton = screen.getByRole('button', { name: /sign in again/i });
+      const signInButton = screen.getByRole('button', { name: /^sign in$/i });
       await user.click(signInButton);
 
       expect(mockLogout).toHaveBeenCalledTimes(1);
@@ -246,7 +245,7 @@ describe('SessionExpired', () => {
       const user = userEvent.setup();
       renderWithStore(<SessionExpired reason="token_expired" />);
 
-      const signInButton = screen.getByRole('button', { name: /sign in again/i });
+      const signInButton = screen.getByRole('button', { name: /^sign in$/i });
       await user.click(signInButton);
 
       await waitFor(() => {
@@ -303,7 +302,7 @@ describe('SessionExpired', () => {
 
       expect(screen.getByRole('heading', { name: 'Access Denied' })).toBeInTheDocument();
       expect(screen.getByText(customMessage)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /sign in again/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^sign in$/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
     });
 
@@ -341,7 +340,7 @@ describe('SessionExpired', () => {
       const user = userEvent.setup();
       renderWithStore(<SessionExpired />);
 
-      const signInButton = screen.getByRole('button', { name: /sign in again/i });
+      const signInButton = screen.getByRole('button', { name: /^sign in$/i });
 
       await user.click(signInButton);
       await user.click(signInButton);
@@ -369,7 +368,7 @@ describe('SessionExpired', () => {
       const user = userEvent.setup();
       renderWithStore(<SessionExpired onRetry={onRetry} />);
 
-      const signInButton = screen.getByRole('button', { name: /sign in again/i });
+      const signInButton = screen.getByRole('button', { name: /^sign in$/i });
       const tryAgainButton = screen.getByRole('button', { name: /try again/i });
 
       await user.click(tryAgainButton);
@@ -432,7 +431,7 @@ describe('SessionExpired', () => {
       const onRetry = vi.fn();
       renderWithStore(<SessionExpired onRetry={onRetry} />);
 
-      expect(screen.getByRole('button', { name: /sign in again/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^sign in$/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
     });
 
@@ -440,7 +439,7 @@ describe('SessionExpired', () => {
       const onRetry = vi.fn();
       renderWithStore(<SessionExpired onRetry={onRetry} />);
 
-      const signInButton = screen.getByRole('button', { name: /sign in again/i });
+      const signInButton = screen.getByRole('button', { name: /^sign in$/i });
       const tryAgainButton = screen.getByRole('button', { name: /try again/i });
 
       expect(signInButton).not.toBeDisabled();

@@ -24,11 +24,15 @@ import RepositoriesIcon from '../assets/svg/repositories_icon.svg';
 import GenericIcon from '../assets/svg/generic_icon.svg';
 import SchedulerIcon from '../assets/svg/scheduler_icon.svg';
 import TableIcon from '../assets/svg/table_icon.svg';
+import BigQueryProductIcon from '../assets/svg/BigQuery.svg';
+
 
 export const getAssetIcon = (assetName: string) => {
   switch (assetName) {
     case 'Bucket':
       return BucketIcon;
+    case 'Big Query Product':
+        return BigQueryProductIcon;
     case 'Cluster':
       return ClusterIcon;
     case 'Code asset':

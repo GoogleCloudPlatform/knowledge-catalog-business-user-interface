@@ -5,6 +5,18 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import FilterAnnotationsMultiSelect from './FilterAnnotationsMultiSelect';
 
+// react-virtuoso virtualizes its list and renders nothing in JSDOM (no layout),
+// so mock it to render all items synchronously for assertions.
+vi.mock('react-virtuoso', () => ({
+  Virtuoso: ({ totalCount, itemContent }: { totalCount: number; itemContent: (index: number) => React.ReactNode }) => (
+    <div data-testid="virtuoso-mock">
+      {Array.from({ length: totalCount }).map((_, index) => (
+        <div key={index}>{itemContent(index)}</div>
+      ))}
+    </div>
+  ),
+}));
+
 const createMockStore = () =>
   configureStore({
     reducer: {
@@ -224,6 +236,7 @@ describe('FilterAnnotationsMultiSelect', () => {
           onChange={mockOnChange}
           onClose={mockOnClose}
           isOpen={true}
+          filterType="Aspects" // Add this line to satisfy the new condition
         />
       );
 
@@ -275,8 +288,10 @@ describe('FilterAnnotationsMultiSelect', () => {
       const searchInput = screen.getByPlaceholderText('Search for annotations');
       await user.type(searchInput, 'Option A');
 
-      expect(screen.getByText('Option A')).toBeInTheDocument();
-      expect(screen.queryByText('Option B')).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Option A')).toBeInTheDocument();
+        expect(screen.queryByText('Option B')).not.toBeInTheDocument();
+      });
     });
 
     it('should show "No annotations found" when search has no results', async () => {
@@ -295,7 +310,9 @@ describe('FilterAnnotationsMultiSelect', () => {
       const searchInput = screen.getByPlaceholderText('Search for annotations');
       await user.type(searchInput, 'NonExistent');
 
-      expect(screen.getByText('No annotations found')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('No annotations found')).toBeInTheDocument();
+      });
     });
 
     it('should be case insensitive when searching', async () => {
@@ -314,7 +331,9 @@ describe('FilterAnnotationsMultiSelect', () => {
       const searchInput = screen.getByPlaceholderText('Search for annotations');
       await user.type(searchInput, 'option a');
 
-      expect(screen.getByText('Option A')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Option A')).toBeInTheDocument();
+      });
     });
 
     it('should update search term on input change', () => {
@@ -351,7 +370,9 @@ describe('FilterAnnotationsMultiSelect', () => {
       const searchInput = screen.getByPlaceholderText('Search for tags');
       await user.type(searchInput, 'xyz');
 
-      expect(screen.getByText('No tags found')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('No tags found')).toBeInTheDocument();
+      });
     });
   });
 
@@ -791,6 +812,7 @@ describe('FilterAnnotationsMultiSelect', () => {
           onChange={mockOnChange}
           onClose={mockOnClose}
           isOpen={true}
+          filterType="Aspects" // Add this line here as well
         />
       );
 

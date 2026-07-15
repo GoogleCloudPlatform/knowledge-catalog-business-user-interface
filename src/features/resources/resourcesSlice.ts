@@ -3,19 +3,16 @@ import { URLS } from '../../constants/urls';
 import axios, { AxiosError } from 'axios';
 //import mockSearchData from '../../mocks/mockSearchData';
 
-const getAspectName = (name: string) => {
-  let session = localStorage.getItem('sessionUserData');
-  let appConfig = session ? JSON.parse(session)?.appConfig : null;
-  
-  let resource:string[] = appConfig.aspects.find((a:any) => a.dataplexEntry?.entrySource?.displayName === name)?.dataplexEntry?.entrySource?.resource.split('/') ?? [];
-  let projects:any[] = appConfig.projects;
-  let projectId:string = resource.length == 6 
+const getAspectName = (name: string, appConfig: any) => {
+  let resource:string[] = appConfig?.aspects?.find((a:any) => a.dataplexEntry?.entrySource?.displayName === name)?.dataplexEntry?.entrySource?.resource.split('/') ?? [];
+  let projects:any[] = appConfig?.projects ?? [];
+  let projectId:string = resource.length == 6
   ? projects.find((p) => p.name === `${resource[0]}/${resource[1]}`)?.projectId
   : '';
   return (projectId.length > 1 && resource.length == 6) ? `${projectId}.${resource[3]}.${resource[5]}` : resource.toString();
 }
 // Thunk for searching resources based on a search term
-export const searchResourcesByTerm = createAsyncThunk('resources/searchResourcesByTerm', async (requestData: any , { rejectWithValue }) => {
+export const searchResourcesByTerm = createAsyncThunk('resources/searchResourcesByTerm', async (requestData: any , { rejectWithValue, getState }) => {
   // If the search term is empty, we are returning an empty list.
   // if (!requestData.term) {
   //   return [];
@@ -23,6 +20,7 @@ export const searchResourcesByTerm = createAsyncThunk('resources/searchResources
 
   // If the term is not empty, we will perform a search.
   try {
+    const appConfig = (getState() as any).user.userData?.appConfig;
     let requestResourceData = {};
     axios.defaults.headers.common['Authorization'] = requestData.id_token ? `Bearer ${requestData.id_token}` : '';
     if(requestData.requestResourceData) {
@@ -50,7 +48,7 @@ export const searchResourcesByTerm = createAsyncThunk('resources/searchResources
         requestData.filters.forEach((filter: any) => {
           if(filter.type === 'aspectType') {
             //let aspect = filter.name.replace(' ', '-');
-            const name = getAspectName(filter.name);
+            const name = getAspectName(filter.name, appConfig);
             if(filter.subAnnotationData && filter.subAnnotationData.length > 0) {
               filter.subAnnotationData.forEach((subAspect:any) => {
                 let subAspectName = `${name}.${subAspect.fieldName}`;
@@ -165,15 +163,16 @@ export const searchResourcesByTerm = createAsyncThunk('resources/searchResources
   }
 });
 
-export const browseResourcesByAspects = createAsyncThunk('resources/browseResourcesByAspects', async (requestData: any , { rejectWithValue, signal }) => {
+export const browseResourcesByAspects = createAsyncThunk('resources/browseResourcesByAspects', async (requestData: any , { rejectWithValue, signal, getState }) => {
 
   // If the term is not empty, we will perform a search.
   try {
     // search from your API endpoint
     axios.defaults.headers.common['Authorization'] = requestData.id_token ? `Bearer ${requestData.id_token}` : '';
+    const appConfig = (getState() as any).user.userData?.appConfig;
     let searchString = '';
     if(requestData.annotationName && requestData.annotationName != '') {
-      let aspectType = getAspectName(requestData.annotationName);
+      let aspectType = getAspectName(requestData.annotationName, appConfig);
 
       // let subAspect = '';
       // if(requestData.subAnnotationName && requestData.subAnnotationName != '') {

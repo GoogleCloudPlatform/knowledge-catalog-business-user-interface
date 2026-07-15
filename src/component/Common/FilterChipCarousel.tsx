@@ -144,7 +144,7 @@ const FilterChipCarousel: React.FC<FilterChipCarouselProps> = ({
                       ? (mode === 'dark' ? '#004a77' : '#E7F0FE')
                       : 'transparent',
                     color: isSelected
-                      ? (mode === 'dark' ? '#8ab4f8' : '#0E4DCA')
+                      ? (mode === 'dark' ? '#8ab4f8' : '#022FCD')
                       : (mode === 'dark' ? '#e3e3e3' : '#1F1F1F'),
                     border: isSelected ? 'none' : `1px solid ${mode === 'dark' ? '#3c4043' : '#DADCE0'}`,
                     height: '32px',

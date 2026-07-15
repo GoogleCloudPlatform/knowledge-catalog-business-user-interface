@@ -116,6 +116,7 @@ const ASPECT_L1_ICONS: Record<string, string> = {
 // L2 field name → icon path mapping
 const ASPECT_L2_ICONS: Record<string, string> = {
   'description': AspectDescriptionIcon,
+  'accessGroups': AspectNumRowAccessPoliciesIcon,
   'fields': AspectFieldsIcon,
   'numColumnDataPolicies': AspectNumColumnDataPoliciesIcon,
   'numRowAccessPolicies': AspectNumRowAccessPoliciesIcon,

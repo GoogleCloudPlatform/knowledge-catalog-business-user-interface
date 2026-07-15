@@ -1,3 +1,5 @@
+import localforage from 'localforage';
+
 // Redux state persistence utilities
 // Define the state structure locally to avoid circular imports
 type PersistedState = {
@@ -87,5 +89,41 @@ export const clearPersistedState = () => {
     });
   } catch (error) {
     console.warn('Failed to clear persisted state:', error);
+  }
+};
+
+// --- User state persistence via IndexedDB (localforage) ---
+// Token is stored in IndexedDB instead of localStorage so it is not
+// trivially visible in DevTools → Local Storage.
+
+const userStorage = localforage.createInstance({
+  name: 'data-discovery-studio',
+  storeName: 'user',
+  driver: [localforage.INDEXEDDB, localforage.WEBSQL],
+});
+
+// Migration: remove stale redux-persist entry from localStorage
+try { localStorage.removeItem('persist:user'); } catch { /* ignore */ }
+
+export const saveUserState = (userState: any) => {
+  userStorage.setItem('userState', userState).catch((err) =>
+    console.warn('Failed to save user state to IndexedDB:', err)
+  );
+};
+
+export const loadUserState = async (): Promise<any> => {
+  try {
+    return await userStorage.getItem('userState');
+  } catch (err) {
+    console.warn('Failed to load user state from IndexedDB:', err);
+    return null;
+  }
+};
+
+export const clearUserState = async () => {
+  try {
+    await userStorage.removeItem('userState');
+  } catch (err) {
+    console.warn('Failed to clear user state from IndexedDB:', err);
   }
 };

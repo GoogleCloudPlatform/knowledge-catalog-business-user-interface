@@ -61,7 +61,7 @@ const FilterChips:React.FC<FilterChipsProps> = ({selectedFilters, getCount, hand
             display: 'flex',
             alignItems: 'center',
             backgroundColor: '#E7F0FE',
-            color: '#0E4DCA',
+            color: '#022FCD',
             height: '32px',
             border: 'none',
             whiteSpace: 'nowrap'      

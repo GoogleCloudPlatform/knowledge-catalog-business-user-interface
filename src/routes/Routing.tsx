@@ -15,7 +15,6 @@ import SearchPage from '../component/SearchPage/SearchPage';
 import { Email, Info } from '@mui/icons-material';
 import { Button } from '@mui/material';
 import ViewDetails from '../component/ViewDetails/ViewDetails';
-import AdminPanel from '../component/AdminPanel/AdminPanel';
 import { useAuth } from '../auth/AuthProvider';
 import { ProtectedRoute } from '../auth/ProtectedRoute';
 import { RedirectGuard } from '../auth/RedirectGuard';
@@ -25,6 +24,7 @@ import UserGuide from '../component/Guide/UserGuide';
 import Glossaries from '../component/Glossaries/Glossaries';
 import DataProducts from '../component/DataProducts/DataProducts';
 import DataProductsDetailView from '../component/DataProducts/DataProductsDetailView';
+import HomeComingSoon from '../component/Home/HomeComingSoon';
 
 const Routing = () => {
   // state to hold the user object
@@ -86,8 +86,20 @@ const Routing = () => {
         element={
           <ProtectedRoute>
             <SessionExpirationWrapper>
-              <Layout searchBar={false}>
+              <Layout>
                 <Home />
+              </Layout>
+            </SessionExpirationWrapper>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/home-page"
+        element={
+          <ProtectedRoute>
+            <SessionExpirationWrapper>
+              <Layout>
+                <HomeComingSoon />
               </Layout>
             </SessionExpirationWrapper>
           </ProtectedRoute>
@@ -103,7 +115,7 @@ const Routing = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     minHeight: '95vh',
-                    backgroundColor: '#F8FAFD',
+                    backgroundColor: '#F4F5FA',
                   }}>
                     <SearchPage />
                   </div>
@@ -142,23 +154,11 @@ const Routing = () => {
         }
       />
       <Route
-        path="/admin-panel"
-        element={
-          <ProtectedRoute>
-            <SessionExpirationWrapper>
-              <Layout searchBar={true}>
-                <AdminPanel />
-              </Layout>
-            </SessionExpirationWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/browse-by-annotation"
         element={
           <ProtectedRoute>
             <SessionExpirationWrapper>
-              <Layout searchBar={true}>
+              <Layout>
                 <BrowseByAnnotation />
               </Layout>
             </SessionExpirationWrapper>
@@ -171,7 +171,7 @@ const Routing = () => {
         element={
           <ProtectedRoute>
             <SessionExpirationWrapper>
-              <Layout searchBar={true}>
+              <Layout>
                 <Glossaries />
               </Layout>
             </SessionExpirationWrapper>
@@ -184,7 +184,7 @@ const Routing = () => {
         element={
           <ProtectedRoute>
             <SessionExpirationWrapper>
-              <Layout searchBar={true}>
+              <Layout>
                 <DataProducts />
               </Layout>
             </SessionExpirationWrapper>
@@ -197,7 +197,7 @@ const Routing = () => {
         element={
           <ProtectedRoute>
             <SessionExpirationWrapper>
-              <Layout searchBar={true}>
+              <Layout>
                 <DataProductsDetailView />
               </Layout>
             </SessionExpirationWrapper>
@@ -210,7 +210,7 @@ const Routing = () => {
         element={
           <ProtectedRoute>
             <SessionExpirationWrapper>
-              <Layout searchBar={true}>
+              <Layout>
                 <div style={{
                   width: "90%",
                   maxWidth: "1400px",
@@ -234,26 +234,26 @@ const Routing = () => {
         element={
           <ProtectedRoute>
             <SessionExpirationWrapper>
-              <Layout searchBar={true}>
+              <Layout>
                 <div style={{ padding: '20px', width:"1000px", margin:"100px auto 0",  }}>
                     <div className="logo-container">
                       <img src="/assets/svg/catalog-studio-logo-figma-585de1.svg" alt="CS Studio Logo" className="navbar-logo-img" />
-                      <label style={{fontSize:"24px", fontWeight:800, color:"#0E4DCA"}}>Knowledge Catalog</label>
-                      <label style={{fontSize:"24px", fontWeight:600, color:"#0E4DCA", margin:"0px 3px 0px"}}>|</label>
-                      <label style={{fontSize:"22px", fontWeight:600, color:"#0E4DCA", margin:"0px 3px 0px"}}>Buisness Interface</label>
+                      <label style={{fontSize:"24px", fontWeight:800, color:"#022FCD"}}>Knowledge Catalog</label>
+                      <label style={{fontSize:"24px", fontWeight:600, color:"#022FCD", margin:"0px 3px 0px"}}>|</label>
+                      <label style={{fontSize:"22px", fontWeight:600, color:"#022FCD", margin:"0px 3px 0px"}}>Buisness Interface</label>
                     </div>
                     <h1>For help contact over these email</h1>
                     <div style={{ borderBottom: "1px solid #DADCE0", padding: '0.875rem 0', gap: '0.25rem'}}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
                         <div style={{ flex: '1 1 0', width: '50%' }}>
                           <div style={{ color: "#575757", fontSize: "1.6875rem", fontWeight: "500", fontFamily: '"Google Sans Text",sans-serif' }}>Admin/Support Contact Email</div>
-                          <div style={{ textDecoration:"underline", color: "#0E4DCA", fontSize: "1rem", fontWeight: "600", fontFamily: '"Google Sans Text",sans-serif', marginTop: "0.125rem", textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          <div style={{ textDecoration:"underline", color: "#022FCD", fontSize: "1rem", fontWeight: "600", fontFamily: '"Google Sans Text",sans-serif', marginTop: "0.125rem", textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                             {import.meta.env.VITE_SUPPORT_EMAIL || import.meta.env.VITE_ADMIN_EMAIL}
                           </div>
                         </div>
                         <div style={{ flex: '1 1 0', width: '50%'  }}>
                           <div style={{ color: "#575757", fontSize: "1.6875rem", fontWeight: "500", fontFamily: '"Google Sans Text",sans-serif' }}>Knowledge Catalog Business Interface Support</div>
-                          <div style={{ textDecoration:"underline", color: "#0E4DCA", fontSize: "1rem", fontWeight: "600", fontFamily: '"Google Sans Text",sans-serif', marginTop: "0.125rem", textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          <div style={{ textDecoration:"underline", color: "#022FCD", fontSize: "1rem", fontWeight: "600", fontFamily: '"Google Sans Text",sans-serif', marginTop: "0.125rem", textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                             dataplex-interface-feedback@google.com
                           </div>
                         </div>

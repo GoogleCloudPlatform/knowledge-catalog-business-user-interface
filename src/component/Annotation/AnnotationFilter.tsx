@@ -83,8 +83,7 @@ const AnnotationFilter: React.FC<AnnotationFilterProps> = ({
   const annotationNames = useMemo(() => {
     if (!entry?.aspects) return [];
     const keys = Object.keys(entry.aspects);
-    const number = entry.entryType?.split('/')[1];
-
+    const number = entry.entryType?.split('/')[1] || entry.type || '0';
     const names = keys
       .filter(key => {
         const aspect = entry.aspects[key];
@@ -95,8 +94,10 @@ const AnnotationFilter: React.FC<AnnotationFilterProps> = ({
           && key !== `${number}.global.usage`
           && !key.endsWith('.global.glossary-term-aspect');
       })
-      .map(key => entry.aspects[key].aspectType.split('/').pop())
-      .filter((name): name is string => !!name);
+      .map(key => {
+        const aspectType = entry.aspects[key].aspectType;
+        return aspectType ? aspectType.split('/').pop() : key.split('.').shift();
+      })
 
     return Array.from(new Set(names)).sort();
   }, [entry]);
@@ -141,19 +142,18 @@ const AnnotationFilter: React.FC<AnnotationFilterProps> = ({
     }
 
     const keys = Object.keys(entry.aspects);
-    const number = entry.entryType?.split('/')[1];
+    const number = entry.entryType?.split('/')[1] || entry.type || '0';
     const filteredAspects: any = {};
 
     keys.forEach(key => {
       const aspect = entry.aspects[key];
-      const annotationName = aspect.aspectType.split('/').pop();
-
-      // Include aspect if it matches filter or is not an annotation
+      const aspectType = aspect.aspectType;
+      const annotationName = aspectType ? aspectType.split('/').pop() : key.split('.').shift();
       if (key === `${number}.global.schema` ||
           key === `${number}.global.overview` ||
           key === `${number}.global.contacts` ||
           key === `${number}.global.usage` ||
-          (annotationName && filteredAnnotationNames.includes(annotationName))) {
+          (annotationName && filteredAnnotationNames.includes(annotationName as string))) {
         filteredAspects[key] = aspect;
       }
     });
@@ -165,6 +165,10 @@ const AnnotationFilter: React.FC<AnnotationFilterProps> = ({
   }, [entry, filteredAnnotationNames, activeAnnotationFilters]);
 
   // Update parent component when filtered entry changes
+  React.useEffect(() => {
+    setIsExpanded(false);
+  }, [entry]);
+
   React.useEffect(() => {
     onFilteredEntryChange(filteredEntry);
   }, [filteredEntry, onFilteredEntryChange]);

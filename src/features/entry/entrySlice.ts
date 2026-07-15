@@ -1,6 +1,38 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { URLS } from '../../constants/urls';
 import axios, { AxiosError } from 'axios';
+import type { GlossaryItem } from '../../component/Glossaries/GlossaryDataType';
+
+// The Dataplex Node.js client returns Timestamp fields as { seconds, nanos }
+// when JSON-serialized, while the REST API returns ISO strings. Handle both.
+const toEpochSeconds = (t: any): number => {
+  if (!t) return 0;
+  if (typeof t === 'string') {
+    const ms = new Date(t).getTime();
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
+  }
+  if (typeof t === 'object' && t.seconds !== undefined) {
+    return Number(t.seconds) || 0;
+  }
+  return 0;
+};
+
+const mapTermEntryToGlossaryItem = (entry: any): GlossaryItem => {
+  const src = entry?.entrySource || {};
+  const updateTimeSec = toEpochSeconds(entry?.updateTime ?? src?.updateTime);
+  return {
+    id: entry?.name,
+    type: 'term',
+    displayName: src.displayName || 'Untitled',
+    description: src.description || '',
+    lastModified: updateTimeSec,
+    labels: src.labels
+      ? Object.keys(src.labels).map((k) => `${k}:${src.labels[k]}`)
+      : [],
+    entryType: entry?.entryType,
+    linkedPaths: entry?.linkedPaths || [],
+  };
+};
 
 // createAsyncThunk is used for asynchronous actions.
 // It will automatically dispatch pending, fulfilled, and rejected actions.
@@ -66,6 +98,35 @@ export const fetchLineageEntry = createAsyncThunk('entry/fetchLineageEntry', asy
   }
 });
 
+export const fetchEntryLinks = createAsyncThunk(
+  'entry/fetchEntryLinks',
+  async (requestData: { entryName: string; id_token: string }, { rejectWithValue }) => {
+    try {
+      axios.defaults.headers.common['Authorization'] = requestData.id_token
+        ? `Bearer ${requestData.id_token}` : '';
+
+      const response = await axios.get(
+        URLS.API_URL + URLS.LOOKUP_ENTRY_LINKS + `?entryName=${encodeURIComponent(requestData.entryName)}`
+      );
+
+      // Backend returns { entryLinks: [...], terms: [...dataplexEntries with linkedPaths] }
+      const termEntries: any[] = response.data?.terms || [];
+      return termEntries.map(mapTermEntryToGlossaryItem);
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        if (error.response?.status === 403) {
+          return rejectWithValue({
+            type: 'PERMISSION_DENIED',
+            message: "You don't have access to this resource",
+          });
+        }
+        return rejectWithValue(error.response?.data || error.message);
+      }
+      return rejectWithValue('An unknown error occurred');
+    }
+  }
+);
+
 export const checkEntryAccess = createAsyncThunk(
   'entry/checkEntryAccess',
   async (requestData: { entryName: string; id_token: string }, { rejectWithValue }) => {
@@ -96,6 +157,9 @@ type EntryState = {
   lineageToEntryCopy: boolean;
   history: unknown[]; // Stack to track previous entries
   accessCheckCache: Record<string, { status: 'loading' | 'succeeded' | 'failed'; error?: unknown }>;
+  entryLinks: GlossaryItem[];
+  entryLinksStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
+  entryLinksError: unknown | null;
 };
 
 const initialState: EntryState = {
@@ -108,6 +172,9 @@ const initialState: EntryState = {
   lineageToEntryCopy:false,
   history: [],
   accessCheckCache: {},
+  entryLinks: [],
+  entryLinksStatus: 'idle',
+  entryLinksError: null,
 };
 
 // createSlice generates actions and reducers for a slice of the Redux state.
@@ -148,6 +215,10 @@ export const entrySlice = createSlice({
     builder
       .addCase(fetchEntry.pending, (state) => {
         state.status = 'loading';
+        // Clear prior entry's linked terms so they don't flash for the new entry
+        state.entryLinks = [];
+        state.entryLinksStatus = 'idle';
+        state.entryLinksError = null;
       })
       .addCase(fetchEntry.fulfilled, (state, action) => {
         state.status = 'succeeded';
@@ -181,6 +252,19 @@ export const entrySlice = createSlice({
           state.error = action.payload;
           state.lineageToEntryCopy = false;
         }
+      })
+      .addCase(fetchEntryLinks.pending, (state) => {
+        state.entryLinksStatus = 'loading';
+        state.entryLinksError = null;
+      })
+      .addCase(fetchEntryLinks.fulfilled, (state, action) => {
+        state.entryLinksStatus = 'succeeded';
+        state.entryLinks = action.payload as GlossaryItem[];
+      })
+      .addCase(fetchEntryLinks.rejected, (state, action) => {
+        state.entryLinksStatus = 'failed';
+        state.entryLinksError = action.payload;
+        state.entryLinks = [];
       })
       .addCase(checkEntryAccess.pending, (state, action) => {
         state.accessCheckCache[action.meta.arg.entryName] = { status: 'loading' };

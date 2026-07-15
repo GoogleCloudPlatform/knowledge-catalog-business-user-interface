@@ -134,10 +134,10 @@ describe('Login', () => {
       render(<Login />);
 
       const knowledgeText = screen.getByText('Knowledge');
-      expect(knowledgeText).toHaveStyle({ color: 'rgb(14, 77, 202)' }); // #0E4DCA
+      expect(knowledgeText).toHaveStyle({ color: '#022FCD' }); // #022FCD
 
       const catalogText = screen.getByText('Catalog');
-      expect(catalogText).toHaveStyle({ color: 'rgb(14, 77, 202)' });
+      expect(catalogText).toHaveStyle({ color: '#022FCD' });
     });
   });
 

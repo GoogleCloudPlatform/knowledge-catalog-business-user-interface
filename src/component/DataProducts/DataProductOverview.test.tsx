@@ -487,45 +487,15 @@ describe('DataProductOverviewNew', () => {
       expect(screen.getByText('Documentation')).toBeInTheDocument();
     });
 
-    it('renders Contacts section', () => {
-      renderDataProductOverviewNew();
-      expect(screen.getByText('Contacts')).toBeInTheDocument();
-    });
-
     it('renders Info section', () => {
       renderDataProductOverviewNew();
-      expect(screen.getByText('Timestamps')).toBeInTheDocument();
-    });
-
-    it('renders Usage Metrics section when entryType is set and not data-product', () => {
-      renderDataProductOverviewNew({ entryType: 'table' });
-      expect(screen.getByText('Usage Metrics')).toBeInTheDocument();
-    });
-
-    it('renders Labels section when entryType is set and not data-product', () => {
-      renderDataProductOverviewNew({ entryType: 'table' });
-      expect(screen.getByText('Labels')).toBeInTheDocument();
+      expect(screen.getByText('Info')).toBeInTheDocument();
     });
 
     it('does not render Table Info for non-Tables entry type', () => {
       const datasetEntry = { ...mockEntry, name: 'project/datasets/my-dataset' };
       renderDataProductOverviewNew({ entry: datasetEntry });
       expect(screen.queryByText('Table Info')).not.toBeInTheDocument();
-    });
-
-    it('does not render Usage Metrics for data-product type', () => {
-      renderDataProductOverviewNew({ entry: mockDataProductEntry, entryType: 'data-product' });
-      expect(screen.queryByText('Usage Metrics')).not.toBeInTheDocument();
-    });
-
-    it('does not render Labels for data-product type', () => {
-      renderDataProductOverviewNew({ entry: mockDataProductEntry, entryType: 'data-product' });
-      expect(screen.queryByText('Labels')).not.toBeInTheDocument();
-    });
-
-    it('does not render Last Run Time for data-product type', () => {
-      renderDataProductOverviewNew({ entry: mockDataProductEntry, entryType: 'data-product' });
-      expect(screen.queryByText('Last Run Time')).not.toBeInTheDocument();
     });
   });
 
@@ -716,7 +686,8 @@ describe('DataProductOverviewNew', () => {
   describe('Contacts section', () => {
     it('renders contacts with avatars', () => {
       renderDataProductOverviewNew();
-      expect(screen.getAllByTestId('avatar').length).toBeGreaterThan(0);
+      const initials = screen.getAllByText('J');
+      expect(initials.length).toBeGreaterThan(0);
     });
 
     it('displays contact roles', () => {
@@ -749,7 +720,7 @@ describe('DataProductOverviewNew', () => {
         }
       };
       renderDataProductOverviewNew({ entry: entryWithoutContacts });
-      expect(screen.getByText('No contacts assigned to this asset.')).toBeInTheDocument();
+      expect(screen.getByText('No contacts assigned.')).toBeInTheDocument();
     });
 
     it('handles contact without email format', () => {
@@ -824,7 +795,7 @@ describe('DataProductOverviewNew', () => {
 
     it('displays Last modified', () => {
       renderDataProductOverviewNew();
-      expect(screen.getByText('Last modified')).toBeInTheDocument();
+      expect(screen.getByText('Last Modified')).toBeInTheDocument();
     });
 
     it('formats dates correctly for regular entry', () => {
@@ -844,102 +815,6 @@ describe('DataProductOverviewNew', () => {
       // Should show "-" for missing timestamps
       const dashElements = screen.getAllByText('-');
       expect(dashElements.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('Usage Metrics section', () => {
-    it('displays execution time', () => {
-      renderDataProductOverviewNew({ entryType: 'table' });
-      expect(screen.getByText('Avg Exec Time')).toBeInTheDocument();
-    });
-
-    it('displays total queries', () => {
-      renderDataProductOverviewNew({ entryType: 'table' });
-      expect(screen.getByText('Total Queries')).toBeInTheDocument();
-    });
-
-    it('shows empty state when usage metrics are empty', () => {
-      const entryWithEmptyUsage = {
-        ...mockEntry,
-        aspects: {
-          ...mockEntry.aspects,
-          '123.global.usage': {
-            data: {
-              fields: {}
-            }
-          }
-        }
-      };
-      renderDataProductOverviewNew({ entry: entryWithEmptyUsage, entryType: 'table' });
-      expect(screen.getByText('No usage metrics available for this asset.')).toBeInTheDocument();
-    });
-
-    it('handles usage metrics without refresh time', () => {
-      const entryWithoutRefreshTime = {
-        ...mockEntry,
-        aspects: {
-          ...mockEntry.aspects,
-          '123.global.usage': {
-            data: {
-              fields: {
-                metrics: mockEntry.aspects['123.global.usage'].data.fields.metrics
-              }
-            }
-          }
-        }
-      };
-      renderDataProductOverviewNew({ entry: entryWithoutRefreshTime, entryType: 'table' });
-      expect(screen.getByText('Usage Metrics')).toBeInTheDocument();
-    });
-
-    it('handles missing metrics data gracefully', () => {
-      const entryWithNoMetrics = {
-        ...mockEntry,
-        aspects: {
-          ...mockEntry.aspects,
-          '123.global.usage': {
-            data: {
-              fields: {
-                refreshTime: { stringValue: '2022-01-01T00:00:00Z' }
-              }
-            }
-          }
-        }
-      };
-      renderDataProductOverviewNew({ entry: entryWithNoMetrics, entryType: 'table' });
-      expect(screen.getByText('Usage Metrics')).toBeInTheDocument();
-    });
-  });
-
-  describe('Labels section', () => {
-    it('displays labels as chips', () => {
-      renderDataProductOverviewNew({ entryType: 'table' });
-      expect(screen.getByText('environment: production')).toBeInTheDocument();
-      expect(screen.getByText('team: data-engineering')).toBeInTheDocument();
-    });
-
-    it('displays no labels message when empty', () => {
-      const entryWithoutLabels = {
-        ...mockEntry,
-        entrySource: {
-          ...mockEntry.entrySource,
-          labels: {}
-        }
-      };
-      renderDataProductOverviewNew({ entry: entryWithoutLabels, entryType: 'table' });
-      expect(screen.getByText('No Labels available')).toBeInTheDocument();
-    });
-
-    it('handles missing labels property', () => {
-      const entryWithMissingLabels = {
-        ...mockEntry,
-        entrySource: {
-          ...mockEntry.entrySource,
-          labels: undefined
-        }
-      };
-      renderDataProductOverviewNew({ entry: entryWithMissingLabels, entryType: 'table' });
-      expect(screen.getByText('No Labels available')).toBeInTheDocument();
     });
   });
 
@@ -965,9 +840,9 @@ describe('DataProductOverviewNew', () => {
   });
 
   describe('card sections render', () => {
-    it('Timestamps card is always visible', () => {
+    it('Info card is always visible', () => {
       renderDataProductOverviewNew();
-      expect(screen.getByText('Timestamps')).toBeInTheDocument();
+      expect(screen.getByText('Info')).toBeInTheDocument();
     });
 
     it('Documentation card is always visible', () => {
@@ -994,7 +869,7 @@ describe('DataProductOverviewNew', () => {
         }
       };
       renderDataProductOverviewNew({ entry: entryWithoutContacts });
-      expect(screen.getByText('No contacts assigned to this asset.')).toBeInTheDocument();
+      expect(screen.getByText('No contacts assigned.')).toBeInTheDocument();
     });
   });
 
@@ -1035,23 +910,6 @@ describe('DataProductOverviewNew', () => {
       // Whitespace-only content is rendered as HTML, not shown as empty state
       expect(screen.getByText('Documentation')).toBeInTheDocument();
     });
-
-    it('handles labels with empty labels object', () => {
-      const entryWithEmptyLabels = {
-        ...mockEntry,
-        entrySource: {
-          ...mockEntry.entrySource,
-          labels: {}
-        }
-      };
-      renderDataProductOverviewNew({ entry: entryWithEmptyLabels, entryType: 'table' });
-      expect(screen.getByText('No Labels available')).toBeInTheDocument();
-    });
-
-    it('renders labels when present', () => {
-      renderDataProductOverviewNew({ entryType: 'table' });
-      expect(screen.getByText('environment: production')).toBeInTheDocument();
-    });
   });
 
   describe('getFormattedDateTimeParts function', () => {
@@ -1088,14 +946,6 @@ describe('DataProductOverviewNew', () => {
     });
   });
 
-  describe('tooltip rendering', () => {
-    it('renders help icons in accordions', () => {
-      renderDataProductOverviewNew({ entryType: 'table' });
-      const helpIcons = screen.getAllByTestId('InfoOutlineIcon');
-      expect(helpIcons.length).toBeGreaterThan(0);
-    });
-  });
-
   describe('edge cases', () => {
     it('handles entry without aspects', () => {
       const entryWithoutAspects = { ...mockEntry, aspects: {} };
@@ -1118,12 +968,6 @@ describe('DataProductOverviewNew', () => {
     it('handles undefined entryType prop', () => {
       renderDataProductOverviewNew({ entryType: undefined });
       expect(screen.getByText('Documentation')).toBeInTheDocument();
-    });
-
-    it('shows all sections when entryType is not data-product', () => {
-      renderDataProductOverviewNew({ entryType: 'table' });
-      expect(screen.getByText('Usage Metrics')).toBeInTheDocument();
-      expect(screen.getByText('Labels')).toBeInTheDocument();
     });
   });
 });
@@ -1258,11 +1102,11 @@ describe('Integration Tests', () => {
         />
       );
 
-      // Verify main sections are visible
+      // Verify main sections are visible (Updated headers)
       expect(screen.getByText('Table Info')).toBeInTheDocument();
       expect(screen.getByText('Documentation')).toBeInTheDocument();
-      expect(screen.getByText('Contacts')).toBeInTheDocument();
-      expect(screen.getByText('Timestamps')).toBeInTheDocument();
+      expect(screen.getByText('Info')).toBeInTheDocument();
+      expect(screen.getByText('Identifiers')).toBeInTheDocument();
 
       // Switch to Sample Data tab
       fireEvent.click(screen.getByText('Sample Data'));

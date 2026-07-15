@@ -7,7 +7,7 @@ describe("UserGuide", () => {
     it("renders the main title", () => {
       render(<UserGuide />);
 
-      expect(screen.getByText("Dataplex Business Interface User Guide")).toBeInTheDocument();
+      expect(screen.getByText("Knowledge Catalog Business Interface User Guide")).toBeInTheDocument();
     });
 
     it("renders 'On this page' navigation header", () => {
@@ -22,10 +22,10 @@ describe("UserGuide", () => {
       const sectionTitles = [
         "Preview Disclaimer",
         "Overview",
-        "Dataplex Business Interface: Architecture",
+        "Knowledge Catalog Business Interface: Architecture",
         "API Usage Details",
         "Before You Begin",
-        "Deploy Dataplex Business Interface Application",
+        "Deploy Knowledge Catalog Business Interface Application",
         "Authenticate",
         "Search Data Assets",
         "Detailed Asset View",
@@ -90,7 +90,7 @@ describe("UserGuide", () => {
 
       // Click on Architecture section
       const architectureButton = screen.getByRole("button", {
-        name: /Dataplex Business Interface: Architecture/i,
+        name: /Knowledge Catalog Business Interface: Architecture/i,
       });
       fireEvent.click(architectureButton);
 
@@ -242,7 +242,7 @@ describe("UserGuide", () => {
         fireEvent.click(overviewButton);
 
         expect(
-          screen.getByText(/Dataplex Business Interface is an open source/)
+          screen.getByText(/Knowledge Catalog Business Interface is an open source/)
         ).toBeInTheDocument();
         expect(screen.getByText("Key Benefits")).toBeInTheDocument();
         expect(screen.getByText(/Simplified Access:/)).toBeInTheDocument();
@@ -271,11 +271,11 @@ describe("UserGuide", () => {
         render(<UserGuide />);
 
         const architectureButton = screen.getByRole("button", {
-          name: /Dataplex Business Interface: Architecture/i,
+          name: /Knowledge Catalog Business Interface: Architecture/i,
         });
         fireEvent.click(architectureButton);
 
-        const archImage = screen.getByAltText("Dataplex Business Interface high-level architecture");
+        const archImage = screen.getByAltText("Knowledge Catalog Business Interface high-level architecture");
         expect(archImage).toBeInTheDocument();
         expect(archImage).toHaveAttribute("src", "/assets/images/fig1-architecture.png");
       });
@@ -284,7 +284,7 @@ describe("UserGuide", () => {
         render(<UserGuide />);
 
         const architectureButton = screen.getByRole("button", {
-          name: /Dataplex Business Interface: Architecture/i,
+          name: /Knowledge Catalog Business Interface: Architecture/i,
         });
         fireEvent.click(architectureButton);
 
@@ -299,8 +299,8 @@ describe("UserGuide", () => {
         const apiButton = screen.getByRole("button", { name: /API Usage Details/i });
         fireEvent.click(apiButton);
 
-        expect(screen.getByText(/Dataplex Catalog Search API:/)).toBeInTheDocument();
-        expect(screen.getByText(/Dataplex Entity\/Entry API:/)).toBeInTheDocument();
+        expect(screen.getByText(/Knowledge Catalog Catalog Search API:/)).toBeInTheDocument();
+        expect(screen.getByText(/Knowledge Catalog Entity\/Entry API:/)).toBeInTheDocument();
         expect(screen.getByText(/Data Lineage API:/)).toBeInTheDocument();
       });
     });
@@ -336,7 +336,7 @@ describe("UserGuide", () => {
         render(<UserGuide />);
 
         const deployButton = screen.getByRole("button", {
-          name: /Deploy Dataplex Business Interface Application/i,
+          name: /Deploy Knowledge Catalog Business Interface Application/i,
         });
         fireEvent.click(deployButton);
 
@@ -350,7 +350,7 @@ describe("UserGuide", () => {
         render(<UserGuide />);
 
         const deployButton = screen.getByRole("button", {
-          name: /Deploy Dataplex Business Interface Application/i,
+          name: /Deploy Knowledge Catalog Business Interface Application/i,
         });
         fireEvent.click(deployButton);
 
@@ -363,7 +363,7 @@ describe("UserGuide", () => {
         render(<UserGuide />);
 
         const deployButton = screen.getByRole("button", {
-          name: /Deploy Dataplex Business Interface Application/i,
+          name: /Deploy Knowledge Catalog Business Interface Application/i,
         });
         fireEvent.click(deployButton);
 
@@ -393,7 +393,7 @@ describe("UserGuide", () => {
         const authButton = screen.getByRole("button", { name: /^Authenticate$/i });
         fireEvent.click(authButton);
 
-        const signInImage = screen.getByAltText("Dataplex Business Interface Sign-in Page");
+        const signInImage = screen.getByAltText("Knowledge Catalog Business Interface Sign-in Page");
         expect(signInImage).toHaveAttribute("src", "/assets/images/fig2-signin.png");
       });
     });
@@ -458,9 +458,9 @@ describe("UserGuide", () => {
         fireEvent.click(browseButton);
 
         expect(
-          screen.getByAltText("Dataplex home page with Browse button highlighted")
+          screen.getByAltText("Knowledge Catalog home page with Browse button highlighted")
         ).toBeInTheDocument();
-        expect(screen.getByAltText("Dataplex browse by aspect page")).toBeInTheDocument();
+        expect(screen.getByAltText("Knowledge Catalog browse by aspect page")).toBeInTheDocument();
       });
     });
 
@@ -486,12 +486,12 @@ describe("UserGuide", () => {
 
       // Expand Architecture section to check its image
       const architectureButton = screen.getByRole("button", {
-        name: /Dataplex Business Interface: Architecture/i,
+        name: /Knowledge Catalog Business Interface: Architecture/i,
       });
       fireEvent.click(architectureButton);
 
       // Check various images exist
-      expect(screen.getByAltText("Dataplex Business Interface high-level architecture")).toBeInTheDocument();
+      expect(screen.getByAltText("Knowledge Catalog Business Interface high-level architecture")).toBeInTheDocument();
     });
   });
 
@@ -568,7 +568,7 @@ describe("UserGuide", () => {
 
       // Expand deploy section
       const deployButton = screen.getByRole("button", {
-        name: /Deploy Dataplex Business Interface Application/i,
+        name: /Deploy Knowledge Catalog Business Interface Application/i,
       });
       fireEvent.click(deployButton);
 

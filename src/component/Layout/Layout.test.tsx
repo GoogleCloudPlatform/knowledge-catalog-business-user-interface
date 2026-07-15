@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import Layout from "./Layout";
 
-// Mock child components
 vi.mock("../GlobalSidebar/GlobalSidebar", () => ({
   default: vi.fn(() => (
     <div data-testid="global-sidebar">
@@ -12,23 +11,9 @@ vi.mock("../GlobalSidebar/GlobalSidebar", () => ({
 }));
 
 vi.mock("../Navbar/Navbar", () => ({
-  default: vi.fn(
-    ({
-      searchBar,
-      searchNavigate,
-    }: {
-      searchBar: boolean;
-      searchNavigate: boolean;
-    }) => (
-      <div
-        data-testid="navbar"
-        data-search-bar={searchBar}
-        data-search-navigate={searchNavigate}
-      >
-        Navbar
-      </div>
-    )
-  ),
+  default: vi.fn(() => (
+    <div data-testid="navbar">Navbar</div>
+  )),
 }));
 
 describe("Layout", () => {
@@ -101,7 +86,7 @@ describe("Layout", () => {
       expect(pageContent?.querySelector('[data-testid="child-content"]')).toBeInTheDocument();
     });
 
-    it("passes default props to Navbar when not specified", () => {
+    it("renders Navbar without forwarding any props", () => {
       render(
         <Layout>
           <div>Child</div>
@@ -109,42 +94,9 @@ describe("Layout", () => {
       );
 
       const navbar = screen.getByTestId("navbar");
-      expect(navbar).toHaveAttribute("data-search-bar", "false");
-      expect(navbar).toHaveAttribute("data-search-navigate", "true");
-    });
-
-    it("passes custom searchBar prop to Navbar", () => {
-      render(
-        <Layout searchBar={true}>
-          <div>Child</div>
-        </Layout>
-      );
-
-      const navbar = screen.getByTestId("navbar");
-      expect(navbar).toHaveAttribute("data-search-bar", "true");
-    });
-
-    it("passes custom searchNavigate prop to Navbar", () => {
-      render(
-        <Layout searchNavigate={false}>
-          <div>Child</div>
-        </Layout>
-      );
-
-      const navbar = screen.getByTestId("navbar");
-      expect(navbar).toHaveAttribute("data-search-navigate", "false");
-    });
-
-    it("passes both custom props to Navbar", () => {
-      render(
-        <Layout searchBar={true} searchNavigate={false}>
-          <div>Child</div>
-        </Layout>
-      );
-
-      const navbar = screen.getByTestId("navbar");
-      expect(navbar).toHaveAttribute("data-search-bar", "true");
-      expect(navbar).toHaveAttribute("data-search-navigate", "false");
+      expect(navbar).toBeInTheDocument();
+      expect(navbar).not.toHaveAttribute("data-search-bar");
+      expect(navbar).not.toHaveAttribute("data-search-navigate");
     });
   });
 
@@ -239,48 +191,6 @@ describe("Layout", () => {
       );
 
       expect(container.querySelector("span")).toHaveTextContent("Test Children");
-    });
-
-    it("accepts optional searchBar prop", () => {
-      expect(() =>
-        render(
-          <Layout>
-            <div>Child</div>
-          </Layout>
-        )
-      ).not.toThrow();
-    });
-
-    it("accepts optional searchNavigate prop", () => {
-      expect(() =>
-        render(
-          <Layout>
-            <div>Child</div>
-          </Layout>
-        )
-      ).not.toThrow();
-    });
-
-    it("uses default value false for searchBar", () => {
-      render(
-        <Layout>
-          <div>Child</div>
-        </Layout>
-      );
-
-      const navbar = screen.getByTestId("navbar");
-      expect(navbar).toHaveAttribute("data-search-bar", "false");
-    });
-
-    it("uses default value true for searchNavigate", () => {
-      render(
-        <Layout>
-          <div>Child</div>
-        </Layout>
-      );
-
-      const navbar = screen.getByTestId("navbar");
-      expect(navbar).toHaveAttribute("data-search-navigate", "true");
     });
   });
 

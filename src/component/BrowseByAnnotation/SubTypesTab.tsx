@@ -6,7 +6,6 @@ import {
   CardContent,
   Menu,
   MenuItem,
-  Chip,
   Tooltip,
   CircularProgress,
 } from "@mui/material";
@@ -62,15 +61,16 @@ const SubTypesTab: React.FC<SubTypesTabProps> = ({
   sortBy,
   sortOrder,
   onSortByChange,
-  onSortOrderToggle,
   onItemClick,
 }) => {
   const [sortAnchorEl, setSortAnchorEl] = useState<null | HTMLElement>(null);
   const [filterText, setFilterText] = useState('');
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
+  const [sortMenuWidth, setSortMenuWidth] = useState<number>(0);
 
   const handleSortClick = (event: React.MouseEvent<HTMLElement>) => {
     setSortAnchorEl(event.currentTarget);
+    setSortMenuWidth(event.currentTarget.clientWidth);
   };
 
   const handleSortClose = () => {
@@ -180,129 +180,123 @@ const SubTypesTab: React.FC<SubTypesTabProps> = ({
         }}
       >
         {/* Header Section (Filter/Sort) */}
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "8px",
-            mb: 2,
-            flexShrink: 0,
-          }}
-        >
-          <FilterBar
-            filterText={filterText}
-            onFilterTextChange={setFilterText}
-            propertyNames={FILTER_PROPERTIES}
-            getPropertyValues={getPropertyValues}
-            activeFilters={activeFilters}
-            onActiveFiltersChange={setActiveFilters}
-            marginLeft="0px"
-            placeholder="Filter Sub Types"
-            endContent={
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                <Typography
-                  component="span"
-                  style={{
-                    fontSize: "14px",
-                    fontWeight: "500",
-                    display: "flex",
-                    alignItems: "center",
-                    cursor: "pointer",
-                    color: "#1F1F1F",
-                    whiteSpace: "nowrap",
-                    fontFamily: '"Google Sans Text", sans-serif',
-                  }}
-                  onClick={handleSortClick}
-                >
-                  <ExpandMore
-                    sx={{
-                      fontSize: '20px',
-                      color: '#575757',
-                      transform: sortAnchorEl ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.3s ease',
-                    }}
-                  />
-                  {sortBy === "name" ? "Name" : sortBy === "assets" ? "Assets" : "Type"}
-                </Typography>
-                <Tooltip title={sortOrder === 'asc' ? 'Sort large to small' : 'Sort small to large'} arrow>
-                  <span
-                    data-testid="sort-order-toggle"
-                    onClick={onSortOrderToggle}
-                    style={{
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      flexShrink: 0,
-                      transform: sortOrder === 'desc' ? 'rotate(180deg)' : 'none',
-                      transition: 'transform 0.2s ease-in-out',
-                    }}
-                  >
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect width="24" height="24" rx="12" fill="#C2E7FF"/>
-                      <path d="M11.168 15.4818L11.168 5.33594L12.8346 5.33594L12.8346 15.4818L17.5013 10.8151L18.668 12.0026L12.0013 18.6693L5.33464 12.0026L6.5013 10.8151L11.168 15.4818Z" fill="#004A77"/>
-                    </svg>
-                  </span>
-                </Tooltip>
-              </div>
-            }
-          />
-          <Menu
-            anchorEl={sortAnchorEl}
-            open={Boolean(sortAnchorEl)}
-            onClose={handleSortClose}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-            PaperProps={{
-              style: {
-                marginTop: '4px',
-                borderRadius: '8px',
-                boxShadow: '0px 4px 6px -1px rgba(0, 0, 0, 0.1), 0px 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                minWidth: '140px',
-              },
-            }}
-          >
-            <MenuItem
-              onClick={() => handleSortSelect("name")}
+        {items.length > 0 && (
+          <>
+            <Box
               sx={{
-                fontSize: "12px",
-                fontFamily: "Google Sans",
-                fontWeight: sortBy === "name" ? "500" : "400",
-                color: sortBy === "name" ? "#0B57D0" : "#1F1F1F",
-                backgroundColor: sortBy === "name" ? "#F8FAFD" : "transparent",
-                '&:hover': { backgroundColor: '#F1F3F4' },
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                mb: 2,
+                flexShrink: 0,
               }}
             >
-              Name
-            </MenuItem>
-            <MenuItem
-              onClick={() => handleSortSelect("assets")}
-              sx={{
-                fontSize: "12px",
-                fontFamily: "Google Sans",
-                fontWeight: sortBy === "assets" ? "500" : "400",
-                color: sortBy === "assets" ? "#0B57D0" : "#1F1F1F",
-                backgroundColor: sortBy === "assets" ? "#F8FAFD" : "transparent",
-                '&:hover': { backgroundColor: '#F1F3F4' },
+              <FilterBar
+                filterText={filterText}
+                onFilterTextChange={setFilterText}
+                propertyNames={FILTER_PROPERTIES}
+                getPropertyValues={getPropertyValues}
+                activeFilters={activeFilters}
+                onActiveFiltersChange={setActiveFilters}
+                marginLeft="0px"
+                placeholder="Filter Sub Types"
+                endContent={
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                    <Box
+                      onClick={handleSortClick}
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        width: "fit-content",
+                        height: "36px",
+                        background: "#FFFFFF",  
+                        border: "1px solid #D6D9E8",
+                        borderRadius: "7.5px",
+                        padding: "0 12px", 
+                        gap: "6px",
+                        cursor: "pointer",
+                        boxSizing: "border-box"
+                      }}
+                    >
+                      <Typography sx={{ 
+                        fontSize: "14px", 
+                        fontFamily: '"Google Sans", sans-serif',
+                        whiteSpace: "nowrap"
+                      }}>
+                        <span style={{ color: "#6A6E7C", fontWeight: 400 }}>
+                          Sort by&nbsp;
+                        </span>
+                        <span style={{ color: "#0C1226", fontWeight: 600 }}>
+                          {sortBy === "name" ? "Name" : sortBy === "assets" ? "Assets" : "Type"}
+                        </span>
+                      </Typography>
+                      
+                      <ExpandMore
+                        sx={{
+                          color: "#6A6E7C",
+                          transform: sortAnchorEl ? "rotate(180deg)" : "rotate(0deg)",
+                          transition: "transform 0.3s ease",
+                        }}
+                      />
+                    </Box>
+                  </div>
+                }
+              />
+            </Box>
+            <Menu
+              anchorEl={sortAnchorEl}
+              open={Boolean(sortAnchorEl)}
+              onClose={handleSortClose}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+              PaperProps={{
+                style: {
+                  marginTop: '4px',
+                  borderRadius: '8px',
+                  boxShadow: '0px 1px 2px rgba(0,0,0,0.3), 0px 2px 6px 2px rgba(0,0,0,0.15)',
+                  width: sortMenuWidth > 0 ? `${sortMenuWidth}px` : 'auto',
+                },
               }}
             >
-              Assets
-            </MenuItem>
-            <MenuItem
-              onClick={() => handleSortSelect("type")}
-              sx={{
-                fontSize: "12px",
-                fontFamily: "Google Sans",
-                fontWeight: sortBy === "type" ? "500" : "400",
-                color: sortBy === "type" ? "#0B57D0" : "#1F1F1F",
-                backgroundColor: sortBy === "type" ? "#F8FAFD" : "transparent",
-                '&:hover': { backgroundColor: '#F1F3F4' },
-              }}
-            >
-              Type
-            </MenuItem>
-          </Menu>
-        </Box>
-
+              <MenuItem
+                onClick={() => handleSortSelect("name")}
+                sx={{
+                  fontSize: '14px',
+                  fontFamily: '"Google Sans Text", sans-serif',
+                  fontWeight: sortBy === 'name' ? '600' : '400',
+                  color: sortBy === 'name' ? '#022FCD' : '#0C1226',
+                  backgroundColor: sortBy === 'name' ? '#F8FAFD' : 'transparent',
+                }}
+              >
+                Name
+              </MenuItem>
+              <MenuItem
+                onClick={() => handleSortSelect("assets")}
+                sx={{
+                  fontSize: '14px',
+                  fontFamily: '"Google Sans Text", sans-serif',
+                  fontWeight: sortBy === 'assets' ? '600' : '400',
+                  color: sortBy === 'assets' ? '#022FCD' : '#0C1226',
+                  backgroundColor: sortBy === 'assets' ? '#F8FAFD' : 'transparent',
+                }}
+              >
+                Assets
+              </MenuItem>
+              <MenuItem
+                onClick={() => handleSortSelect("type")}
+                sx={{
+                  fontSize: '14px',
+                  fontFamily: '"Google Sans Text", sans-serif',
+                  fontWeight: sortBy === 'type' ? '600' : '400',
+                  color: sortBy === 'type' ? '#022FCD' : '#0C1226',
+                  backgroundColor: sortBy === 'type' ? '#F8FAFD' : 'transparent',
+                }}
+              >
+                Type
+              </MenuItem>
+            </Menu>
+          </>
+        )}
         {/* Conditional Body: Empty State OR Grid */}
         {filteredAndSortedItems.length === 0 ? (
           <Box
@@ -316,8 +310,8 @@ const SubTypesTab: React.FC<SubTypesTabProps> = ({
               gap: 2,
             }}
           >
-            <Typography variant="body1" color="text.secondary">
-              {hasFilters ? "No sub types match the filter criteria" : "No sub types available"}
+            <Typography variant="body1" color="#0C1226CC">
+              {hasFilters ? "No sub types match the filter criteria." : "No Sub Types Available."}
             </Typography>
           </Box>
         ) : (
@@ -436,45 +430,59 @@ const SubTypesTab: React.FC<SubTypesTabProps> = ({
                     {item.isCountLoading ? (
                       <Box
                         sx={{
-                          display: "flex",
+                          display: "inline-flex",
                           alignItems: "center",
                           gap: "6px",
-                          height: "24px",
-                          backgroundColor: "#C2E7FF",
-                          borderRadius: "25px",
-                          px: 1.5,
+                          background: "rgba(7, 106, 255, 0.1)",
+                          border: "1px solid rgba(7, 106, 255, 0.2)",
+                          borderRadius: "12px",
+                          padding: "4px 12px",
+                          alignSelf: "flex-start",
                         }}
                       >
                         <CircularProgress
                           size={12}
                           thickness={4}
-                          sx={{ color: "#004A77" }}
+                          sx={{ color: "#076AFF" }}
                         />
                         <Typography
                           sx={{
-                            fontFamily: "Google Sans Text",
-                            fontWeight: 500,
-                            fontSize: "12px",
-                            color: "#004A77",
+                            fontFamily: '"Google Sans", sans-serif',
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            color: "#076AFF",
+                            letterSpacing: "0.2px",
+                            lineHeight: 1,
                           }}
                         >
                           Loading
                         </Typography>
                       </Box>
                     ) : (
-                      <Chip
-                        label={`${item.fieldValues || 0} asset${(item.fieldValues || 0) !== 1 ? 's' : ''}`}
-                        size="small"
+                      <Box
                         sx={{
-                          height: "24px",
-                          backgroundColor: "#C2E7FF",
-                          color: "#004A77",
-                          fontFamily: "Google Sans Text",
-                          fontWeight: 500,
-                          fontSize: "12px",
-                          borderRadius: "25px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          background: "rgba(7, 106, 255, 0.1)",
+                          border: "1px solid rgba(7, 106, 255, 0.2)",
+                          borderRadius: "12px",
+                          padding: "4px 12px",
+                          alignSelf: "flex-start",
                         }}
-                      />
+                      >
+                        <Typography
+                          sx={{
+                            fontFamily: '"Google Sans", sans-serif',
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            color: "#076AFF",
+                            letterSpacing: "0.2px",
+                            lineHeight: 1,
+                          }}
+                        >
+                          {`${item.fieldValues || 0} asset${(item.fieldValues || 0) !== 1 ? 's' : ''}`}
+                        </Typography>
+                      </Box>
                     )}
                     <Box
                       sx={{

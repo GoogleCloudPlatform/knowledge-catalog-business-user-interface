@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Alert, Box, Grid, Tooltip, IconButton, Typography, Skeleton, Tab, Tabs } from '@mui/material';
-import { Close, LockOutlined } from '@mui/icons-material';
+import { Close, LockOutlined, DashboardOutlined, ViewListOutlined } from '@mui/icons-material';
+import BigQueryIcon from '../../assets/svg/BigQuery.svg';
 import './ResourcePreview.css';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchEntry, clearHistory } from '../../features/entry/entrySlice';
@@ -349,7 +350,6 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
     }} isTopComponent={false}
     expandedItems={expandedAnnotations}
     setExpandedItems={setExpandedAnnotations}
-    isGlossary={isGlossary}
     />;
   } else if (entryStatus === 'failed') {
     if(entryError?.details?.toLowerCase().includes('403') || entryError?.details?.includes('PERMISSION_DENIED')) {
@@ -455,7 +455,7 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
                 width: '100%',
                 height: 'var(--btn-height)',
                 boxSizing: 'border-box',
-                background: mode === 'dark' ? '#a7c6fa' : '#0E4DCA',
+                background: mode === 'dark' ? '#a7c6fa' : '#022FCD',
                 color: mode === 'dark' ? '#072e6f' : '#FFFFFF',
                 border: 'none',
                 borderRadius: 'var(--btn-radius)',
@@ -544,7 +544,7 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
                   }}
                 >
                   <img
-                    src="/assets/svg/bigquery-icon.svg"
+                    src={BigQueryIcon}
                     alt="Open in BigQuery"
                     style={{ width: 'var(--icon-img-size)', height: 'var(--icon-img-size)' }}
                   />
@@ -601,27 +601,27 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
             borderBottom: 1,
             borderBottomColor: mode === 'dark' ? '#3c4043' : '#DADCE0',
             marginBottom: 'var(--tab-mb)',
-            '& .MuiTabs-root': {
-              minHeight: '44px',
-              padding: 0,
-            },
-            '& .MuiTabs-scroller': {
-              padding: 0,
-            },
+            position: 'relative',
             '& .MuiTabs-flexContainer': {
-              justifyContent: isTable ? 'space-between' : 'space-around',
-              padding: isTable ? '0 12px' : '0 5px',
+              justifyContent: 'space-around',
+              gap: isTable ? '0px' : '12px',
+              padding: isTable ? '0 8px' : '0 4px',
             },
             '& .MuiTab-root': {
-              fontFamily: '"Product Sans Regular", sans-serif',
-              fontSize: 'var(--tab-font-size)',
-              color: mode === 'dark' ? '#dedfe0' : '#575757',
+              fontFamily: '"Google Sans", sans-serif',
+              fontSize: '12px',
+              fontWeight: 500,
+              color: mode === 'dark' ? '#dedfe0' : '#0C1226',
               textTransform: 'none',
-              minHeight: '44px',
-              padding: '6px 0 14px 0',
+              minHeight: '47px',
+              padding: '0px 4px',
+              display: 'inline-flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
               minWidth: 'unset',
               '&.Mui-selected': {
-                color: mode === 'dark' ? '#bfe4ff' : '#0E4DCA',
+                color: mode === 'dark' ? '#8ab4f8' : '#022FCD',
               },
             },
             '& .MuiTabs-indicator': {
@@ -629,13 +629,12 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
               '&::after': {
                 content: '""',
                 position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: '-2px',
-                height: '5px',
-                backgroundColor: mode === 'dark' ? '#131314' : 'white',
-                borderTop: mode === 'dark' ? '4px solid #bfe4ff' : '4px solid #0B57D0',
-                borderRadius: '2.5px 2.5px 0 0',
+                left: '4px',
+                right: '4px',
+                bottom: '0px',
+                height: '3px',
+                backgroundColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
+                borderRadius: '3px 3px 0 0',
               },
             },
           }}
@@ -648,9 +647,11 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
               children: <span className="indicator" />,
             }}
           >
-            <Tab label="Overview" />
-            {getEntryType(previewData.name, '/') == 'Tables' && <Tab label="Schema" />}
-            <Tab label="Aspects" />
+            <Tab icon={<DashboardOutlined sx={{ fontSize: "18px" }} />} iconPosition="start" label="Overview" />
+            {getEntryType(previewData.name, '/') == 'Tables' && (
+              <Tab icon={<ViewListOutlined sx={{ fontSize: "18px" }} />} iconPosition="start" label="Schema" />
+            )}
+            <Tab icon={<span className="material-symbols-outlined" style={{ fontSize: "18px", display: "inline-block", verticalAlign: "middle" }}>newsmode</span>} iconPosition="start" label="Aspects" />
           </Tabs>
         </Box>
 
@@ -764,7 +765,7 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
                                 </Box>
                               }
                             >
-                              <span style={{ fontWeight: 500, color: mode === 'dark' ? '#8ab4f8' : '#0E4DCA', cursor: 'pointer', marginLeft: '4px' }}>
+                              <span style={{ fontWeight: 500, color: mode === 'dark' ? '#8ab4f8' : '#022FCD', cursor: 'pointer', marginLeft: '4px' }}>
                                 +{contacts.length - 1}
                               </span>
                             </Tooltip>
@@ -810,7 +811,7 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
                       {schema}
                     </div>
                   ) : (
-                    <div style={{padding:"var(--empty-content-padding)", textAlign: "center", fontSize: "var(--empty-content-font-size)", color: mode === 'dark' ? '#9aa0a6' : "#575757"}}>
+                    <div style={{padding:"var(--empty-content-padding)", textAlign: "center", fontSize: "var(--empty-content-font-size)", color: mode === 'dark' ? '#9aa0a6' : "#0C1226CC"}}>
                       No Schema Data available for this table
                     </div>
                   )
@@ -834,7 +835,7 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
                         {annotationTab}
                     </div>
                   ) : (
-                    <div style={{padding:"var(--empty-content-padding)", textAlign: "center", fontSize: "var(--empty-content-font-size)", color: mode === 'dark' ? '#9aa0a6' : "#575757"}}>
+                    <div style={{padding:"var(--empty-content-padding)", textAlign: "center", fontSize: "var(--empty-content-font-size)", color: mode === 'dark' ? '#9aa0a6' : "#0C1226CC"}}>
                       No Aspects Data available for this table
                     </div>
                   )

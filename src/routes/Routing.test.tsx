@@ -208,19 +208,6 @@ describe('Routing', () => {
       expect(screen.getByTestId('protected-redirect')).toBeInTheDocument();
     });
 
-    it('should have searchBar set to false for home route', () => {
-      mockUser = { email: 'test@example.com' };
-      mockLocation = { pathname: '/home' };
-
-      render(
-        <MemoryRouter initialEntries={['/home']}>
-          <Routing />
-        </MemoryRouter>
-      );
-
-      const layout = screen.getByTestId('layout-component');
-      expect(layout).toHaveAttribute('data-searchbar', 'false');
-    });
   });
 
   describe('Search Route', () => {
@@ -237,19 +224,6 @@ describe('Routing', () => {
       expect(screen.getByTestId('search-page-component')).toBeInTheDocument();
     });
 
-    it('should have searchBar set to true for search route', () => {
-      mockUser = { email: 'test@example.com' };
-      mockLocation = { pathname: '/search' };
-
-      render(
-        <MemoryRouter initialEntries={['/search']}>
-          <Routing />
-        </MemoryRouter>
-      );
-
-      const layout = screen.getByTestId('layout-component');
-      expect(layout).toHaveAttribute('data-searchbar', 'true');
-    });
   });
 
   describe('Permission Required Route', () => {
@@ -311,21 +285,6 @@ describe('Routing', () => {
       );
 
       expect(screen.getByTestId('view-details-component')).toBeInTheDocument();
-    });
-  });
-
-  describe('Admin Panel Route', () => {
-    it('should render AdminPanel component when user is authenticated', () => {
-      mockUser = { email: 'test@example.com' };
-      mockLocation = { pathname: '/admin-panel' };
-
-      render(
-        <MemoryRouter initialEntries={['/admin-panel']}>
-          <Routing />
-        </MemoryRouter>
-      );
-
-      expect(screen.getByTestId('admin-panel-component')).toBeInTheDocument();
     });
   });
 
@@ -501,7 +460,6 @@ describe('Routing', () => {
       '/search',
       '/permission-required',
       '/view-details',
-      '/admin-panel',
       '/browse-by-annotation',
       '/glossaries',
       '/data-products',

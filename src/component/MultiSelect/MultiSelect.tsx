@@ -428,12 +428,12 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                     indeterminate={selectAllState.indeterminate}
                     onChange={handleSelectAll}
                     sx={{
-                      color: selectAllState.checked || selectAllState.indeterminate ? '#0E4DCA' : '#575757',
+                      color: selectAllState.checked || selectAllState.indeterminate ? '#022FCD' : '#575757',
                       '&.Mui-checked': {
-                        color: '#0E4DCA',
+                        color: '#022FCD',
                       },
                       '&.MuiCheckbox-indeterminate': {
-                        color: '#0E4DCA',
+                        color: '#022FCD',
                       },
                       width: '20px',
                       height: '20px',
@@ -492,9 +492,9 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                           handleToggleOption(option);
                         }}
                         sx={{
-                          color: value.includes(option) ? '#0E4DCA' : '#575757',
+                          color: value.includes(option) ? '#022FCD' : '#575757',
                           '&.Mui-checked': {
-                            color: '#0E4DCA',
+                            color: '#022FCD',
                           },
                           width: '20px',
                           height: '20px',
@@ -584,9 +584,9 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                         handleToggleOption(selectedValue);
                       }}
                       sx={{
-                        color: '#0E4DCA',
+                        color: '#022FCD',
                         '&.Mui-checked': {
-                          color: '#0E4DCA',
+                          color: '#022FCD',
                         },
                         width: '20px',
                         height: '20px',
@@ -611,10 +611,9 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                       fontWeight: 400,
                       fontSize: '12px',
                       lineHeight: '1.33em',
-                      color: '#575757',
+                      color: '#0C1226CC',
                       padding: '16px',
                       textAlign: 'center',
-                      fontStyle: 'italic',
                     }}
                   >
                     No items selected
@@ -636,7 +635,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
               onClick={() => setOpen(false)}
               size="small"
               sx={{
-                backgroundColor: '#0E4DCA',
+                backgroundColor: '#022FCD',
                 color: '#FFFFFF',
                 fontWeight: 500,
                 fontSize: '12px',
@@ -808,12 +807,12 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                         indeterminate={editSelectAllState.indeterminate}
                         onChange={handleEditSelectAll}
                         sx={{
-                          color: editSelectAllState.checked || editSelectAllState.indeterminate ? '#0E4DCA' : '#575757',
+                          color: editSelectAllState.checked || editSelectAllState.indeterminate ? '#022FCD' : '#575757',
                           '&.Mui-checked': {
-                            color: '#0E4DCA',
+                            color: '#022FCD',
                           },
                           '&.MuiCheckbox-indeterminate': {
-                            color: '#0E4DCA',
+                            color: '#022FCD',
                           },
                           width: '20px',
                           height: '20px',
@@ -865,9 +864,9 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                           checked={editSelectedValues.includes(option)}
                           onChange={() => handleEditOptionToggle(option)}
                           sx={{
-                            color: editSelectedValues.includes(option) ? '#0E4DCA' : '#575757',
+                            color: editSelectedValues.includes(option) ? '#022FCD' : '#575757',
                             '&.Mui-checked': {
-                              color: '#0E4DCA',
+                              color: '#022FCD',
                             },
                             width: '20px',
                             height: '20px',

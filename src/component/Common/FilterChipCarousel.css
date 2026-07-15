@@ -22,7 +22,7 @@
   filter: brightness(0) saturate(100%) invert(37%) sepia(6%) saturate(500%) hue-rotate(175deg) brightness(93%) contrast(89%);
 }
 
-/* Selected chip icons: blue #0E4DCA */
+/* Selected chip icons: blue #022FCD */
 .carousel-scroll-container .carousel-chip-selected img,
 .carousel-scroll-container .carousel-chip-selected .MuiSvgIcon-root,
 .carousel-scroll-container .carousel-chip-selected .material-symbols-outlined {

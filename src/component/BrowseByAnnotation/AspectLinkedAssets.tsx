@@ -193,8 +193,8 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
           gap: 2,
         }}
       >
-        <Typography variant="body1" color="text.secondary">
-          No linked assets available
+        <Typography variant="body1" color="#0C1226CC">
+          No linked assets available.
         </Typography>
       </Box>
     );
@@ -208,7 +208,7 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
           width: "100%",
           borderRadius: "16px",
           overflow: "visible",
-          bgcolor: "#fff",
+          bgcolor: "transparent",
           display: "flex",
           flexDirection: "row",
           gap: "16px",
@@ -229,7 +229,7 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
             padding: isFilterOpen ? "20px" : "0px",
             marginTop: "8px",
             gap: "20px",
-            backgroundColor: "#F8FAFD",
+            backgroundColor: "#F4F5FA",
             border: isFilterOpen ? "1px solid #DADCE0" : "none",
             borderRadius: "20px",
             height: "100%",
@@ -282,6 +282,7 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
               showSortBy={true}
               showResultsCount={false}
               hideMostRelevant={true}
+              isGlossary={true}
               customFilters={
                 <div style={{ display: "flex", alignItems: "flex-start", gap: "20px", minWidth: 0, flex: 1 }}>
                   <span
@@ -294,10 +295,10 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
                       gap: "8px",
                       width: "85px",
                       height: "32px",
-                      border: isFilterOpen ? "none" : "1px solid #0E4DCA",
+                      border: isFilterOpen ? "none" : "1px solid #022FCD",
                       borderRadius: "59px",
-                      background: isFilterOpen ? "#0E4DCA" : "none",
-                      color: isFilterOpen ? "#EDF2FC" : "#0E4DCA",
+                      background: isFilterOpen ? "#022FCD" : "none",
+                      color: isFilterOpen ? "#EDF2FC" : "#022FCD",
                       cursor: "pointer",
                       transition: "all 0.2s ease",
                       flexShrink: 0,
@@ -356,7 +357,7 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
                 height: "100%",
                 border: "none",
                 margin: 0,
-                backgroundColor: "#fff",
+                backgroundColor: "transparent",
                 width: "100%",
               }}
               contentStyle={{

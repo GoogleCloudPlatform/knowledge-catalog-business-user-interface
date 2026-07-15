@@ -14,7 +14,7 @@
   width: 2rem;
   object-fit: contain;
   flex-shrink: 0;
-  color: #0E4DCA;
+  color: #022FCD;
 }
 
 .nav-icon{
@@ -78,9 +78,17 @@
   .navbar-logo-img {
     max-height: 1.25rem;
   }
-  
+
   .nav-icon {
     width: 0.875rem;
     height: 0.875rem;
   }
+}
+
+.navbar-searchbar-slot #search-bar.navbar-variant,
+.navbar-searchbar-slot #search-bar.navbar-variant .MuiTextField-root,
+.navbar-searchbar-slot #search-bar.navbar-variant .MuiOutlinedInput-root,
+.navbar-searchbar-slot #search-bar.navbar-variant .MuiOutlinedInput-input {
+  background: #F4F5FA !important;
+  background-color: #F4F5FA !important;
 }

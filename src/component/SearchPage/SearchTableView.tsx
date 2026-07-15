@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tooltip } from '@mui/material';
-import { Lock } from '@mui/icons-material';
+import { Lock, LocationOnOutlined } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import Tag from '../Tags/Tag';
 import { useColumnResize } from '../../hooks/useColumnResize';
@@ -44,6 +44,7 @@ interface SearchTableViewProps {
   getEntryType: (namePath: string, separator: string) => string;
   previewOpen?: boolean;
   selectedEntryName?: string | null;
+  isDataProduct?: boolean;
 }
 
 // const capitalizeFirstLetter = (s: any) => {
@@ -112,12 +113,11 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
   getFormatedDate,
   getEntryType,
   previewOpen,
-  selectedEntryName
+  selectedEntryName,
+  isDataProduct
 }) => {
   const mode = useSelector((state: any) => state.user.mode) as string;
   const isDark = mode === 'dark';
-  const borderRight = previewOpen ? '0px' : '10px';
-  const gradientRight = previewOpen ? '0px' : '10px';
   // const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [sortColumn, setSortColumn] = useState<'name' | 'date' | 'location' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -263,15 +263,18 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
   return (
     <TableContainer
       component={Paper}
-      sx={{
-        backgroundColor: isDark ? '#131314' : '#FFFFFF',
-        borderRadius: '8px',
-        boxShadow: 'none',
-        maxHeight: 'calc(100vh - 200px)',
-        overflowY: 'auto',
-        overflowX: 'auto',
-        width: '100%',
-      }}
+          sx={{
+      backgroundColor: isDark ? '#131314' : '#FFFFFF',
+      borderRadius: '16px',
+      border: isDark ? '1px solid #3c4043' : '1px solid #E8EEF5',
+      boxShadow: 'none',
+      maxHeight: 'calc(100vh - 140px)',
+      overflowY: 'auto',
+      overflowX: 'auto',
+      width: '100%',
+      maxWidth: '100%',
+      marginLeft: '0px',
+    }}
     >
       <Table sx={{ width: '100%', tableLayout: 'fixed' }} aria-label="search results table">
         <colgroup>
@@ -283,33 +286,32 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
           <TableRow
             sx={{
               position: 'relative',
+              height: '48px',
               '& .MuiTableCell-root': {
                 borderBottom: 'none',
-                padding: '12px 20px 4px',
+                padding: '0px !important',
               },
-              '& .MuiTableCell-root:first-of-type': {
-                paddingLeft: '20px',
-              },
-              ...(previewOpen ? { '& .MuiTableCell-root:last-of-type': { paddingRight: '8px' } } : {}),
               '&::after': {
                 content: '""',
                 position: 'absolute',
                 bottom: 0,
-                left: '12px',
-                right: borderRight,
+                left: '0px',
+                right: '0px',
                 height: '1px',
-                backgroundColor: mode === 'dark' ? '#3c4043' : '#DADCE0',
+                backgroundColor: isDataProduct && !isDark ? '#E8EEF5' : (mode === 'dark' ? '#3c4043' : '#DADCE0'),
               },
             }}
           >
             {/* Name */}
             <TableCell
               sx={{
-                fontSize: '12px',
-                fontWeight: '500',
-                color: isDark ? '#dedfe0' : '#444746',
-                fontFamily: '"Google Sans", sans-serif',
-                position: 'relative',
+                  fontFamily: '"Google Sans", sans-serif', 
+                  fontSize: '14px', 
+                  fontWeight: 600, 
+                  height: '48px', 
+                  color: isDark ? '#dedfe0' : '#444746', 
+                  position: 'relative',
+                  padding: '0px !important'
               }}
             >
               <Tooltip title={getNameSortTooltip()} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
@@ -321,9 +323,11 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                     alignItems: 'center',
                     gap: '4px',
                     cursor: 'pointer',
-                    borderRadius: '4px',
-                    padding: '4px 8px',
-                    margin: '-4px -8px',
+                    width: '100%',
+                    height: '100%',
+                    boxSizing: 'border-box',
+                    padding: '0px 20px',
+                    margin: '0px',
                     transition: 'background-color 0.2s ease',
                     '&:hover': {
                       backgroundColor: isDark ? '#3c4043' : '#F8F9FA',
@@ -360,14 +364,18 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
             {/* Description */}
             <TableCell
               sx={{
-                fontFamily: '"Google Sans", sans-serif',
-                fontSize: '12px',
-                fontWeight: '500',
-                color: isDark ? '#dedfe0' : '#444746',
+                fontFamily: '"Google Sans", sans-serif', 
+                fontSize: '14px', 
+                fontWeight: 600, 
+                height: '48px', 
+                color: isDark ? '#dedfe0' : '#444746', 
                 position: 'relative',
+                padding: '0px !important'
               }}
             >
+              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%', boxSizing: 'border-box', padding: '0px 20px' }}>
               Description
+              </Box>
               <ResizeHandle
                 onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(1, e); }}
                 isActive={activeIndex === 1}
@@ -378,14 +386,18 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
             {/* Type */}
             <TableCell
               sx={{
-                fontFamily: '"Google Sans", sans-serif',
-                fontSize: '12px',
-                fontWeight: '500',
-                color: isDark ? '#dedfe0' : '#444746',
+                fontFamily: '"Google Sans", sans-serif', 
+                fontSize: '14px', 
+                fontWeight: 600, 
+                height: '48px', 
+                color: isDark ? '#dedfe0' : '#444746', 
                 position: 'relative',
+                padding: '0px !important'
               }}
             >
+              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%', boxSizing: 'border-box', padding: '0px 20px' }}>
               Type
+              </Box>
               <ResizeHandle
                 onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(2, e); }}
                 isActive={activeIndex === 2}
@@ -396,11 +408,13 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
             {/* Location */}
             <TableCell
               sx={{
-                fontFamily: '"Google Sans", sans-serif',
-                fontSize: '12px',
-                fontWeight: '500',
-                color: isDark ? '#dedfe0' : '#444746',
+                fontFamily: '"Google Sans", sans-serif', 
+                fontSize: '14px', 
+                fontWeight: 600, 
+                height: '48px', 
+                color: isDark ? '#dedfe0' : '#444746', 
                 position: 'relative',
+                padding: '0px !important'
               }}
             >
               <Tooltip title={getLocationSortTooltip()} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
@@ -412,9 +426,11 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                     alignItems: 'center',
                     gap: '4px',
                     cursor: 'pointer',
-                    borderRadius: '4px',
-                    padding: '4px 8px',
-                    margin: '-4px -8px',
+                    width: '100%',
+                    height: '100%',
+                    padding: '0px 20px',
+                    margin: '0px',
+                    boxSizing: 'border-box',
                     transition: 'background-color 0.2s ease',
                     '&:hover': {
                       backgroundColor: isDark ? '#3c4043' : '#F8F9FA',
@@ -451,10 +467,13 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
             {/* Last Modified */}
             <TableCell
               sx={{
-                fontFamily: '"Google Sans", sans-serif',
-                fontSize: '12px',
-                fontWeight: '500',
-                color: isDark ? '#dedfe0' : '#444746',
+                fontFamily: '"Google Sans", sans-serif', 
+                fontSize: '14px', 
+                fontWeight: 600, 
+                height: '48px', 
+                color: isDark ? '#dedfe0' : '#444746', 
+                position: 'relative',
+                padding: '0px !important'
               }}
             >
               <Tooltip title={getDateSortTooltip()} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
@@ -467,12 +486,14 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                     justifyContent: 'flex-end',
                     gap: '4px',
                     cursor: 'pointer',
-                    borderRadius: '4px',
-                    padding: '4px 8px',
-                    margin: '-4px -8px',
+                    width: '100%',
+                    height: '100%',
+                    boxSizing: 'border-box',
+                    padding: previewOpen ? '0px 8px 0px 20px' : '0px 20px',
+                    margin: '0px',
                     transition: 'background-color 0.2s ease',
                     '&:hover': {
-                      backgroundColor: mode === 'dark' ? '#3c4043' : '#F8F9FA',
+                      backgroundColor: isDark ? '#3c4043' : '#F8F9FA',
                     },
                   }}
                 >
@@ -514,35 +535,28 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                 sx={{
                   position: 'relative',
                   cursor: 'pointer',
-                  height: '40px',
-                  backgroundColor: mode === 'dark' ? '#131314' : '#FFFFFF',
+                  height: '60px',
+                  backgroundColor: isDataProduct && !isDark ? '#FFFFFF' : (isDark ? '#131314' : '#FFFFFF'),
+                  
                   '& .MuiTableCell-root': {
                     borderBottom: 'none',
                     backgroundColor: isSelected ? (mode === 'dark' ? '#004a76' : '#EDF2FC') : undefined,
                   },
-                  '& .MuiTableCell-root:first-of-type': {
-                    background: isSelected ? (mode === 'dark' ? `linear-gradient(to right, transparent 12px, #004a76 12px)` : 'linear-gradient(to right, transparent 12px, #EDF2FC 12px)') : undefined,
-                  },
-                  '& .MuiTableCell-root:last-of-type': {
-                    background: isSelected ? (mode === 'dark' ? `linear-gradient(to left, transparent ${gradientRight}, #004a76 ${gradientRight})` : `linear-gradient(to left, transparent ${gradientRight}, #EDF2FC ${gradientRight})`) : undefined,
-                  },
                   '&:hover .MuiTableCell-root': {
                     backgroundColor: isSelected ? (mode === 'dark' ? '#185683' : '#EDF2FC') : (mode === 'dark' ? '#3c4043' : '#F8F9FA'),
                   },
-                  '&:hover .MuiTableCell-root:first-of-type': {
-                    background: isSelected ? (mode === 'dark' ? `linear-gradient(to right, transparent 12px, #185683 12px)` : 'linear-gradient(to right, transparent 12px, #EDF2FC 12px)') : (mode === 'dark' ? 'linear-gradient(to right, transparent 12px, #3c4043 12px)' : 'linear-gradient(to right, transparent 12px, #F8F9FA 12px)'),
-                  },
-                  '&:hover .MuiTableCell-root:last-of-type': {
-                    background: isSelected ? (mode === 'dark' ? `linear-gradient(to left, transparent ${gradientRight}, #185683 ${gradientRight})` : `linear-gradient(to left, transparent ${gradientRight}, #EDF2FC ${gradientRight})`) : (mode === 'dark' ? `linear-gradient(to left, transparent ${gradientRight}, #3c4043 ${gradientRight})` : `linear-gradient(to left, transparent ${gradientRight}, #F8F9FA ${gradientRight})`),
-                  },
+
                   '&::after': {
                     content: '""',
                     position: 'absolute',
                     bottom: 0,
-                    left: '12px',
-                    right: borderRight,
+                    left: '0px',
+                    right: '0px',
                     height: '1px',
-                    backgroundColor: mode === 'dark' ? '#3c4043' : '#DADCE0',
+                    backgroundColor: isDataProduct && !isDark ? '#E8EEF5' : (mode === 'dark' ? '#3c4043' : '#DADCE0'),
+                  },
+                  '&:last-child::after': {
+                    display: isDataProduct ? 'none' : 'block'
                   },
                 }}
               >
@@ -564,12 +578,15 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                           flex: 1,
                           fontFamily: '"Google Sans", sans-serif',
                           fontSize: '14px',
-                          fontWeight: 400,
-                          color: mode === 'dark' ? '#dedfe0' : '#1F1F1F',
+                          fontWeight: 600,
+                          color: isDark ? '#dedfe0' : '#022FCD',
                           cursor: 'pointer',
                           textOverflow: 'ellipsis',
                           overflow: 'hidden',
-                          whiteSpace: 'nowrap'
+                          whiteSpace: 'nowrap',
+                          '&:hover': {
+                            textDecoration: isDataProduct ? 'underline' : 'none'
+                          }
                         }}
                       >
                         {getNameFromEntry(entry)}
@@ -610,10 +627,11 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                 {/* Type */}
                 <TableCell
                   sx={{
-                    padding: '10px 20px'
+                    padding: '10px 20px',
+                    overflow: 'hidden',
                   }}
                 >
-                  <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap', overflow: 'hidden' }}>
+                  <Box sx={{ display: 'flex', gap: '8px', flexWrap: previewOpen ? 'nowrap' : 'wrap', overflow: 'hidden' }}>
                     <OverflowTag
                       text={(() => {
                         const sys = entry.entrySource?.system;
@@ -626,15 +644,17 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                       className="asset-tag"
                       css={{
                         fontFamily: '"Google Sans", sans-serif',
-                        backgroundColor: mode === 'dark' ? '#004a76' : '#C2E7FF',
-                        color: mode === 'dark' ? '#c1e6ff' : '#004A77',
-                        borderRadius: '8px',
-                        height: '20px',
-                        padding: '0px 8px',
-                        fontSize: '12px',
-                        fontWeight: '500',
+                        background: 'rgba(7, 106, 255, 0.1)',
+                        border: '1px solid rgba(7, 106, 255, 0.2)',
+                        color: '#076AFF',
+                        borderRadius: '12px',
+                        height: 'auto',
+                        padding: '4px 12px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        letterSpacing: '0.2px',
+                        lineHeight: 1,
                         textTransform: 'capitalize',
-                        border: 'none',
                         cursor: 'default',
                         transition: 'none',
                       }}
@@ -644,14 +664,16 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                       className="asset-tag"
                       css={{
                         fontFamily: '"Google Sans", sans-serif',
-                        backgroundColor: mode === 'dark' ? '#004a76' : '#C2E7FF',
-                        color: mode === 'dark' ? '#c1e6ff' : '#004A77',
-                        height: '20px',
-                        borderRadius: '8px',
-                        padding: '0px 8px',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        border: 'none',
+                        background: 'rgba(7, 106, 255, 0.1)',
+                        border: '1px solid rgba(7, 106, 255, 0.2)',
+                        color: '#076AFF',
+                        height: 'auto',
+                        borderRadius: '12px',
+                        padding: '4px 12px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        letterSpacing: '0.2px',
+                        lineHeight: 1,
                         cursor: 'default',
                         transition: 'none',
                       }}
@@ -660,27 +682,34 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                 </TableCell>
 
                 {/* Location */}
-                <TableCell
-                  sx={{
-                    padding: '10px 20px',
-                    overflow: 'hidden',
-                  }}
-                >
+                <TableCell sx={{ padding: '10px 20px', overflow: 'hidden' }}>
                   <OverflowTooltip text={entry.entrySource?.location || '-'}>
-                    <Typography
-                      sx={{
-                        fontFamily: '"Product Sans", "Google Sans Text", sans-serif',
-                        fontSize: '14px',
-                        fontWeight: '400',
-                        color: mode === 'dark' ? '#dedfe0' : '#575757',
-                        letterSpacing: '0.1px',
+                    <Box sx={{ 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '4px', 
+                      border: '1px solid #C4E9D8', 
+                      borderRadius: '12px', 
+                      backgroundColor: '#F5FEF8',
+                      padding: '0px 8px',
+                      height: '24px',
+                      maxWidth: '100%',
+                      boxSizing: 'border-box'
+                    }}>
+                      <LocationOnOutlined sx={{ fontSize: '14px', color: '#027E4C', flexShrink: 0 }} />
+                      <Typography sx={{ 
+                        fontFamily: '"Google Sans", sans-serif', 
+                        fontSize: '12px', 
+                        fontWeight: 600,
+                        color: '#027E4C', 
+                        whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {entry.entrySource?.location || '-'}
-                    </Typography>
+                        minWidth: 0
+                      }}>
+                        {(entry.entrySource?.location || '-').charAt(0).toUpperCase() + (entry.entrySource?.location || '').slice(1)}
+                      </Typography>
+                    </Box>
                   </OverflowTooltip>
                 </TableCell>
 

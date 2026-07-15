@@ -427,6 +427,18 @@ const BrowseByAnnotation = () => {
       } catch (error) {
         console.error("Failed to fetch aspect details:", error);
         setLoadingAspectName(null);
+        setDynamicAnnotationsData((prevData: any) =>
+          prevData.map((annotation: any) =>
+            annotation.name === item.name
+              ? { 
+                  ...annotation, 
+                  subItems: [], 
+                  subTypesLoaded: true, 
+                  countsFetched: true 
+                }
+              : annotation
+          )
+        );
       }
     };
 
@@ -539,7 +551,7 @@ const BrowseByAnnotation = () => {
         px: 0,
         pb: 0,
         pt: 0,
-        backgroundColor: '#F8FAFD',
+        backgroundColor: '#f8fafc',
         height: 'calc(100vh - 72px)',
         width: '100%',
         overflow: 'hidden',
@@ -586,7 +598,7 @@ const BrowseByAnnotation = () => {
               margin: 'auto',
               fontSize: '16px',
               fontWeight: 500,
-              color: '#575757',
+              color: '#0C1226CC',
               fontFamily: '"Google Sans Text", sans-serif' 
           }}>
             No Aspects for browse by experience available

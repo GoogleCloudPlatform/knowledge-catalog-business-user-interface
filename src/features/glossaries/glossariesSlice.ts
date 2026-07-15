@@ -351,6 +351,14 @@ export const fetchGlossaryEntryDetails = createAsyncThunk(
 
       return { entryName, details: response.data };
     } catch (error: any) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response?.status === 403) {
+        return rejectWithValue({
+          type: "PERMISSION_DENIED",
+          message: "You don't have access to this resource",
+          itemId: entryName,
+        });
+      }
       return rejectWithValue(
         error.response?.data || "Failed to lookup entry details"
       );
@@ -1105,6 +1113,8 @@ export const glossariesSlice = createSlice({
         }
       })
       .addCase(fetchGlossaryEntryDetails.fulfilled, (state, action) => {
+        state.accessDeniedItemId = null;
+
         const { entryName, details } = action.payload;
         const updated = updateDetailsInTree(state.glossaryItems, entryName, details);
 
@@ -1302,7 +1312,15 @@ export const glossariesSlice = createSlice({
       .addCase(filterGlossaries.rejected, (state, action) => {
         state.filterStatus = "failed";
         state.filterError = action.payload as string | null;
-      });
+      })
+      .addCase(fetchGlossaryEntryDetails.rejected, (state, action) => {
+        const payload = action.payload as { type?: string; itemId?: string } | string;
+        if (typeof payload === "object" && payload?.type === "PERMISSION_DENIED") {
+          state.accessDeniedItemId = payload.itemId || null;
+        } else {
+          state.accessDeniedItemId = null;
+        }
+      }); 
   },
 });
 

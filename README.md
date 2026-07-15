@@ -1,4 +1,4 @@
-# Knowledge Catalog Business Interface - 1.3.3
+# Knowledge Catalog Business Interface - 1.4.0
 
 An open-source, web-based application called **`Knowledge Catalog Business Interface`** which aims to help business users of BigQuery customers discover and access data assets in the **Knowledge Catalog** (formerly Dataplex Universal Catalog).
 ## Key objectives of the application include:
@@ -317,13 +317,23 @@ gcloud run deploy [SERVICE_NAME] \
 **Your application is now redeployed and accessible, with both front-end and backend in one single container and cloud run service!**
 
 
-## Release Note : 1.3.3
-This is a sub minor release with features, identified bug/fixes and some user interface changes.
+## Release Note : 1.4.0
+This is a minor release with features, identified bug/fixes and some user interface changes.
 Feature Enhancements:
 
-  - Auth logic for checking access changed from roles to permissions
+  - API optimizations and performance
+  - Debouncing added for large list for project and other large filter list
+  - Dataproduct UI revamped end to end
+  - New Access Request workflow implemented for Dataproduct as per GCP console.
+  - UI component modifications for multiple components
+  - - Cards
+  - - Buttons
+  - - Icons
+  - - Tags
+  - - Tabs Style
+  - - Side Nav
 
 Bug Fixes:
 
-  - UI Bug fixes in some screens.
-  - readme updates for rebranding to Knowledge Catalog.
+  - Insights and Data profile / Data Quality Scans are not visible in some cases
+  - List loading issue in larger list of filters and sub-filter modals.

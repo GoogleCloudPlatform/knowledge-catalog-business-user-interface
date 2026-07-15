@@ -7,6 +7,7 @@ import dataProductsReducer, {
   fetchDataProductsAssetsList,
   dataproductsSlice,
 } from "./dataProductsSlice";
+import userReducer from "../user/userSlice";
 
 // ==========================================================================
 // Mock axios
@@ -85,11 +86,15 @@ const mockSessionData = {
 // Helper Functions
 // ==========================================================================
 
-const createTestStore = () => {
+const createTestStore = (userData: any = null) => {
   return configureStore({
     reducer: {
       dataproducts: dataProductsReducer,
+      user: userReducer,
     },
+    preloadedState: userData ? {
+      user: { token: null, userData, mode: 'light' as const },
+    } : undefined,
   });
 };
 
@@ -100,7 +105,6 @@ const createTestStore = () => {
 describe("dataProductsSlice", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
   });
 
   afterEach(() => {
@@ -303,9 +307,6 @@ describe("dataProductsSlice", () => {
   // ==========================================================================
 
   describe("getDataProductDetails", () => {
-    beforeEach(() => {
-      localStorage.setItem("sessionUserData", JSON.stringify(mockSessionData));
-    });
 
     describe("Pending State", () => {
       it("sets selectedDataProductStatus to loading when pending", () => {
@@ -324,7 +325,7 @@ describe("dataProductsSlice", () => {
           data: mockDataProductDetails,
         });
 
-        const store = createTestStore();
+        const store = createTestStore(mockSessionData);
         await store.dispatch(
           getDataProductDetails({
             id_token: "test-token",
@@ -360,7 +361,7 @@ describe("dataProductsSlice", () => {
           data: mockDataProductDetails,
         });
 
-        const store = createTestStore();
+        const store = createTestStore(mockSessionData);
         await store.dispatch(
           getDataProductDetails({
             id_token: "test-token",
@@ -388,7 +389,7 @@ describe("dataProductsSlice", () => {
           data: mockDataProductDetails,
         });
 
-        const store = createTestStore();
+        const store = createTestStore(mockSessionData);
         await store.dispatch(
           getDataProductDetails({
             id_token: "my-token",
@@ -408,7 +409,7 @@ describe("dataProductsSlice", () => {
           data: mockDataProductDetails,
         });
 
-        const store = createTestStore();
+        const store = createTestStore(mockSessionData);
         await store.dispatch(
           getDataProductDetails({
             dataProductId:
@@ -426,7 +427,7 @@ describe("dataProductsSlice", () => {
         (axiosError as any).response = { data: "Server error details" };
         vi.mocked(axios.get).mockRejectedValueOnce(axiosError);
 
-        const store = createTestStore();
+        const store = createTestStore(mockSessionData);
         await store.dispatch(
           getDataProductDetails({
             id_token: "token",
@@ -444,7 +445,7 @@ describe("dataProductsSlice", () => {
         const axiosError = new AxiosError("Connection timeout");
         vi.mocked(axios.get).mockRejectedValueOnce(axiosError);
 
-        const store = createTestStore();
+        const store = createTestStore(mockSessionData);
         await store.dispatch(
           getDataProductDetails({
             id_token: "token",
@@ -463,7 +464,7 @@ describe("dataProductsSlice", () => {
           new Error("Something went wrong")
         );
 
-        const store = createTestStore();
+        const store = createTestStore(mockSessionData);
         await store.dispatch(
           getDataProductDetails({
             id_token: "token",
@@ -705,14 +706,12 @@ describe("dataProductsSlice", () => {
 
   describe("getProjectNumber helper", () => {
     it("extracts project number from session data", async () => {
-      localStorage.setItem("sessionUserData", JSON.stringify(mockSessionData));
-
       vi.mocked(axios.get).mockResolvedValueOnce({
         status: 200,
         data: mockDataProductDetails,
       });
 
-      const store = createTestStore();
+      const store = createTestStore(mockSessionData);
       await store.dispatch(
         getDataProductDetails({
           id_token: "test-token",
@@ -733,14 +732,12 @@ describe("dataProductsSlice", () => {
     });
 
     it("returns empty string when project is not found", async () => {
-      localStorage.setItem("sessionUserData", JSON.stringify(mockSessionData));
-
       vi.mocked(axios.get).mockResolvedValueOnce({
         status: 200,
         data: mockDataProductDetails,
       });
 
-      const store = createTestStore();
+      const store = createTestStore(mockSessionData);
       await store.dispatch(
         getDataProductDetails({
           id_token: "test-token",
@@ -753,9 +750,7 @@ describe("dataProductsSlice", () => {
       expect(axios.get).toHaveBeenCalled();
     });
 
-    it("handles missing sessionUserData in localStorage", async () => {
-      localStorage.removeItem("sessionUserData");
-
+    it("handles missing appConfig in store", async () => {
       vi.mocked(axios.get).mockRejectedValueOnce(
         new TypeError("Cannot read properties of null")
       );
@@ -774,21 +769,12 @@ describe("dataProductsSlice", () => {
     });
 
     it("handles session data with empty projects array", async () => {
-      localStorage.setItem(
-        "sessionUserData",
-        JSON.stringify({
-          appConfig: {
-            projects: [],
-          },
-        })
-      );
-
       vi.mocked(axios.get).mockResolvedValueOnce({
         status: 200,
         data: mockDataProductDetails,
       });
 
-      const store = createTestStore();
+      const store = createTestStore({ appConfig: { projects: [] } });
       await store.dispatch(
         getDataProductDetails({
           id_token: "test-token",
@@ -801,21 +787,12 @@ describe("dataProductsSlice", () => {
     });
 
     it("handles project name without forward slashes", async () => {
-      localStorage.setItem(
-        "sessionUserData",
-        JSON.stringify({
-          appConfig: {
-            projects: [{ projectId: "test-project", name: "simple-name" }],
-          },
-        })
-      );
-
       vi.mocked(axios.get).mockResolvedValueOnce({
         status: 200,
         data: mockDataProductDetails,
       });
 
-      const store = createTestStore();
+      const store = createTestStore({ appConfig: { projects: [{ projectId: "test-project", name: "simple-name" }] } });
       await store.dispatch(
         getDataProductDetails({
           id_token: "test-token",
@@ -850,14 +827,12 @@ describe("dataProductsSlice", () => {
     });
 
     it("handles non-200 non-401 status in getDataProductDetails", async () => {
-      localStorage.setItem("sessionUserData", JSON.stringify(mockSessionData));
-
       vi.mocked(axios.get).mockResolvedValueOnce({
         status: 500,
         data: mockDataProductDetails,
       });
 
-      const store = createTestStore();
+      const store = createTestStore(mockSessionData);
       await store.dispatch(
         getDataProductDetails({
           id_token: "token",
@@ -890,14 +865,12 @@ describe("dataProductsSlice", () => {
     });
 
     it("rejects with Token expired when getDataProductDetails receives 401 status", async () => {
-      localStorage.setItem("sessionUserData", JSON.stringify(mockSessionData));
-
       vi.mocked(axios.get).mockResolvedValueOnce({
         status: 401,
         data: { error: "Unauthorized" },
       });
 
-      const store = createTestStore();
+      const store = createTestStore(mockSessionData);
       const result = await store.dispatch(
         getDataProductDetails({
           id_token: "expired-token",
@@ -940,9 +913,7 @@ describe("dataProductsSlice", () => {
     });
 
     it("getDataProductDetails does not affect dataProductsItems state", async () => {
-      localStorage.setItem("sessionUserData", JSON.stringify(mockSessionData));
-
-      const store = createTestStore();
+      const store = createTestStore(mockSessionData);
 
       // Set some initial items
       store.dispatch({
@@ -968,9 +939,7 @@ describe("dataProductsSlice", () => {
     });
 
     it("fetchDataProductsAssetsList does not affect other state properties", async () => {
-      localStorage.setItem("sessionUserData", JSON.stringify(mockSessionData));
-
-      const store = createTestStore();
+      const store = createTestStore(mockSessionData);
 
       // Set initial states
       store.dispatch({
@@ -1063,23 +1032,18 @@ describe("dataProductsSlice", () => {
     });
 
     it("handles special characters in project ID", async () => {
-      localStorage.setItem(
-        "sessionUserData",
-        JSON.stringify({
-          appConfig: {
-            projects: [
-              { projectId: "project-with-dashes", name: "projects/111222333" },
-            ],
-          },
-        })
-      );
-
       vi.mocked(axios.get).mockResolvedValueOnce({
         status: 200,
         data: mockDataProductDetails,
       });
 
-      const store = createTestStore();
+      const store = createTestStore({
+        appConfig: {
+          projects: [
+            { projectId: "project-with-dashes", name: "projects/111222333" },
+          ],
+        },
+      });
       await store.dispatch(
         getDataProductDetails({
           id_token: "token",

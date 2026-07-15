@@ -4,7 +4,8 @@ import { getGlossaryMuiIcon, GLOSSARY_COLORS } from "../../constants/glossaryIco
 
 export const getIcon = (
   type: ItemType,
-  fontSize: "small" | "medium" | "large" = "small"
+  fontSize: "small" | "medium" | "large" = "small",
+  color?: string
 ) => {
   const sizeMap = {
     small: "1rem",
@@ -17,6 +18,6 @@ export const getIcon = (
 
   return getGlossaryMuiIcon(glossaryType, {
     size,
-    color: GLOSSARY_COLORS[glossaryType],
+    color: color || GLOSSARY_COLORS[glossaryType],
   });
 };

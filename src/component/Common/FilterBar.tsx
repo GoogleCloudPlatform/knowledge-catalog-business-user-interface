@@ -19,6 +19,7 @@ export interface PropertyConfig {
   name: string;
   mode: 'text' | 'dropdown' | 'both';
   hint?: string;
+  type?: 'text' | 'date';
 }
 
 export interface ActiveFilter {
@@ -239,6 +240,15 @@ const FilterBar: React.FC<FilterBarProps> = ({
   const [menuTrigger, setMenuTrigger] = useState<'filter' | 'search' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [inputError, setInputError] = useState("");
+
+  const isValidDate = (value: string): boolean => {
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(value)) return false;
+    const date = new Date(value);
+    return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+
   const hasFilters = activeFilters.length > 0;
 
   // Focus management for accessibility
@@ -442,6 +452,14 @@ const FilterBar: React.FC<FilterBarProps> = ({
       const value = filterText.trim();
       if (!value) return;
 
+      if (selectedTextProperty) {
+        const propConfig = properties.find(p => p.name === selectedTextProperty);
+        if (propConfig?.type === 'date' && !isValidDate(value)) {
+          setInputError("Invalid date. Please use YYYY-MM-DD format.");
+          return;
+        }
+      }
+
       // Use selectedTextProperty if explicitly chosen, otherwise global search (no key)
       const property = selectedTextProperty ?? '';
       const newChip: ActiveFilter = {
@@ -485,7 +503,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
   const getInputTooltip = () => {
     if (selectedTextProperty) {
       const prop = properties.find(p => p.name === selectedTextProperty);
-      if (prop?.hint) return `Format: ${prop.hint}`;
+      if (prop?.hint) return prop.hint;
     }
     return '';
   };
@@ -494,6 +512,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
   const visibleProperties = properties.filter(prop => {
     // When opened via filter icon, hide text-only properties unless opted in
     if (menuTrigger === 'filter' && !showTextInFilterMenu && prop.mode === 'text') {
+      return false;
+    }
+    // When opened via search bar, hide dropdown-only properties (they are categorical only)
+    if (menuTrigger === 'search' && prop.mode === 'dropdown') {
       return false;
     }
     if (prop.mode === 'text') return true;
@@ -509,7 +531,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
         flexDirection: 'column',
         gap: '8px',
         padding: '0px',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '##F4F5FA',
         ...(isPreview ? { flex: 1, minWidth: 0 } : { width: '100%' }),
         ...sx
       }}>
@@ -523,15 +545,16 @@ const FilterBar: React.FC<FilterBarProps> = ({
               alignItems: 'center',
               gap: '4px',
               height: '32px',
+              backgroundColor: '#FFFFFF',
               border: (isFocused || hasFilters || selectedTextProperty)
-                ? '1px solid #0E4DCA'
-                : '1px solid #DADCE0',
+                ? '1px solid #022FCD'
+                : '1px solid #C8CEE0',
               borderRadius: '54px',
               padding: '8px 4px 8px 2px',
               boxSizing: 'border-box',
               transition: 'border-color 0.2s ease',
               '&:hover': {
-                borderColor: '#0E4DCA',
+                borderColor: '#022FCD',
               },
               ...(isPreview
                 ? { flex: 1, minWidth: 0 }
@@ -589,11 +612,14 @@ const FilterBar: React.FC<FilterBarProps> = ({
                 {selectedTextProperty}:
               </Box>
             )}
-            <Tooltip title={getInputTooltip()} placement="bottom" arrow open={!!getInputTooltip() && isFocused}>
+            <Tooltip title={getInputTooltip()} placement="bottom" open={!!getInputTooltip() && isFocused} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
               <TextField
                 inputRef={inputRef}
                 value={filterText}
-                onChange={(e) => onFilterTextChange(e.target.value)}
+                onChange={(e) => {
+                  onFilterTextChange(e.target.value);
+                  if (inputError) setInputError("");
+                }}
                 onKeyDown={handleTextKeyDown}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
@@ -672,10 +698,22 @@ const FilterBar: React.FC<FilterBarProps> = ({
               </Button>
             )}
           </Box>
-
           {/* Optional end content (e.g., expand/collapse button) */}
           {endContent}
         </Box>
+          {inputError && (
+          <Typography
+            sx={{
+              fontFamily: "'Google Sans', sans-serif",
+              fontSize: "11px",
+              color: "#D93025",
+              marginLeft: marginLeft ?? (isPreview ? '10px' : '25px'),
+              marginTop: "-4px", 
+            }}
+          >
+            {inputError}
+          </Typography>
+        )}
 
         {/* Active Filter Chips */}
         {!hideChips && activeFilters.length > 0 && (
@@ -959,7 +997,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
               size="small"
               sx={{
                 padding: 0,
-                '&.Mui-checked': { color: '#0E4DCA' },
+                '&.Mui-checked': { color: '#022FCD' },
               }}
             />
             <ListItemText

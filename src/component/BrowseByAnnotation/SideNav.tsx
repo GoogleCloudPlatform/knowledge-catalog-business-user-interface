@@ -66,6 +66,32 @@ interface SideNavProps {
   isOpen?: boolean;
 }
 
+const OverflowTooltip: React.FC<{ 
+  text: string; 
+  enterDelay?: number; 
+  children: React.ReactElement<any> 
+}> = ({ text, enterDelay = 500, children }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  const handleMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
+    // Check if the inner text element is overflowing
+    const el = e.currentTarget.querySelector('.MuiTypography-root') || e.currentTarget;
+    setShowTooltip(el.scrollWidth > el.clientWidth);
+  };
+
+  return (
+    <Tooltip 
+      title={text} 
+      placement="right" 
+      enterDelay={enterDelay} 
+      arrow 
+      disableHoverListener={!showTooltip}
+    >
+      {React.cloneElement(children, { onMouseEnter: handleMouseEnter })}
+    </Tooltip>
+  );
+};
+
 const SideNav: React.FC<SideNavProps> = ({
   selectedItem,
   onItemClick,
@@ -123,10 +149,10 @@ const SideNav: React.FC<SideNavProps> = ({
       sx={{
         position: 'fixed',
         left: isOpen ? '96px' : '-252px',
-        top: 0,
+        top: '65px', 
         width: '252px',
-        height: '100vh',
-        backgroundColor: mode === 'dark' ? '#282a2c' : '#F8FAFD',
+        height: 'calc(100vh - 72px)',
+        backgroundColor: mode === 'dark' ? '#282a2c' : '#F4F5FA',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -145,8 +171,8 @@ const SideNav: React.FC<SideNavProps> = ({
         position: "sticky",
         top: 0,
         zIndex: 1,
-        backgroundColor: mode === 'dark' ? '#282a2c' : '#F8FAFD',
-        padding: "24px 20px 0 20px",
+        backgroundColor: mode === 'dark' ? '#282a2c' : '#F4F5FA',
+        padding: "20px 20px 0 20px",
         boxSizing: "border-box",
       }}>
         <Typography sx={{
@@ -166,9 +192,9 @@ const SideNav: React.FC<SideNavProps> = ({
             { name: 'Name contains', mode: 'text' as const },
             { name: 'Name prefix', mode: 'text' as const },
             { name: 'Location', mode: 'text' as const },
-            { name: 'Created on', mode: 'text' as const, hint: 'YYYY-MM-DD' },
-            { name: 'Created before', mode: 'text' as const, hint: 'YYYY-MM-DD' },
-            { name: 'Created after', mode: 'text' as const, hint: 'YYYY-MM-DD' },
+            { name: 'Created on', mode: 'text' as const, hint: 'Format: YYYY-MM-DD' },
+            { name: 'Created before', mode: 'text' as const, hint: 'Format: YYYY-MM-DD' },
+            { name: 'Created after', mode: 'text' as const, hint: 'Format: YYYY-MM-DD' },
           ]}
           activeFilters={filters}
           onActiveFiltersChange={handleFiltersChange}
@@ -204,144 +230,170 @@ const SideNav: React.FC<SideNavProps> = ({
         {annotationsData.map((annotation: any, index: number) => {
           const isExpanded = expandedItem === index;
           const isSelected = selectedItem?.name === annotation.name;
-
+          const hasSelectedSubItem = isSelected && !!selectedSubItem; 
+          const hasChildren = (annotation.subItems && annotation.subItems.length > 0) || 
+                              (loadingAspectName === annotation.name && !annotation.subTypesLoaded);
+          const showGroupCard = isExpanded && !hasSelectedSubItem && hasChildren;
           return (
-            <Box key={annotation.name || index}>
-              {/* Parent Item - Aspect */}
-              <ListItemButton
-                selected={isSelected && !selectedSubItem}
-                onClick={() => handleAspectClick(annotation, index)}
-                sx={{
-                  ml: '20px',
-                  mr: '20px',
-                  pl: '8px',
-                  pr: '12px',
-                  py: '8px',
-                  height: '32px',
-                  borderRadius: '200px',
-                  mb: 0.5,
-                  "&.Mui-selected": {
-                    backgroundColor: "#C2E7FF",
-                    color: "#1F1F1F",
-                    "&:hover": { backgroundColor: "#C2E7FF" },
-                    "& .MuiListItemIcon-root": { color: "#1F1F1F" },
-                    "& .MuiTypography-root": { fontWeight: 500 },
-                  },
-                  '&:hover': {
-                    backgroundColor: (isSelected && !selectedSubItem) ? '#C2E7FF' : '#F1F3F4',
-                  },
-                }}
-              >
-                {/* Chevron Icon */}
+            <Box key={annotation.name || index} sx={{ position: 'relative', mb: 0.5 }}>
+              {showGroupCard && (
                 <Box
-                  component="span"
                   sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    mr: 0.5,
-                    transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
-                    transition: 'transform 0.2s',
-                  }}
-                >
-                  <ExpandMore
-                    sx={{ fontSize: 16, color: '#1F1F1F' }}
-                  />
-                </Box>
-
-                {/* Annotation Icon */}
-                <ListItemIcon sx={{ minWidth: 20, mr: 0.1, color: '#1F1F1F' }}>
-                  <img
-                    src={AnnotationsIconBlue}
-                    alt=""
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                </ListItemIcon>
-
-                {/* Title */}
-                <ListItemText
-                  primary={annotation.title}
-                  primaryTypographyProps={{
-                    fontFamily: 'Product Sans',
-                    fontSize: '12px',
-                    fontWeight: isExpanded || isSelected ? 500 : 400,
-                    color: '#1F1F1F',
-                    noWrap: true,
-                    letterSpacing: '0.1px',
+                    position: "absolute",
+                    top: 0,
+                    bottom: 0,
+                    left: "20px",
+                    right: "20px",
+                    backgroundColor: "#e8ebf7ff",
+                    borderRadius: "16px",
+                    zIndex: 0,
                   }}
                 />
-              </ListItemButton>
+              )}
 
-              {/* Sub-Items - Collapsed */}
-              <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                {loadingAspectName === annotation.name && !annotation.subTypesLoaded ? (
-                  <Box sx={{ pl: '40px', pr: '20px', pt: 1 }}>
-                    <ShimmerLoader count={4} type="simple-list" />
+              {/* --- 4. Content Layer --- */}
+              <Box sx={{ position: "relative", zIndex: 1, pb: showGroupCard ? "6px" : 0 }}>
+                {/* Parent Item - Aspect */}
+                <ListItemButton
+                  selected={isSelected && !selectedSubItem}
+                  onClick={() => handleAspectClick(annotation, index)}
+                  sx={{
+                    ml: '20px',
+                    mr: '20px',
+                    pl: '8px',
+                    pr: '12px',
+                    height: '36px',
+                    borderRadius: (isSelected && !selectedSubItem) ? '31px' : '20px',
+                    mb: 0.5,
+                    "&.Mui-selected": {
+                      backgroundColor: "#DDE5FC",
+                      color: "#0C1226",
+                      "&:hover": { backgroundColor: "#DDE5FC" },
+                      "& .MuiListItemIcon-root": { color: "#022FCD" },
+                      "& .MuiTypography-root": { color: "#0C1226", fontWeight: 500 },
+                    },
+                    '&:hover': {
+                      backgroundColor: (isSelected && !selectedSubItem) ? undefined : '#ced1d3ff',
+                      borderRadius: '20px'
+                    },
+                  }}
+                >
+                  {/* Chevron Icon */}
+                  <Box
+                    component="span"
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mr: 0.5,
+                      transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                      transition: 'transform 0.2s',
+                    }}
+                  >
+                    <ExpandMore
+                      sx={{ fontSize: 16, color: '#1F1F1F' }}
+                    />
                   </Box>
-                ) : (
-                  <List component="div" disablePadding>
-                    {annotation.subItems.map((subItem: any, subIndex: number) => {
-                      const isSubItemSelected = selectedSubItem?.title === subItem.title && selectedItem?.name === annotation.name;
 
-                      return (
-                        <ListItemButton
-                          key={subIndex}
-                          selected={isSubItemSelected}
-                          onClick={() => handleSubItemClick(subItem, annotation)}
-                          sx={{
-                            ml: '40px',
-                            mr: '20px',
-                            pl: '8px',
-                            pr: '12px',
-                            py: '8px',
-                            height: '32px',
-                            borderRadius: '200px',
-                            mb: 0.5,
-                            '&.Mui-selected': {
-                              backgroundColor: '#C2E7FF',
-                              color: '#1F1F1F',
-                              '&:hover': { backgroundColor: '#C2E7FF' },
-                              '& .MuiListItemIcon-root': { color: '#1F1F1F' },
-                              '& .MuiTypography-root': { fontWeight: 500 },
-                            },
-                            '&:hover': {
-                              backgroundColor: isSubItemSelected ? '#C2E7FF' : '#F1F3F4',
-                            },
-                          }}
-                        >
-                          {/* Sub-item Icon */}
-                          <ListItemIcon sx={{ minWidth: 20, mr: 0.1, color: '#1F1F1F' }}>
-                            <img
-                              src={AnnotationSubitemIcon}
-                              alt=""
-                              style={{ width: '12px', height: '12px' }}
-                            />
-                          </ListItemIcon>
+                  {/* Annotation Icon */}
+                  <ListItemIcon sx={{ minWidth: 20, mr: 0.1 }}>
+                    <img
+                      src={AnnotationsIconBlue}
+                      alt=""
+                      style={{ 
+                        width: '16px', 
+                        height: '16px',
+                        filter: (isSelected && !selectedSubItem) ? 'none' : 'grayscale(1) brightness(0.2)' 
+                      }}
+                    />
+                  </ListItemIcon>
 
-                          {/* Sub-item Title - Show displayName if available */}
-                          <Tooltip
-                            title={subItem.displayName || subItem.title}
-                            placement="right"
-                            enterDelay={500}
-                            arrow
+                  {/* Title */}
+                  <OverflowTooltip text={annotation.title} enterDelay={600}>
+                    <ListItemText
+                      primary={annotation.title}
+                      primaryTypographyProps={{
+                        fontFamily: 'Product Sans',
+                        fontSize: '14px',
+                        lineHeight: '20px',
+                        letterSpacing: '0.25px',
+                        fontWeight: isExpanded || isSelected ? 500 : 400,
+                        color: (isSelected && !selectedSubItem) ? '#0C1226' : '#1F1F1F',
+                        noWrap: true,
+                      }}
+                    />
+                  </OverflowTooltip>
+                </ListItemButton>
+
+                {/* Sub-Items - Collapsed */}
+                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                  {loadingAspectName === annotation.name && !annotation.subTypesLoaded ? (
+                    <Box sx={{ pl: '40px', pr: '20px', pt: 1 }}>
+                      <ShimmerLoader count={4} type="simple-list" />
+                    </Box>
+                  ) : (
+                    <List component="div" disablePadding>
+                      {annotation.subItems.map((subItem: any, subIndex: number) => {
+                        const isSubItemSelected = selectedSubItem?.title === subItem.title && selectedItem?.name === annotation.name;
+
+                        return (
+                          <ListItemButton
+                            key={subIndex}
+                            selected={isSubItemSelected}
+                            onClick={() => handleSubItemClick(subItem, annotation)}
+                            sx={{
+                              ml: '40px',
+                              mr: '20px',
+                              pl: '8px',
+                              pr: '12px',
+                              height: '36px',
+                              borderRadius: isSubItemSelected ? '31px' : '20px',
+                              mb: 0.5,
+                              '&.Mui-selected': {
+                                backgroundColor: '#DDE5FC',
+                                color: '#0C1226',
+                                '&:hover': { backgroundColor: '#DDE5FC' },
+                                '& .MuiTypography-root': { color: '#0C1226', fontWeight: 500 },
+                              },
+                              '&:hover': {
+                                backgroundColor: isSubItemSelected ? undefined : '#ced1d3ff',
+                                borderRadius: '20px'
+                              },
+                            }}
                           >
-                            <ListItemText
-                              primary={subItem.displayName || subItem.title}
-                              primaryTypographyProps={{
-                                fontFamily: 'Google Sans',
-                                fontSize: '12px',
-                                fontWeight: isSubItemSelected ? 500 : 400,
-                                color: '#1F1F1F',
-                                noWrap: true,
-                                letterSpacing: '0.1px',
-                              }}
-                            />
-                          </Tooltip>
-                        </ListItemButton>
-                      );
-                    })}
-                  </List>
-                )}
-              </Collapse>
+                            {/* Sub-item Icon */}
+                            <ListItemIcon sx={{ minWidth: 20, mr: 0.1 }}>
+                              <img
+                                src={AnnotationSubitemIcon}
+                                alt=""
+                                style={{ 
+                                  width: '12px', 
+                                  height: '12px',
+                                }}
+                              />
+                            </ListItemIcon>
+
+                            {/* Sub-item Title */}
+                            <OverflowTooltip text={subItem.displayName || subItem.title} enterDelay={500}>
+                              <ListItemText
+                                primary={subItem.displayName || subItem.title}
+                                primaryTypographyProps={{
+                                  fontFamily: '"Google Sans", sans-serif',
+                                  fontSize: '14px',
+                                  lineHeight: '20px',
+                                  letterSpacing: '0.25px',
+                                  fontWeight: isSubItemSelected ? 500 : 400,
+                                  color: isSubItemSelected ? '#0C1226' : '#1F1F1F',
+                                  noWrap: true,
+                                }}
+                              />
+                            </OverflowTooltip>
+                          </ListItemButton>
+                        );
+                      })}
+                    </List>
+                  )}
+                </Collapse>
+              </Box>
             </Box>
           );
         })}

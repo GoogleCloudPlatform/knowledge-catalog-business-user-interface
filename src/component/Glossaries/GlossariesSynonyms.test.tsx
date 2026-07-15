@@ -10,6 +10,10 @@ vi.mock('../../utils/resourceUtils', () => ({
     date: `2025-01-${String((timestamp.seconds % 28) + 1).padStart(2, '0')}`,
     time: '12:00:00',
   }),
+  getFormattedDateTimeParts: (timestamp: number) => ({
+    date: `2025-01-${String((timestamp % 28) + 1).padStart(2, '0')}`,
+    time: '12:00:00',
+  }),
 }));
 
 describe('GlossariesSynonyms', () => {
@@ -268,9 +272,9 @@ describe('GlossariesSynonyms', () => {
       expect(screen.getByText('Name')).toBeInTheDocument();
     });
 
-    it('displays Last Modified when sortBy is lastModified', () => {
+    it('displays Last modified when sortBy is lastModified', () => {
       render(<GlossariesSynonyms {...defaultProps} sortBy="lastModified" />);
-      expect(screen.getByText('Last Modified')).toBeInTheDocument();
+      expect(screen.getByText('Last modified')).toBeInTheDocument();
     });
 
     it('opens sort menu when button is clicked', async () => {
@@ -281,14 +285,14 @@ describe('GlossariesSynonyms', () => {
 
       expect(screen.getByRole('menu')).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: 'Name' })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: 'Last Modified' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Last modified' })).toBeInTheDocument();
     });
 
     it('calls onSortByChange when Name is selected', async () => {
       const user = userEvent.setup();
       render(<GlossariesSynonyms {...defaultProps} relations={mockRelations} sortBy="lastModified" />);
 
-      await user.click(screen.getByText('Last Modified'));
+      await user.click(screen.getByText('Last modified'));
       await user.click(screen.getByRole('menuitem', { name: 'Name' }));
 
       expect(mockOnSortByChange).toHaveBeenCalledWith('name');
@@ -299,7 +303,7 @@ describe('GlossariesSynonyms', () => {
       render(<GlossariesSynonyms {...defaultProps} relations={mockRelations} />);
 
       await user.click(screen.getByText('Name'));
-      await user.click(screen.getByRole('menuitem', { name: 'Last Modified' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Last modified' }));
 
       expect(mockOnSortByChange).toHaveBeenCalledWith('lastModified');
     });
@@ -321,7 +325,7 @@ describe('GlossariesSynonyms', () => {
       await user.click(screen.getByText('Name'));
       expect(screen.getByRole('menu')).toBeInTheDocument();
 
-      await user.click(screen.getByRole('menuitem', { name: 'Last Modified' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Last modified' }));
 
       expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     });
@@ -340,29 +344,24 @@ describe('GlossariesSynonyms', () => {
     });
   });
 
-  describe('Sort Order Toggle', () => {
-    it('calls onSortOrderToggle when sort icon is clicked', async () => {
+  describe('Sort Expand Icon', () => {
+    it('renders the expand icon without rotation when the sort menu is closed', () => {
+      render(<GlossariesSynonyms {...defaultProps} sortOrder="asc" />);
+
+      const expandIcon = screen.getByTestId('ExpandMoreIcon');
+      expect(expandIcon).toHaveStyle({ transform: 'rotate(0deg)' });
+    });
+
+    it('rotates the expand icon when the sort menu is open', async () => {
       const user = userEvent.setup();
       render(<GlossariesSynonyms {...defaultProps} relations={mockRelations} />);
 
-      const sortOrderToggle = screen.getByTestId('sort-order-toggle');
-      await user.click(sortOrderToggle);
+      const expandIcon = screen.getByTestId('ExpandMoreIcon');
+      expect(expandIcon).toHaveStyle({ transform: 'rotate(0deg)' });
 
-      expect(mockOnSortOrderToggle).toHaveBeenCalled();
-    });
+      await user.click(screen.getByText('Name'));
 
-    it('renders sort toggle without rotation for asc order', () => {
-      render(<GlossariesSynonyms {...defaultProps} sortOrder="asc" />);
-
-      const sortOrderToggle = screen.getByTestId('sort-order-toggle');
-      expect(sortOrderToggle).toHaveStyle({ transform: 'none' });
-    });
-
-    it('renders sort toggle with rotation for desc order', () => {
-      render(<GlossariesSynonyms {...defaultProps} sortOrder="desc" />);
-
-      const sortOrderToggle = screen.getByTestId('sort-order-toggle');
-      expect(sortOrderToggle).toHaveStyle({ transform: 'rotate(180deg)' });
+      expect(expandIcon).toHaveStyle({ transform: 'rotate(180deg)' });
     });
   });
 

@@ -70,6 +70,21 @@ vi.mock('../../utils/resourceUtils', () => ({
   getFormattedDateTimeParts: vi.fn(() => ({ date: 'Jan 1, 2025', time: '12:00:00 AM' })),
 }));
 
+// Mock the apiInterceptor axios instance used by loadChangeRequests.
+// The component renders a Skeleton in place of the RequestAccessButton while
+// changeRequestStatus === 'loading'. Resolving this call lets the status flip to
+// 'success' so the actual RequestAccessButton (cta-button) renders.
+const { mockAxiosGet } = vi.hoisted(() => ({
+  mockAxiosGet: vi.fn(() =>
+    Promise.resolve({ data: { changeRequests: [] } })
+  ),
+}));
+vi.mock('../../utils/apiInterceptor', () => ({
+  default: {
+    get: mockAxiosGet,
+  },
+}));
+
 // Mock NotificationContext
 const mockShowError = vi.fn();
 const mockShowNotification = vi.fn();
@@ -162,9 +177,16 @@ vi.mock('./Contract', () => ({
   }
 }));
 
-vi.mock('../Buttons/CTAButton', () => ({
-  default: function MockCTAButton({ handleClick, text }: any) {
-    return <button onClick={handleClick} data-testid="cta-button">{text}</button>;
+vi.mock('./RequestAccessButton', () => ({
+  default: function MockRequestAccessButton({ entry, onRequestAccess }: any) {
+    return (
+      <button 
+        onClick={() => onRequestAccess(entry)} 
+        data-testid="cta-button"
+      >
+        Request Access
+      </button>
+    );
   }
 }));
 
@@ -225,7 +247,7 @@ const createMockDataProductDetails = (overrides: any = {}) => ({
     '123.global.contacts': {
       data: {
         identities: [
-          { name: 'John Doe', role: 'Owner' }
+          { name: 'John Doe <test@example.com>', role: 'Owner' }
         ]
       }
     },
@@ -345,6 +367,17 @@ const renderWithProviders = (
   );
 };
 
+// loadChangeRequests resolves asynchronously and flips changeRequestStatus from
+// 'loading' to 'success', which swaps the loading Skeleton for the real
+// RequestAccessButton (cta-button). Flush the pending promise chain so the
+// button is in the DOM before assertions/interactions.
+const flushChangeRequests = async () => {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+};
+
 // ================================================================================
 // TESTS
 // ================================================================================
@@ -393,8 +426,9 @@ describe('DataProductsDetailView', () => {
   });
 
   describe('Successful Render', () => {
-    it('renders the component with all main elements when data is loaded', () => {
+    it('renders the component with all main elements when data is loaded', async () => {
       renderWithProviders(<DataProductsDetailView />);
+      await flushChangeRequests();
 
       // Check for title
       expect(screen.getByText('Test Data Product')).toBeInTheDocument();
@@ -410,7 +444,7 @@ describe('DataProductsDetailView', () => {
       expect(screen.getByText('Overview')).toBeInTheDocument();
       expect(screen.getByText('Assets')).toBeInTheDocument();
       expect(screen.getByText('Access Groups & Permissions')).toBeInTheDocument();
-      expect(screen.getByText('Contract')).toBeInTheDocument();
+      expect(screen.getByText('Contracts')).toBeInTheDocument();
       expect(screen.getByText('Aspects')).toBeInTheDocument();
     });
 
@@ -481,7 +515,7 @@ describe('DataProductsDetailView', () => {
     it('switches to Contract tab when clicked', () => {
       renderWithProviders(<DataProductsDetailView />);
 
-      const contractTab = screen.getByText('Contract');
+      const contractTab = screen.getByText('Contracts');
       fireEvent.click(contractTab);
 
       expect(mockDispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'dataProducts/setDataProductsDetailTabValue', payload: 3 }));
@@ -504,17 +538,17 @@ describe('DataProductsDetailView', () => {
       const aspectsTab = screen.getByText('Aspects');
       fireEvent.click(aspectsTab);
 
-      expect(mockDispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'dataProducts/setDataProductsDetailTabValue', payload: 4 }));
+      expect(mockDispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'dataProducts/setDataProductsDetailTabValue', payload: 5 }));
     });
 
-    it('renders Aspects tab content when detailTabValue is 4', () => {
+    it('renders Aspects tab content when detailTabValue is 5', () => {
       const stateWithAspectsTab = {
         ...defaultStoreState,
-        dataProducts: { ...defaultStoreState.dataProducts, detailTabValue: 4 },
+        dataProducts: { ...defaultStoreState.dataProducts, detailTabValue: 5 },
       };
       renderWithProviders(<DataProductsDetailView />, stateWithAspectsTab);
 
-      expect(screen.getByTestId('tabpanel-4')).toBeInTheDocument();
+      expect(screen.getByTestId('tabpanel-5')).toBeInTheDocument();
       expect(screen.getByTestId('annotation-filter')).toBeInTheDocument();
       expect(screen.getByTestId('preview-annotation')).toBeInTheDocument();
     });
@@ -552,8 +586,9 @@ describe('DataProductsDetailView', () => {
   });
 
   describe('Request Access Flow', () => {
-    it('opens submit access panel when Request Access button is clicked', () => {
+    it('opens submit access panel when Request Access button is clicked', async () => {
       renderWithProviders(<DataProductsDetailView />);
+      await flushChangeRequests();
 
       const requestAccessBtn = screen.getByTestId('cta-button');
       fireEvent.click(requestAccessBtn);
@@ -561,9 +596,10 @@ describe('DataProductsDetailView', () => {
       expect(screen.getByTestId('submit-access-panel')).toBeInTheDocument();
     });
 
-    it('calls onRequestAccess prop if provided', () => {
+    it('calls onRequestAccess prop if provided', async () => {
       const mockOnRequestAccess = vi.fn();
       renderWithProviders(<DataProductsDetailView onRequestAccess={mockOnRequestAccess} />);
+      await flushChangeRequests();
 
       const requestAccessBtn = screen.getByTestId('cta-button');
       fireEvent.click(requestAccessBtn);
@@ -573,8 +609,9 @@ describe('DataProductsDetailView', () => {
       }));
     });
 
-    it('closes submit access panel when close button is clicked', () => {
+    it('closes submit access panel when close button is clicked', async () => {
       renderWithProviders(<DataProductsDetailView />);
+      await flushChangeRequests();
 
       // Open the panel
       const requestAccessBtn = screen.getByTestId('cta-button');
@@ -591,6 +628,7 @@ describe('DataProductsDetailView', () => {
 
     it('shows notification after successful submit', async () => {
       renderWithProviders(<DataProductsDetailView />);
+      await flushChangeRequests();
 
       // Open the panel
       const requestAccessBtn = screen.getByTestId('cta-button');
@@ -607,6 +645,7 @@ describe('DataProductsDetailView', () => {
 
     it('auto-hides notification after 5 seconds', async () => {
       renderWithProviders(<DataProductsDetailView />);
+      await flushChangeRequests();
 
       // Open and submit
       const requestAccessBtn = screen.getByTestId('cta-button');
@@ -625,8 +664,9 @@ describe('DataProductsDetailView', () => {
       expect(screen.queryByTestId('notification-bar')).not.toBeInTheDocument();
     });
 
-    it('closes notification when close button is clicked', () => {
+    it('closes notification when close button is clicked', async () => {
       renderWithProviders(<DataProductsDetailView />);
+      await flushChangeRequests();
 
       // Open and submit
       const requestAccessBtn = screen.getByTestId('cta-button');
@@ -642,8 +682,9 @@ describe('DataProductsDetailView', () => {
       expect(screen.queryByTestId('notification-bar')).not.toBeInTheDocument();
     });
 
-    it('does not show undo button in request access notification', () => {
+    it('does not show undo button in request access notification', async () => {
       renderWithProviders(<DataProductsDetailView />);
+      await flushChangeRequests();
 
       // Open and submit
       const requestAccessBtn = screen.getByTestId('cta-button');
@@ -709,7 +750,7 @@ describe('DataProductsDetailView', () => {
   describe('Annotation Actions', () => {
     const aspectsTabState = {
       ...defaultStoreState,
-      dataProducts: { ...defaultStoreState.dataProducts, detailTabValue: 4 },
+      dataProducts: { ...defaultStoreState.dataProducts, detailTabValue: 5 },
     };
 
     it('collapses all annotations when collapse button is clicked', () => {
@@ -806,8 +847,9 @@ describe('DataProductsDetailView', () => {
   });
 
   describe('Access Panel Sync', () => {
-    it('syncs panel state with global context', () => {
+    it('syncs panel state with global context', async () => {
       renderWithProviders(<DataProductsDetailView />);
+      await flushChangeRequests();
 
       // Open submit access panel
       const requestAccessBtn = screen.getByTestId('cta-button');
@@ -839,53 +881,61 @@ describe('DataProductsDetailView', () => {
   });
 
   describe('Entry Source Display Name Fallback', () => {
-    it('uses getName fallback when displayName is empty', () => {
+    it('uses getName fallback when displayName is empty', async () => {
       const stateWithEmptyDisplayName = {
         ...defaultStoreState,
         dataProducts: {
           ...defaultStoreState.dataProducts,
           selectedDataProductDetails: createMockDataProductDetails({
+            name: 'projects/test-project/locations/us/dataProducts/fallback-mock-title-name',
             entrySource: {
-              ...createMockDataProductDetails().entrySource,
-              displayName: ''
+              displayName: '',
+              description: 'A test data product for testing',
+              system: 'Dataplex',
+              location: 'US',
+              resource: 'projects/test-project/dataProducts/test-product'
             }
           })
         }
       };
 
       renderWithProviders(<DataProductsDetailView />, stateWithEmptyDisplayName);
+      await flushChangeRequests();
 
-      // Component should still render without errors
+      expect(screen.getByText('fallback-mock-title-name')).toBeInTheDocument();
       expect(screen.getByTestId('cta-button')).toBeInTheDocument();
     });
   });
 
-  describe('Icon Display', () => {
-    it('uses default icon when no icon in localStorage', () => {
-      // Mock localStorage to return empty object BEFORE rendering
-      const localStorageMock = {
-        getItem: vi.fn(() => '{}'),
-        setItem: vi.fn(),
-        removeItem: vi.fn(),
-        clear: vi.fn()
-      };
-      Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true });
+ describe('Icon Display', () => {
+    it('uses default material icon when no icon in localStorage', () => {
+        const localStorageMock = {
+          getItem: vi.fn(() => '{}'),
+          setItem: vi.fn(),
+          removeItem: vi.fn(),
+          clear: vi.fn()
+        };
+        Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true });
 
-      const store = createMockStore(defaultStoreState);
+        const store = createMockStore(defaultStoreState);
 
-      render(
-        <Provider store={store}>
-          <BrowserRouter>
-            <AuthContext.Provider value={mockAuthContext}>
-              <DataProductsDetailView />
-            </AuthContext.Provider>
-          </BrowserRouter>
-        </Provider>
-      );
+        render(
+          <Provider store={store}>
+            <BrowserRouter>
+              <AuthContext.Provider value={mockAuthContext}>
+                <DataProductsDetailView />
+              </AuthContext.Provider>
+            </BrowserRouter>
+          </Provider>
+        );
 
-      const icon = screen.getByAltText('Test Data Product');
-      expect(icon).toHaveAttribute('src', '/assets/images/data-product-card.png');
-    });
+        // Verify the image is NOT rendered
+        expect(screen.queryByAltText('Test Data Product')).not.toBeInTheDocument();
+
+        // Verify the fallback SVG is rendered instead
+        const svgs = document.querySelectorAll('svg');
+        expect(svgs.length).toBeGreaterThan(0);
+      });
   });
 
   describe('Tab Props', () => {
@@ -903,12 +953,12 @@ describe('DataProductsDetailView', () => {
   });
 
   describe('Expand All with Empty Aspects', () => {
-    it('handles expand all when aspects is undefined', () => {
+    it('displays the empty state message when aspects is undefined', () => {
       const stateWithNoAspects = {
         ...defaultStoreState,
         dataProducts: {
           ...defaultStoreState.dataProducts,
-          detailTabValue: 4,
+          detailTabValue: 5,
           selectedDataProductDetails: {
             ...createMockDataProductDetails(),
             aspects: undefined
@@ -918,9 +968,11 @@ describe('DataProductsDetailView', () => {
 
       renderWithProviders(<DataProductsDetailView />, stateWithNoAspects);
 
-      // Click expand all - should not throw
-      const expandBtn = screen.getByTestId('expand-all-btn');
-      expect(() => fireEvent.click(expandBtn)).not.toThrow();
+      // Verify the button does NOT exist
+      expect(screen.queryByTestId('expand-all-btn')).not.toBeInTheDocument();
+      
+      // Verify the empty state message is rendered instead
+      expect(screen.getByText('No aspects available for this data product.')).toBeInTheDocument();
     });
   });
 

@@ -16,21 +16,39 @@ const AnnotationPageSkeleton: React.FC = () => {
         <Box sx={{ padding: '12px 20px 0px' }}>
           <Skeleton variant="rounded" width={105} height={32} sx={{ borderRadius: '59px' }} />
         </Box>
+        <Box
+          sx={{
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '24px',
+            gap: '20px',
+            margin: '20px 20px 15px 20px',
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #ECEEF4',
+          }}
+        >
+          {/* Row 1: Title - icon + title */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '20px', width: '100%', minHeight: '40px' }}>
+            <Skeleton variant="rounded" width={48} height={48} sx={{ borderRadius: '10px', flexShrink: 0 }} />
+            <Skeleton variant="text" width={300} height={36} />
+          </Box>
 
-        {/* Row 1: Title - icon + title */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '20px', padding: '20px 20px 0px' }}>
-          <Skeleton variant="rounded" width={48} height={48} sx={{ borderRadius: '10px', flexShrink: 0 }} />
-          <Skeleton variant="text" width={300} height={36} />
+          {/* Row 2: Description */}
+          <Box sx={{ width: '100%' }}>
+            <Skeleton variant="text" width="80%" height={20} />
+            <Skeleton variant="text" width="50%" height={20} />
+          </Box>
         </Box>
-
-        {/* Row 2: Description */}
-        <Box sx={{ padding: '16px 20px 0px', maxWidth: '800px' }}>
-          <Skeleton variant="text" width="80%" height={20} />
-          <Skeleton variant="text" width="50%" height={20} />
-        </Box>
-
         {/* Row 3: Tabs */}
-        <Box sx={{ display: 'flex', gap: '40px', paddingLeft: '36px', paddingBottom: '8px' }}>
+        <Box sx={{ 
+            display: 'flex', 
+            gap: '40px', 
+            paddingLeft: '1.75rem',
+            minHeight: '47px',
+            alignItems: 'center' 
+          }}>
           <Skeleton variant="text" width={80} height={20} sx={{ borderRadius: '4px' }} />
           <Skeleton variant="text" width={80} height={20} sx={{ borderRadius: '4px' }} />
         </Box>

@@ -373,7 +373,7 @@ const DataProductOverview: React.FC<DataProductOverviewProps> = ({ entry, css })
                                             fontWeight: 400,
                                             fontSize: "14px",
                                             lineHeight: "1.43em",
-                                            color: "#575757"
+                                            color: "#0C1226CC"
                                         }}>
                                             No Contacts Available
                                         </Typography>

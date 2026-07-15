@@ -407,7 +407,7 @@ const Schema: React.FC<SchemaProps> = ({ entry, isPreview = false, sx }) => {
           </Box>
         </Box>
       ) : (
-        <div style={{ padding: "48px", textAlign: "center", fontSize: "14px", fontFamily: 'Google Sans, sans-serif', color: isDark ? '#9aa0a6' : "#575757" }}>No data matches the applied filters</div>
+        <div style={{ padding: "48px", textAlign: "center", fontSize: "14px", fontFamily: 'Google Sans, sans-serif', color: isDark ? '#9aa0a6' : "#0C1226CC" }}>No data matches the applied filters</div>
       )}
     </div>
   );

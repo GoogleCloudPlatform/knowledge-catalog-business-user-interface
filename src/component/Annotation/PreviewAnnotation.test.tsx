@@ -446,7 +446,6 @@ describe('PreviewAnnotation', () => {
       renderPreviewAnnotation({ entry: mockEntryWithRawData }, expandedSet);
 
       expect(screen.getByText('directField')).toBeInTheDocument();
-      fireEvent.click(screen.getByText('directField'));
       expect(screen.getByText('direct value')).toBeInTheDocument();
     });
   });
@@ -457,8 +456,9 @@ describe('PreviewAnnotation', () => {
     it('applies glossary-specific styling when isGlossary is true', () => {
       renderPreviewAnnotation({ isGlossary: true });
 
+      // The aspect name Typography keeps a fixed 14px font size regardless of isGlossary.
       const annotationName = screen.getByText('Annotation1');
-      expect(annotationName).toHaveStyle({ fontSize: '0.7rem' });
+      expect(annotationName).toHaveStyle({ fontSize: '14px' });
     });
 
     it('applies default styling when isGlossary is false', () => {

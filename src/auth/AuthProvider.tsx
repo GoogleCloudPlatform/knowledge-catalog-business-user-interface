@@ -1,15 +1,15 @@
-import { createContext, useContext, useState, useMemo, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { type CredentialResponse, GoogleOAuthProvider } from '@react-oauth/google';
 import type { User } from '../types/User';
 import axios from 'axios';
-import { useDispatch } from 'react-redux';
 import { setCredentials } from '../features/user/userSlice';
-import { clearPersistedState } from '../utils/persistence';
+import { clearPersistedState, clearUserState } from '../utils/persistence';
 import { useNotification } from '../contexts/NotificationContext';
 import { setGlobalAuthFunctions, setAuthNotificationShown } from '../services/authErrorService';
 import { performSilentAuth } from '../services/silentAuthService';
 import { AUTH_CONFIG } from '../constants/auth';
 import { setIsLoaded } from '../features/projects/projectsSlice';
+import { useAppDispatch, useAppSelector } from '../app/store';
 
 
 type AuthContextType = {
@@ -29,34 +29,12 @@ export const useAuth = ():AuthContextType => {
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   const { showSuccess, showError, showInfo } = useNotification();
 
-  // Load stored data and ensure token timestamps exist
-  const storedData = JSON.parse(localStorage.getItem('sessionUserData') || 'null');
-
-  // If stored data exists but doesn't have token timestamps, add them
-  // (This handles migration from old sessions without timestamps)
-  if (storedData && storedData.token && (!storedData.tokenExpiry || !storedData.tokenIssuedAt)) {
-    const now = Math.floor(Date.now() / 1000);
-    // If we don't know when the token was issued, assume it was issued now
-    // This is conservative - treats existing tokens as fresh
-    storedData.tokenIssuedAt = now;
-    storedData.tokenExpiry = now + AUTH_CONFIG.TOKEN_LIFETIME_SECONDS;
-    localStorage.setItem('sessionUserData', JSON.stringify(storedData));
-    console.log('[AuthProvider] Migrated legacy session data with token timestamps');
-  }
-
-  const [user, setUser] = useState<User | null>(storedData ?? null);
+  // Read user from Redux (hydrated from IndexedDB on bootstrap)
+  const user = useAppSelector(state => state.user.userData) as User | null;
   const isLoggedOut = useRef(false);
-
-  // Sync stored session data to Redux on mount only
-  useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem('sessionUserData') || 'null');
-    if (stored) {
-      dispatch(setCredentials({ token: stored.token, user: stored }));
-    }
-  }, [dispatch]);
 
   const login = useCallback(async (credentialResponse: CredentialResponse) => {
     if (credentialResponse.credential) {
@@ -88,12 +66,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           iamDisplayRole: 'Viewer',
           appConfig: {}
         };
-        setUser(userData);
-        localStorage.setItem('sessionUserData', JSON.stringify(userData));
 
-        dispatch(
-          setCredentials({token, user: userData})
-        );
+        dispatch(setCredentials({token, user: userData}));
 
         // Reset the auth notification flag on successful login
         setAuthNotificationShown(false);
@@ -109,12 +83,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = useCallback(() => {
     isLoggedOut.current = true;
-    revokeGoogleToken(user?.token || '');
     dispatch(setCredentials({token: null, user: null}));
     dispatch(setIsLoaded({ isloaded: false }));
-    localStorage.removeItem('sessionUserData');
-    setUser(null);
-    clearPersistedState(); // Clear persisted Redux state
+    clearUserState(); // Clear user state from IndexedDB
+    clearPersistedState(); // Clear persisted Redux state (search, resources, entry)
     showInfo('You have been signed out.', 3000);
   }, [dispatch, showInfo]);
 
@@ -126,8 +98,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const updateUser = useCallback((token:string|undefined, userData:User) => {
     if (isLoggedOut.current) return;
     dispatch(setCredentials({token: token, user: userData}));
-    localStorage.setItem('sessionUserData', JSON.stringify(userData));
-    setUser(userData);
   }, [dispatch]);
 
   /**
@@ -170,25 +140,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user, updateUser]);
 
-  const revokeGoogleToken = async (token: string) => {
-    // The token to revoke is sent in the request body as a URL-encoded parameter
-    const response = await fetch('https://oauth2.googleapis.com/revoke', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `token=${encodeURIComponent(token)}`
-    });
-
-    if (response.ok) {
-      console.log('Token successfully revoked');
-      // Handle post-revocation actions, e.g., logging the user out of your app
-      // Note: Revoking a token does not sign the user out of their Google Account, only your app's access.
-    } else {
-      // Handle errors (e.g., token already revoked, invalid token, network issues)
-      console.error('Failed to revoke token:', response.statusText);
-    }
-  }
 
   const contextValue = useMemo(() => ({
     user,

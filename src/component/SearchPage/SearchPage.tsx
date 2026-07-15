@@ -96,7 +96,7 @@ const SearchPage: React.FC = () => {
   useEffect(() => {
     const mainArea = document.querySelector('.main-content-area') as HTMLElement;
     if (mainArea) {
-      mainArea.style.backgroundColor = mode === 'dark' ? '#131314' : '#F8FAFD';
+      mainArea.style.backgroundColor = mode === 'dark' ? '#131314' : '#F4F5FA';
     }
     return () => {
       if (mainArea) {
@@ -270,8 +270,8 @@ const SearchPage: React.FC = () => {
   }, [resourcesStatus]);
   
   // Custom filter component for SearchPage
-  const filterBorderColor = mode === 'dark' ? '#a7c6fa' : '#0E4DCA';
-  const filterActiveColor = mode === 'dark' ? '#a7c6fa' : '#0E4DCA';
+  const filterBorderColor = mode === 'dark' ? '#a7c6fa' : '#022FCD';
+  const filterActiveColor = mode === 'dark' ? '#a7c6fa' : '#022FCD';
   const customFilters = (
     <span
         style={{
@@ -312,7 +312,7 @@ const SearchPage: React.FC = () => {
 
   return (
     <>
-        <div className="search-page-bg" style={{backgroundColor: mode === 'dark' ? '#131314' : '#F8FAFD', height: 'calc(100vh - 3.9rem)', position: "relative"}}>
+        <div className="search-page-bg" style={{backgroundColor: mode === 'dark' ? '#131314' : '#F4F5FA', height: 'calc(100vh - 3.9rem)', position: "relative"}}>
             {/* Filters Component - Fixed Full-Height Overlay */}
             <div className="filter-panel-container" style={{
                 position: 'fixed',
@@ -324,7 +324,7 @@ const SearchPage: React.FC = () => {
                 zIndex: 1100,
                 overflowY: 'auto',
                 overflowX: 'hidden',
-                backgroundColor: mode === 'dark' ? '#282a2c' : '#F8FAFD',
+                backgroundColor: mode === 'dark' ? '#282a2c' : '#F4F5FA',
                 scrollbarWidth: 'none',
             }}>
                 <FilterDropdown

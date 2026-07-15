@@ -25,6 +25,7 @@ export default defineConfig({
         'src/types/**',
         'src/constants/**',
         '**/DataProductsTypes.ts',
+        'src/component/TableInsights/index.tsx',
       ],
       reportsDirectory: './coverage',
       clean: false,

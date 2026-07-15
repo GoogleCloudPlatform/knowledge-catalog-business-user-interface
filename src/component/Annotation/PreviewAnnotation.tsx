@@ -121,14 +121,30 @@ interface PreviewAnnotationProps {
   expandedItems: Set<string>;
   setExpandedItems: React.Dispatch<React.SetStateAction<Set<string>>>;
   isGlossary?: boolean;
+  isDataProduct?: boolean;
 }
+
+const isValidField = (item: any): boolean => {
+  if (item && typeof item === 'object' && 'kind' in item) {
+    return (item.kind === 'stringValue' && !!item.stringValue) ||
+           (item.kind === 'numberValue' && item.numberValue !== undefined) ||
+           (item.kind === 'boolValue') ||
+           (item.kind === 'listValue' && item.listValue?.values?.length > 0) ||
+           (item.kind === 'structValue' && item.structValue?.fields &&
+            Object.keys(item.structValue.fields).length > 0);
+  }
+  if (Array.isArray(item)) return item.length > 0;
+  if (item && typeof item === 'object') return Object.keys(item).length > 0;
+  return item !== null && item !== undefined && typeof item !== 'object';
+};
 
 const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
   entry,
   css,
   expandedItems = new Set(),
   setExpandedItems,
-  isGlossary = false
+  isGlossary = false,
+  isDataProduct = false,
 }) => {
 
   const number = entry?.entryType?.split('/').length > 0 ? entry?.entryType.split('/')[1] : '0';
@@ -144,6 +160,14 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
     delete aspects?.[key];
   });
 
+  if (isDataProduct) {
+    Object.keys(aspects).forEach(key => {
+      if (key.endsWith('.data-product') || key.endsWith('.queries')) {
+        delete aspects[key];
+      }
+    });
+  }
+
   const keys = Object.keys(aspects ?? {});
 
   // Filter out global aspects to check if there are any displayable aspects
@@ -156,6 +180,14 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
     return !(isSchema || isOverview || isContacts || isUsage || isGlossaryTermAspect);
   });
 
+
+  const contentKeys = displayableKeys.filter((key) => {
+  const rawData = aspects[key]?.data;
+  if (!rawData) return false;
+  const fieldsToCheck = rawData.fields || rawData;
+  return Object.keys(fieldsToCheck).some((fieldKey) => isValidField(fieldsToCheck[fieldKey]));
+});
+
   // State to track sub-field expansion (L2/L3)
   const [expandedFieldPaths, setExpandedFieldPaths] = useState<Set<string>>(new Set());
 
@@ -164,8 +196,9 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
   useEffect(() => {
     if (expandedItems.size === 0) {
       setExpandedFieldPaths(new Set());
-    } else if (displayableKeys.length > 0 && expandedItems.size >= displayableKeys.length) {
-      // Recursively collect all expandable field paths from aspect data
+    } else if (contentKeys.length > 0 && contentKeys.every(key => expandedItems.has(key))) {
+      // Recursively collect all expandable field paths from aspect data.
+      // Handles both kind-tagged (structValue/listValue) and plain-JSON shapes.
       const collectPaths = (
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         fields: Record<string, any>,
@@ -176,12 +209,16 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
         if (!fields || depth > 2) return;
         for (const key of Object.keys(fields)) {
           const value = fields[key];
-          if (!value || typeof value !== 'object') continue;
           const fp = `${basePath}.${key}`;
+          // Record every field path, including scalar leaves, so their value rows auto-expand
           paths.add(fp);
+          // Scalars have no children to recurse into
+          if (!value || typeof value !== 'object') continue;
+
+          // Kind-tagged list
           if (value.kind === 'listValue') {
             const vals = value.listValue?.values;
-            if (vals && Array.isArray(vals)) {
+            if (Array.isArray(vals)) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               vals.forEach((item: any, index: number) => {
                 const ip = `${fp}.${index}`;
@@ -191,15 +228,30 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
                 }
               });
             }
+          // Kind-tagged struct
           } else if (value.kind === 'structValue' && value.structValue?.fields) {
             collectPaths(value.structValue.fields, fp, depth + 1, paths);
+          // Plain JSON array
+          } else if (Array.isArray(value)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            value.forEach((item: any, index: number) => {
+              if (item && typeof item === 'object' && !Array.isArray(item)) {
+                const ip = `${fp}.${index}`;
+                paths.add(ip);
+                collectPaths(item, ip, depth + 1, paths);
+              }
+            });
+          // Plain JSON nested object (no kind wrapper)
+          } else if (!('kind' in value)) {
+            collectPaths(value, fp, depth + 1, paths);
           }
         }
       };
 
       const allPaths = new Set<string>();
       for (const aspectKey of displayableKeys) {
-        const aspectData = aspects[aspectKey]?.data?.fields;
+        // Plain-JSON data products keep data on .data; kind-tagged entries use .data.fields
+        const aspectData = aspects[aspectKey]?.data?.fields ?? aspects[aspectKey]?.data;
         if (aspectData) {
           collectPaths(aspectData, aspectKey, 0, allPaths);
         }
@@ -249,26 +301,13 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
    * Checks if a field value has displayable content.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const isValidField = (item: any): boolean => {
-    if (item && typeof item === 'object' && 'kind' in item) {
-      return (item.kind === 'stringValue' && !!item.stringValue) ||
-             (item.kind === 'numberValue' && item.numberValue !== undefined) ||
-             (item.kind === 'boolValue') ||
-             (item.kind === 'listValue' && item.listValue?.values?.length > 0) ||
-             (item.kind === 'structValue' && item.structValue?.fields &&
-              Object.keys(item.structValue.fields).length > 0);
-    }
-    // Simple type (Standard JSON key-value)
-    return item !== null && item !== undefined && typeof item !== 'object';
-  };
-
   /**
    * Renders the multilevel field hierarchy for an aspect's data.
    */
   const renderAnnotation = (fields: any, aspectKey: string) => {
     if (!fields || typeof fields !== 'object' || Object.keys(fields).length === 0) {
       return (
-        <div style={{ padding: '0.5rem', color: '#575757', fontStyle: 'italic', fontSize: '0.75rem' }}>
+        <div style={{ padding: '0.5rem', color: '#0C1226CC', fontStyle: 'italic', fontSize: '0.75rem' }}>
           No data available
         </div>
       );
@@ -297,6 +336,7 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
             onToggleField={handleToggleField}
             fieldPath={`${aspectKey}.${key}`}
             isLast={index === validFields.length - 1}
+            isDataProduct={isDataProduct || isGlossary}
           />
         ))}
       </div>
@@ -313,7 +353,7 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
         justifyContent: 'center',
         height: '100%',
         minHeight: '200px',
-        color: 'rgba(0, 0, 0, 0.6)',
+        color: '#0C1226CC',
         fontSize: '1rem',
         fontFamily: 'Google Sans, sans-serif',
         ...css
@@ -375,7 +415,7 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
               <Typography component="span" sx={{
                 fontFamily: 'Google Sans, sans-serif',
                 fontWeight: 500,
-                fontSize: isGlossary ? '0.7rem': '14px',
+                fontSize: '14px',
                 lineHeight: '20px',
                 color: "#575757",
                 wordBreak: 'break-word',
@@ -425,10 +465,9 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
                     alignItems: 'center',
                     minHeight: '48px',
                     padding: '12px 8px',
-                    backgroundColor: expandedItems.has(key) ? '#F0F4F8' : 'transparent',
-                    cursor: 'pointer',
+                    backgroundColor: (isDataProduct || isGlossary) ? '#FFFFFF' : (expandedItems.has(key) ? '#F0F4F8' : 'transparent'),
                     flexDirection: 'row',
-                    '&:hover': { backgroundColor: '#F0F4F8' },
+                    '&:hover': { backgroundColor: (isDataProduct || isGlossary) ? (expandedItems.has(key) ? '#FFFFFF' : 'transparent') : '#F0F4F8' },
                     '& .MuiAccordionSummary-content': { margin: 0, overflow: 'hidden', minWidth: 0 },
                     '& .MuiAccordionSummary-expandIconWrapper': { display: 'none' },
                     ...(isFirstAspect && {
@@ -453,7 +492,7 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
                 </AccordionSummary>
                 <AccordionDetails sx={{
                   padding: 0,
-                  backgroundColor: expandedItems.has(key) ? '#F0F4F8' : 'transparent',
+                  backgroundColor: (isDataProduct || isGlossary) ? '#FFFFFF' : (expandedItems.has(key) ? '#F0F4F8' : 'transparent'),
                   ...(isLastAspect && {
                     borderBottomLeftRadius: '12px',
                     borderBottomRightRadius: '12px',
@@ -473,8 +512,8 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
                   alignItems: 'center',
                   minHeight: '48px',
                   padding: '12px 8px',
-                  backgroundColor: 'transparent',
-                  borderBottom: '1px solid #DADCE0',
+                  backgroundColor: (isDataProduct || isGlossary) ? '#FFFFFF' : 'transparent',
+                  borderBottom: isLastAspect ? 'none' : '1px solid #DADCE0',
                   cursor: 'default',
                   ...(isFirstAspect && {
                     borderTopLeftRadius: '12px',

@@ -3,7 +3,7 @@ import { createSlice } from '@reduxjs/toolkit';
 const initialState = {
   token: null,
   userData: null,
-  mode: localStorage.getItem('mode') || 'light',
+  mode: 'light' as 'light' | 'dark',
 };
 
 export const userSlice = createSlice({
@@ -18,13 +18,7 @@ export const userSlice = createSlice({
       state.token = action.payload;
     },
     changeMode: (state) => {
-      if (state.mode === 'light') {
-        state.mode = 'dark';
-        localStorage.setItem('mode', 'dark');
-      } else {
-        state.mode = 'light';
-        localStorage.setItem('mode', 'light');
-      }
+      state.mode = state.mode === 'light' ? 'dark' : 'light';
     },
   },
 });

@@ -250,20 +250,20 @@ describe('AspectLinkedAssets', () => {
     it('should render empty state when linkedAssets is empty', () => {
       render(<AspectLinkedAssets {...defaultProps} linkedAssets={[]} />);
 
-      expect(screen.getByText('No linked assets available')).toBeInTheDocument();
+      expect(screen.getByText('No linked assets available.')).toBeInTheDocument();
       expect(screen.queryByTestId('resource-viewer')).not.toBeInTheDocument();
     });
 
     it('should render empty state when linkedAssets is null', () => {
       render(<AspectLinkedAssets {...defaultProps} linkedAssets={null as any} />);
 
-      expect(screen.getByText('No linked assets available')).toBeInTheDocument();
+      expect(screen.getByText('No linked assets available.')).toBeInTheDocument();
     });
 
     it('should render empty state when linkedAssets is undefined', () => {
       render(<AspectLinkedAssets {...defaultProps} linkedAssets={undefined as any} />);
 
-      expect(screen.getByText('No linked assets available')).toBeInTheDocument();
+      expect(screen.getByText('No linked assets available.')).toBeInTheDocument();
     });
   });
 

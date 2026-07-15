@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Accordion,
   AccordionSummary,
@@ -576,12 +576,17 @@ const handleCheckboxChange = (filter: any) => {
       const rect = accordionElement.getBoundingClientRect();
       const headerElement = accordionElement.querySelector('.MuiAccordionSummary-root');
       const headerRect = headerElement ? headerElement.getBoundingClientRect() : rect;
+      const expectedModalWidth = 400; 
+      const spaceOnRight = window.innerWidth - rect.right;
       
       setMultiselectPosition({
         top: ((headerRect.top + window.scrollY + 341) > window.innerHeight) 
           ? window.innerHeight - 360
           : headerRect.top + window.scrollY,
-        left: isGlossary ? (rect.left - 730) : (rect.right + 16)
+
+        left: spaceOnRight > expectedModalWidth + 32 
+          ? (rect.right + 16) 
+          : Math.max(16, rect.left - expectedModalWidth - 16)
       });
     }
     
@@ -740,6 +745,13 @@ const handleCheckboxChange = (filter: any) => {
   //   // Apply the filter logic here
   // };
 
+  const currentModalOptions = useMemo(() => {
+    if (!currentFilterType || !showMultiSelect) return [];
+    
+    const filter = filterData.find((f: any) => f.title === currentFilterType);
+    return filter?.items.map((item: any) => item.name) || [];
+  }, [filterData, currentFilterType, showMultiSelect]);
+
   return !loading ? (
     <Box
       sx={{
@@ -747,7 +759,8 @@ const handleCheckboxChange = (filter: any) => {
         scrollbarWidth: "none", // Firefox
         "&::-webkit-scrollbar": { display: "none" }, // Chrome/Safari
         "-ms-overflow-style": "none", // IE and Edge
-        maxHeight: "100%"
+        maxHeight: "100%",
+        backgroundColor: isGlossary ? "#F2F4FC" : "transparent",
       }}
     >
       <Box sx={{
@@ -766,7 +779,7 @@ const handleCheckboxChange = (filter: any) => {
             position: isGlossary ? "relative" : "sticky",
             top: 0,
             zIndex: 1,
-            backgroundColor: isGlossary ? "transparent" : (mode === 'dark' ? '#282a2c' : '#F8FAFD'),
+            backgroundColor: isGlossary ? "#F2F4FC" : (mode === 'dark' ? '#282a2c' : '#F2F4FC'),
             padding: isGlossary ? "0px" : "24px 0 0 0",
         }}>
             <Typography sx={{fontWeight: 500, fontSize: "16px", lineHeight: "24px", color: mode === 'dark' ? '#e3e3e3' : '#1F1F1F', fontFamily: '"Google Sans", sans-serif'}}>Filters</Typography>
@@ -916,8 +929,8 @@ const handleCheckboxChange = (filter: any) => {
                               width: '16px',
                               height: '16px',
                               borderRadius: '4px',
-                              border: `2px solid ${mode === 'dark' ? '#8ab4f8' : '#0E4DCA'}`,
-                              backgroundColor: mode === 'dark' ? '#8ab4f8' : '#0E4DCA',
+                              border: `2px solid ${mode === 'dark' ? '#8ab4f8' : '#022FCD'}`,
+                              backgroundColor: mode === 'dark' ? '#8ab4f8' : '#022FCD',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -951,7 +964,7 @@ const handleCheckboxChange = (filter: any) => {
                             {filter.title === 'Assets' && isGlossaryAssetType(item.name) && (
                               getGlossaryMuiIcon(assetNameToGlossaryType(item.name), {
                                 size: '16px',
-                                color: '#4285F4',
+                                color: '#022FCD',
                               })
                             )}
                             {filter.title === 'Assets' && !isGlossaryAssetType(item.name) && getAssetIcon(item.name) && (
@@ -1006,7 +1019,7 @@ const handleCheckboxChange = (filter: any) => {
                     </Box>
                   ))
                 }
-                {(filter.title !== 'Assets' && filter.title !== 'Products' && filter.items.length > 10) && (
+                {(filter.title !== 'Assets' && filter.title !== 'Products' && (filter.items.length > 10)) && (
                   <div style={{
                     display: 'flex',
                     justifyContent: 'flex-start',
@@ -1049,7 +1062,7 @@ const handleCheckboxChange = (filter: any) => {
     {/* MultiSelect Modal for all filter types */}
     {showMultiSelect && currentFilterType && multiselectPosition && (
       <FilterAnnotationsMultiSelect
-        options={filterData.find((f:any) => f.title === currentFilterType)?.items.map((item:any) => item.name) || []}
+        options={currentModalOptions}
         value={selectedFilters.filter((sf:any) => sf.type === (filterData.find((f:any) => f.title === currentFilterType)?.items[0]?.type || 'typeAliases')).map((sf:any) => sf.name)}
         onChange={handleMultiSelectChange}
         onClose={handleCloseMultiSelect}

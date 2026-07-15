@@ -12,7 +12,7 @@ import {
 } from "@mui/material";
 import NothingImage from "../../assets/images/nothing-image.png";
 
-import { ArrowBack, KeyboardArrowUp, KeyboardArrowDown, Close, FormatListBulleted } from "@mui/icons-material";
+import { ArrowBack, KeyboardArrowUp, KeyboardArrowDown, Close, FormatListBulleted, DashboardOutlined, CategoryOutlined, ArticleOutlined, Inventory2Outlined } from "@mui/icons-material";
 import { type GlossaryItem, type FilterChip, type FilterFieldType, FILTER_FIELD_LABELS } from "./GlossaryDataType";
 import PreviewAnnotation from "../Annotation/PreviewAnnotation";
 import AnnotationFilter from "../Annotation/AnnotationFilter";
@@ -265,7 +265,7 @@ const Glossaries = () => {
   const [isSidebarLoading, setIsSidebarLoading] = useState(false);
   const [isContentLoading, setIsContentLoading] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
-  const isSidebarOpen = useSelector((state: any) => state.search.isSideNavOpen);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const isSmallScreen = useMediaQuery('(max-width: 1280px)');
 
   // Use filtered tree when filters are active, otherwise use all glossary items
@@ -567,34 +567,10 @@ const Glossaries = () => {
   };
 
   const handleAnnotationExpandAll = () => {
-    const aspects = selectedItem?.aspects;
-
-    if (aspects) {
-      const annotationKeys = Object.keys(aspects).filter((key) => {
-        const isSchema = key.endsWith(".global.schema");
-        const isOverview = key.endsWith(".global.overview");
-        const isContacts = key.endsWith(".global.contacts");
-        const isUsage = key.endsWith(".global.usage");
-        const isGlossaryTermAspect = key.endsWith(
-          ".global.glossary-term-aspect"
-        );
-
-        if (
-          isSchema ||
-          isOverview ||
-          isContacts ||
-          isUsage ||
-          isGlossaryTermAspect
-        ) {
-          return false;
-        }
-
-        return hasValidAnnotationData(aspects[key]);
-      });
-
-      setExpandedAnnotations(new Set(annotationKeys));
-    }
-  };
+  if (selectedItem?.aspects) {
+    setExpandedAnnotations(new Set(Object.keys(selectedItem.aspects)));
+  }
+};
 
   useEffect(() => {
     setAssetPreviewData(null);
@@ -667,7 +643,7 @@ const Glossaries = () => {
         px: 0,
         pb: 0,
         pt: 0,
-        backgroundColor: "#fff",
+        backgroundColor: "#f8fafc",
         height: "calc(100vh - 72px)",
         width: "100%",
         overflow: "hidden",
@@ -679,10 +655,10 @@ const Glossaries = () => {
         sx={{
           position: "fixed",
           left: isSidebarOpen ? "96px" : "-252px",
-          top: 0,
+          top: "65px", 
           width: "252px",
-          height: "100vh",
-          backgroundColor: "#F8FAFD",
+          height: "calc(100vh - 72px)", 
+          backgroundColor: "#F4F5FA",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -701,15 +677,15 @@ const Glossaries = () => {
           position: "sticky",
           top: 0,
           zIndex: 1,
-          backgroundColor: "#F8FAFD",
-          padding: "24px 20px 0 20px",
+          backgroundColor: "#F4F5FA",
+          padding: "20px 20px 0 20px",
           boxSizing: "border-box",
         }}>
           <Typography sx={{
             fontWeight: 500,
             fontSize: "16px",
             lineHeight: "24px",
-            color: "#1F1F1F",
+            color: "#0C1226",
             fontFamily: '"Google Sans", sans-serif',
           }}>Business Glossaries</Typography>
         </div>
@@ -764,7 +740,7 @@ const Glossaries = () => {
               ))}
               {filteredGlossaries.length === 0 && (
                 <Box sx={{ p: 3, textAlign: "center" }}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="#0C1226CC">
                     No results found
                   </Typography>
                 </Box>
@@ -782,7 +758,7 @@ const Glossaries = () => {
           width: isSidebarOpen ? "calc(100% - 252px)" : "100%",
           height: "calc(100vh - 72px)",
           borderRadius: "0px",
-          backgroundColor: "#fff",
+          backgroundColor: "#f8fafc",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -811,10 +787,10 @@ const Glossaries = () => {
                 padding: "8px 13px",
                 gap: "8px",
                 height: "32px",
-                border: isSidebarOpen ? "none" : "1px solid #0E4DCA",
+                border: isSidebarOpen ? "none" : "1px solid #022FCD",
                 borderRadius: "59px",
-                background: isSidebarOpen ? "#0E4DCA" : "none",
-                color: isSidebarOpen ? "#EDF2FC" : "#0E4DCA",
+                background: isSidebarOpen ? "#022FCD" : "none",
+                color: isSidebarOpen ? "#EDF2FC" : "#022FCD",
                 cursor: "pointer",
                 transition: "all 0.2s ease",
               }}
@@ -822,7 +798,7 @@ const Glossaries = () => {
                 e.preventDefault();
                 e.stopPropagation();
                 const newState = !isSidebarOpen;
-                dispatch(setSideNavOpen(newState));
+                setIsSidebarOpen(newState);
                 if (isSmallScreen && newState) {
                   setAssetPreviewData(null);
                   setIsAssetPreviewOpen(false);
@@ -841,112 +817,132 @@ const Glossaries = () => {
             </span>
           </Box>
 
-          {/* Breadcrumbs/Title Row */}
+          {/* Header Card (Breadcrumbs, Title, Description) */}
           <Box
             sx={{
+              boxSizing: "border-box",
               display: "flex",
-              alignItems: "center",
+              flexDirection: "column",
+              justifyContent: "flex-start",
+              alignItems: "flex-start",
+              padding: "24px",
               gap: "20px",
-              padding: "20px 20px 0px",
+              width: "auto",
+              margin: "20px 20px 15px 20px",
+              background: "#FFFFFF",
+              borderRadius: "16px",
+              border: "1px solid #ECEEF4",
+              flex: "none",
+              order: 0,
+              flexGrow: 0,
             }}
           >
-            {(
-              <>
-                {breadcrumbs.length > 1 && (
-                  <IconButton
-                    sx={{ p: '4px', mr: 0.5, width: '40px', height: '40px', borderRadius: '50%', color: '#0B57D0', transition: 'background-color 0.2s', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' } }}
-                    onClick={() => {
-                      setSelectedId(breadcrumbs[breadcrumbs.length - 2].id);
-                      setTabValue(0);
-                    }}
-                  >
-                    <ArrowBack style={{ fontSize: "24px" }} />
-                  </IconButton>
-                )}
-                <ThemedIconContainer iconColor={GLOSSARY_COLORS[selectedItem?.type || "term"]}>
-                  {getIcon(selectedItem?.type || "term", "medium")}
-                </ThemedIconContainer>
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
-                    <Tooltip title={selectedItem?.displayName || ''} arrow placement="top">
-                      <label style={{
-                        fontFamily: '"Google Sans", sans-serif',
-                        color: "#1F1F1F",
-                        fontSize: "28px",
-                        fontWeight: "400",
-                        lineHeight: "36px",
-                        maxWidth: "500px",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}>
-                        {selectedItem?.displayName}
-                      </label>
-                    </Tooltip>
-                  </div>
-                </div>
-              </>
-            )}
-          </Box>
-
-          {/* Description Section */}
-          {selectedItem && (
-            <div style={{ padding: "16px 20px 0px", maxWidth: "800px" }}>
-              {selectedItem.description ? (
+            {/* Breadcrumbs/Title Row */}
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: "20px",
+                width: "100%",
+                minHeight: "40px",
+              }}
+            >
+              {(
                 <>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {breadcrumbs.length > 1 && (
+                      <IconButton
+                        sx={{ p: '4px', width: '40px', height: '40px', borderRadius: '50%', color: '#1F1F1F', transition: 'background-color 0.2s', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' } }}
+                        onClick={() => {
+                          setSelectedId(breadcrumbs[breadcrumbs.length - 2].id);
+                          setTabValue(0);
+                        }}
+                      >
+                        <ArrowBack style={{ fontSize: "24px" }} />
+                      </IconButton>
+                    )}
+                    <ThemedIconContainer iconColor={GLOSSARY_COLORS[selectedItem?.type || "term"]}>
+                      {getIcon(selectedItem?.type || "term", "medium")}
+                    </ThemedIconContainer>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
+                      <Tooltip title={selectedItem?.displayName || ''} arrow placement="top">
+                        <label style={{
+                          fontFamily: '"Google Sans", sans-serif',
+                              color: "#1F1F1F",
+                              fontSize: "24px",
+                              fontWeight: "500",
+                              lineHeight: "32px",
+                        }}>
+                          {selectedItem?.displayName}
+                        </label>
+                      </Tooltip>
+                    </div>
+                  </div>
+                </>
+              )}
+            </Box>
+
+            {/* Description Section */}
+            {selectedItem && (
+              <div style={{ width: "100%" }}>
+                {selectedItem.description ? (
+                  <>
+                    <div style={{
+                      fontFamily: '"Google Sans", sans-serif',
+                      fontSize: "14px",
+                      lineHeight: "20px",
+                      color: "#0C1226",
+                      fontWeight: 400,
+                      maxHeight: descriptionExpanded ? "none" : "60px",
+                      overflow: "hidden",
+                      position: "relative",
+                    }}>
+                      {(selectedItem.description).trim()}
+                    </div>
+                    {(selectedItem.description).trim().length > 600 && (
+                      <button
+                        onClick={() => setDescriptionExpanded(!descriptionExpanded)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "6px 0px",
+                          color: "#0B57D0",
+                          fontFamily: '"Google Sans", sans-serif',
+                          fontSize: "14px",
+                          fontWeight: 500,
+                          lineHeight: "20px",
+                          marginTop: "4px"
+                        }}
+                      >
+                        {descriptionExpanded ? <KeyboardArrowUp sx={{ fontSize: "20px" }} /> : <KeyboardArrowDown sx={{ fontSize: "20px" }} />}
+                        {descriptionExpanded ? 'Show less' : 'Show more'}
+                      </button>
+                    )}
+                  </>
+                ) : (
                   <div style={{
                     fontFamily: '"Google Sans", sans-serif',
                     fontSize: "14px",
                     lineHeight: "20px",
-                    color: "#575757",
+                    color: "#0C1226CC",
                     fontWeight: 400,
-                    maxHeight: descriptionExpanded ? "none" : "60px",
-                    overflow: "hidden",
-                    position: "relative",
                   }}>
-                    {selectedItem.description}
+                    No description provided for this glossary item.
                   </div>
-                  {selectedItem.description.length > 200 && (
-                    <button
-                      onClick={() => setDescriptionExpanded(!descriptionExpanded)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        padding: "6px 0px",
-                        color: "#0B57D0",
-                        fontFamily: '"Google Sans", sans-serif',
-                        fontSize: "14px",
-                        fontWeight: 500,
-                        lineHeight: "20px",
-                      }}
-                    >
-                      {descriptionExpanded ? <KeyboardArrowUp sx={{ fontSize: "20px" }} /> : <KeyboardArrowDown sx={{ fontSize: "20px" }} />}
-                      {descriptionExpanded ? 'Show less' : 'Show more'}
-                    </button>
-                  )}
-                </>
-              ) : (
-                <div style={{
-                  fontFamily: '"Google Sans", sans-serif',
-                  fontSize: "14px",
-                  lineHeight: "20px",
-                  color: "#575757",
-                  fontWeight: 400,
-                  fontStyle: "italic",
-                }}>
-                  No description provided for this glossary item.
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </Box>
 
           {/* Tabs */}
-          {(selectedItem && !selectedItem.aspects) ||
-          (selectedItem?.type === "term" && !selectedItem.relations) ? (
+          {(selectedItem && !selectedItem.aspects && accessDeniedItemId !== selectedId) ||
+          (selectedItem?.type === "term" && !selectedItem.relations && accessDeniedItemId !== selectedId) ? (
             // Tabs Shimmer: Horizontal row of placeholders to prevent layout jump
             <Box
               sx={{
@@ -966,17 +962,30 @@ const Glossaries = () => {
                 paddingLeft: "1.75rem",
                 position: "relative",
                 "& .MuiTabs-root": {
-                  minHeight: "48px",
+                  minHeight: "47px",
+                  height: "47px",
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "flex-start",
+                  "& .MuiTabs-flexContainer": {
+                    gap: "4px",
+                  }
                 },
                 "& .MuiTab-root": {
-                  fontFamily: '"Product Sans Regular", sans-serif',
+                  fontFamily: '"Google Sans", sans-serif',
                   fontSize: "14px",
-                  color: "#575757",
+                  fontWeight: 500,
+                  color: "#0C1226",
                   textTransform: "none",
-                  minHeight: "48px",
-                  padding: "12px 20px 16px",
+                  minHeight: "47px",
+                  padding: "0px 16px",
+                  display: "inline-flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "4px",
                   "&.Mui-selected": {
-                    color: "#0E4DCA",
+                    color: "#022FCD",
                   },
                   "&.Mui-disabled": { color: "#BDBDBD" },
                 },
@@ -985,13 +994,12 @@ const Glossaries = () => {
                   "&::after": {
                     content: '""',
                     position: "absolute",
-                    left: "20px",
-                    right: "20px",
-                    bottom: "-2px",
-                    height: "5px",
-                    backgroundColor: "white",
-                    borderTop: "3px solid #0E4DCA",
-                    borderRadius: "2.5px 2.5px 0 0",
+                    left: "16px",
+                    right: "16px",
+                    bottom: "0px",
+                    height: "3px",
+                    backgroundColor: "#022FCD",
+                    borderRadius: "3px 3px 0 0",
                   },
                 },
               }}
@@ -1007,12 +1015,20 @@ const Glossaries = () => {
                 }}
               >
                 {[
-                  { label: "Overview", hide: false },
-                  { label: "Categories", hide: isTerm },
-                  { label: "Terms", hide: isTerm },
-                  { label: "Linked Assets", hide: !isTerm },
-                  { label: "Synonyms & Related Terms", hide: !isTerm },
-                  { label: "Aspects", hide: !isTerm },
+                  { label: "Overview", hide: false, icon: <DashboardOutlined sx={{ fontSize: "20px" }} /> },
+                  { label: "Categories", hide: isTerm, icon: <CategoryOutlined sx={{ fontSize: "20px" }} /> },
+                  { label: "Terms", hide: isTerm, icon: <ArticleOutlined sx={{ fontSize: "20px" }} /> },
+                  { label: "Linked Assets", hide: !isTerm, icon: <Inventory2Outlined sx={{ fontSize: "20px" }} />},
+                  { 
+                    label: "Synonyms & Related Terms", 
+                    hide: !isTerm, 
+                    icon: <span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>match_word</span> 
+                  },
+                  { 
+                    label: "Aspects", 
+                    hide: !isTerm, 
+                    icon: <span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>newsmode</span> 
+                  },
                 ].map((tab, index) => {
                   if (tab.hide) return null;
                   return (
@@ -1020,6 +1036,8 @@ const Glossaries = () => {
                       key={index}
                       value={index}
                       label={tab.label}
+                      icon={tab.icon}
+                      iconPosition="start"
                     />
                   );
                 })}
@@ -1130,7 +1148,16 @@ const Glossaries = () => {
                     </Box>
 
                     {/* Aspect List Component */}
-                    <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+                    <Box sx={{ 
+                      flex: 1, 
+                      overflowY: "auto", 
+                      minHeight: 0,
+                      border: '1px solid #DADCE0',
+                      borderRadius: '12px',
+                      backgroundColor: '#FFFFFF',
+                      overflow: 'hidden',
+                      marginTop: '12px'
+                    }}>
                       <PreviewAnnotation
                         entry={filteredAnnotationEntry || selectedItem}
                         css={{
@@ -1143,6 +1170,7 @@ const Glossaries = () => {
                         }}
                         expandedItems={expandedAnnotations}
                         setExpandedItems={setExpandedAnnotations}
+                        isGlossary={true}
                       />
                     </Box>
                   </Box>
@@ -1158,7 +1186,7 @@ const Glossaries = () => {
                       gap: 2,
                     }}
                   >
-                    <Typography variant="body1" color="text.secondary">
+                    <Typography variant="body1" color="#0C1226CC">
                       No aspects available for this term
                     </Typography>
                   </Box>
@@ -1196,7 +1224,7 @@ const Glossaries = () => {
 
             height: "calc(100vh - 100px)",
             borderRadius: "0px",
-            backgroundColor: "#fff",
+            backgroundColor: "transparent",
             border: "transparent",
             display: "flex",
             flexDirection: "column",

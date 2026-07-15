@@ -122,7 +122,7 @@ describe('SearchEntriesCard', () => {
       render(<SearchEntriesCard entry={entry} />);
 
       await waitFor(() => {
-        expect(screen.getByText('us-central1')).toBeInTheDocument();
+        expect(screen.getByText('Us-central1')).toBeInTheDocument();
       });
     });
 
@@ -485,7 +485,7 @@ describe('SearchEntriesCard', () => {
       render(<SearchEntriesCard entry={entry} />);
 
       await waitFor(() => {
-        expect(screen.getByText('europe-west1')).toBeInTheDocument();
+        expect(screen.getByText('Europe-west1')).toBeInTheDocument();
       });
     });
   });
@@ -793,12 +793,12 @@ describe('SearchEntriesCard', () => {
   });
 
   describe('MUI Icons', () => {
-    it('renders AccessTime icon', async () => {
+    it('renders DateRange icon', async () => {
       const entry = createMockEntry();
       render(<SearchEntriesCard entry={entry} />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('AccessTimeIcon')).toBeInTheDocument();
+        expect(screen.getByTestId('DateRangeOutlinedIcon')).toBeInTheDocument();
       });
     });
 

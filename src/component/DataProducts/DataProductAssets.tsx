@@ -6,7 +6,10 @@ import FilterDropdown from "../Filter/FilterDropDown";
 import { typeAliases } from "../../utils/resourceUtils";
 import FilterBar, { FilterBarChips } from '../Common/FilterBar';
 import type { ActiveFilter as FilterBarActiveFilter } from '../Common/FilterBar';
-
+import { useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
+import { fetchEntry, clearHistory } from '../../features/entry/entrySlice';
+import type { AppDispatch } from '../../app/store';
 
 interface DataProductAssetsProps {
   linkedAssets: any[];
@@ -26,9 +29,11 @@ const DataProductAssets: React.FC<DataProductAssetsProps> = ({
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<any[]>([]);
   const [filterBarActiveFilters, setFilterBarActiveFilters] = useState<FilterBarActiveFilter[]>([]);
-  const [assetViewMode, setAssetViewMode] = useState<"list" | "table">("table");
   const [assetPageSize, setAssetPageSize] = useState(20);
   const [assetPreviewData, setAssetPreviewData] = useState<any | null>(null);
+
+  const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
 
   const filteredLinkedAssets = useMemo(() => {
     let assets = linkedAssets || [];
@@ -168,7 +173,7 @@ const DataProductAssets: React.FC<DataProductAssetsProps> = ({
           gap: 2,
         }}
       >
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body1" color="#0C1226CC">
           No assets available for this Data Product.
         </Typography>
       </Box>
@@ -176,14 +181,87 @@ const DataProductAssets: React.FC<DataProductAssetsProps> = ({
   }
 
   return (
-    <Box sx={{ height: "100%", width: "100%" }}>
+    <Box sx={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
+      <Box 
+        sx={{ 
+          display: "flex", 
+          alignItems: "center",
+          gap: "12px", 
+          width: "100%", 
+          paddingLeft: "20px",
+          paddingRight: "20px",
+          paddingTop: "16px",
+          paddingBottom: "8px",
+          boxSizing: "border-box",
+          position: "relative",
+        }}
+      >
+        <span
+          style={{
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0px 16px",
+            gap: "8px",
+            height: "32px",
+            border: isFilterOpen ? "none" : "1px solid #022FCD",
+            borderRadius: "59px",
+            background: isFilterOpen ? "#022FCD" : "#FFFFFF",
+            color: isFilterOpen ? "#EDF2FC" : "#022FCD",
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            flexShrink: 0,
+          }}
+          onClick={() => {
+            const newFilterState = !isFilterOpen;
+            setIsFilterOpen(newFilterState);
+            if (newFilterState) {
+              setAssetPreviewData(null);
+              onAssetPreviewChange(null);
+            }
+          }}
+        >
+          {isFilterOpen ? (
+            <Close style={{ width: "18px", height: "18px" }} />
+          ) : (
+            <Tune style={{ width: "18px", height: "18px" }} />
+          )}
+          <span style={{
+            fontFamily: '"Google Sans", sans-serif',
+            fontWeight: 500,
+            fontSize: "14px",
+            display: "flex",
+            alignItems: "center",
+            whiteSpace: "nowrap",
+          }}>Filters</span>
+        </span>
+        
+        <FilterBar
+          filterText={searchTerm}
+          onFilterTextChange={onSearchTermChange}
+          propertyNames={[
+            { name: 'Name', mode: 'text' as const },
+            { name: 'Description', mode: 'text' as const },
+          ]}
+          activeFilters={filterBarActiveFilters}
+          onActiveFiltersChange={setFilterBarActiveFilters}
+          marginLeft="0px"
+          placeholder="Filter assets by name or description"
+          sx={{ flex: 1, minWidth: 0, backgroundColor: 'transparent' }}
+          hideChips
+          showTextInFilterMenu
+        />
+      </Box>
       <Box
         sx={{
-          height: "100%",
+          flex: 1,
+          minHeight: 0,
           width: "100%",
           borderRadius: "16px",
           overflow: "visible",
-          bgcolor: "#fff",
+          bgcolor: "#F7F9F9",
           display: "flex",
           flexDirection: "row",
           gap: "8px",
@@ -192,22 +270,22 @@ const DataProductAssets: React.FC<DataProductAssetsProps> = ({
         {/* LEFT SECTION: Filter Card (Collapsible) */}
         <Box
           sx={{
+            height: "100%",
             width: isFilterOpen ? "clamp(230px, 18vw, 280px)" : "0px",
             minWidth: isFilterOpen ? "clamp(230px, 18vw, 280px)" : "0px",
-            transition:
-              "width 0.3s ease, min-width 0.3s ease, padding 0.3s ease, opacity 0.3s ease",
+            transition: "all 0.3s ease",
             opacity: isFilterOpen ? 1 : 0,
             overflow: "hidden",
             display: "flex",
             flexDirection: "column",
             alignItems: "flex-start",
             padding: isFilterOpen ? "20px" : "0px",
-            marginTop: "8px",
+            marginTop: "10px",
+            marginLeft: isFilterOpen ? "20px" : "0px",
             gap: "20px",
-            backgroundColor: "#F8FAFD",
+            backgroundColor: "#F2F4FC",
             border: isFilterOpen ? "1px solid #DADCE0" : "none",
             borderRadius: "20px",
-            height: "100%",
             boxSizing: "border-box",
           }}
         >
@@ -233,6 +311,8 @@ const DataProductAssets: React.FC<DataProductAssetsProps> = ({
             display: "flex",
             flexDirection: "column",
             minWidth: 0,
+            paddingRight: "20px",
+            transition: "padding 0.3s ease",
           }}
         >
           {/* Resource Viewer Content */}
@@ -243,8 +323,7 @@ const DataProductAssets: React.FC<DataProductAssetsProps> = ({
               resourcesTotalSize={filteredLinkedAssets.length}
               previewData={assetPreviewData}
               onPreviewDataChange={handlePreviewDataChange}
-              viewMode={assetViewMode}
-              onViewModeChange={setAssetViewMode}
+              viewMode="table"
               selectedTypeFilter={null}
               onTypeFilterChange={() => {}}
               typeAliases={typeAliases}
@@ -257,68 +336,15 @@ const DataProductAssets: React.FC<DataProductAssetsProps> = ({
               showSortBy={true}
               showResultsCount={false}
               hideMostRelevant={true}
-              headerStyle={{ paddingTop: '2px' }}
-              customFilters={
-                <div style={{ display: "flex", alignItems: "flex-start", gap: "20px", minWidth: 0, flex: 1 }}>
-                  <span
-                    style={{
-                      boxSizing: "border-box",
-                      display: "flex",
-                      flexDirection: "row",
-                      alignItems: "center",
-                      padding: "8px 13px",
-                      gap: "8px",
-                      width: "85px",
-                      height: "32px",
-                      border: isFilterOpen ? "none" : "1px solid #0E4DCA",
-                      borderRadius: "59px",
-                      background: isFilterOpen ? "#0E4DCA" : "none",
-                      color: isFilterOpen ? "#EDF2FC" : "#0E4DCA",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease",
-                      flexShrink: 0,
-                      flexGrow: 0,
-                    }}
-                    onClick={() => {
-                      const newFilterState = !isFilterOpen;
-                      setIsFilterOpen(newFilterState);
-                      if (newFilterState) {
-                        setAssetPreviewData(null);
-                        onAssetPreviewChange(null);
-                      }
-                    }}
-                  >
-                    {isFilterOpen ? <Close style={{ width: "16px", height: "16px", flexShrink: 0, flexGrow: 0 }} /> : <Tune style={{ width: "16px", height: "16px", flexShrink: 0, flexGrow: 0 }} />}
-                    <span style={{
-                      fontFamily: '"Google Sans", sans-serif',
-                      fontWeight: 500,
-                      fontSize: "12px",
-                      lineHeight: "16px",
-                      letterSpacing: "0.1px",
-                      display: "flex",
-                      alignItems: "center",
-                      whiteSpace: "nowrap",
-                      flexShrink: 0,
-                      flexGrow: 0,
-                    }}>Filters</span>
-                  </span>
-                  <FilterBar
-                    filterText={searchTerm}
-                    onFilterTextChange={onSearchTermChange}
-                    propertyNames={[
-                      { name: 'Name', mode: 'text' as const },
-                      { name: 'Description', mode: 'text' as const },
-                    ]}
-                    activeFilters={filterBarActiveFilters}
-                    onActiveFiltersChange={setFilterBarActiveFilters}
-                    marginLeft="0px"
-                    placeholder="Filter assets by name or description"
-                    sx={{ flex: 1, minWidth: 0 }}
-                    hideChips
-                    showTextInFilterMenu
-                  />
-                </div>
-              }
+              headerStyle={{ paddingTop: '2px', backgroundColor: '#F7F9F9' }}
+              isDataProduct={true}
+              hideViewToggle={true}
+              onViewDetails={(entry) => {
+                dispatch(clearHistory());
+                dispatch(fetchEntry({ entryName: entry.name, id_token: idToken }));
+                navigate('/view-details');
+              }}
+              
               customFilterChips={
                 <FilterBarChips
                   activeFilters={filterBarActiveFilters}
@@ -330,8 +356,8 @@ const DataProductAssets: React.FC<DataProductAssetsProps> = ({
                 height: "100%",
                 border: "none",
                 margin: 0,
-                backgroundColor: "#fff",
-                width: "100%",
+                backgroundColor: "#F7F9F9",
+                width: "auto",
               }}
               contentStyle={{
                 minHeight: "auto",

@@ -5,25 +5,29 @@
  * These functions are exposed on window object for easy testing from browser console
  */
 
+import store from '../app/store';
+import { setCredentials } from '../features/user/userSlice';
+
 /**
  * Expire the current session token by setting tokenExpiry to the past
  * Usage in console: window.expireToken()
  */
 export const expireToken = () => {
-  const sessionData = localStorage.getItem('sessionUserData');
-  if (!sessionData) {
+  const userData = store.getState().user.userData as any;
+  if (!userData) {
     console.error('No session data found');
     return;
   }
 
-  const userData = JSON.parse(sessionData);
   const now = Math.floor(Date.now() / 1000);
+  const updatedUser = {
+    ...userData,
+    tokenExpiry: now - 3600, // 1 hour in the past
+    tokenIssuedAt: now - 7200, // 2 hours in the past
+  };
 
-  userData.tokenExpiry = now - 3600; // 1 hour in the past
-  userData.tokenIssuedAt = now - 7200; // 2 hours in the past
-
-  localStorage.setItem('sessionUserData', JSON.stringify(userData));
-  console.log('Token expired! tokenExpiry set to:', new Date(userData.tokenExpiry * 1000).toLocaleString());
+  store.dispatch(setCredentials({ token: updatedUser.token, user: updatedUser }));
+  console.log('Token expired! tokenExpiry set to:', new Date(updatedUser.tokenExpiry * 1000).toLocaleString());
   console.log('Refresh the page or wait for the next session check (30s)');
 };
 
@@ -32,21 +36,22 @@ export const expireToken = () => {
  * Usage in console: window.setTokenExpiry(5) // expires in 5 minutes
  */
 export const setTokenExpiry = (minutes: number) => {
-  const sessionData = localStorage.getItem('sessionUserData');
-  if (!sessionData) {
+  const userData = store.getState().user.userData as any;
+  if (!userData) {
     console.error('No session data found');
     return;
   }
 
-  const userData = JSON.parse(sessionData);
   const now = Math.floor(Date.now() / 1000);
+  const updatedUser = {
+    ...userData,
+    tokenExpiry: now + (minutes * 60),
+    tokenIssuedAt: now,
+  };
 
-  userData.tokenExpiry = now + (minutes * 60);
-  userData.tokenIssuedAt = now;
-
-  localStorage.setItem('sessionUserData', JSON.stringify(userData));
+  store.dispatch(setCredentials({ token: updatedUser.token, user: updatedUser }));
   console.log(`Token set to expire in ${minutes} minutes`);
-  console.log('Expiry time:', new Date(userData.tokenExpiry * 1000).toLocaleString());
+  console.log('Expiry time:', new Date(updatedUser.tokenExpiry * 1000).toLocaleString());
 
   if (minutes <= 5) {
     console.log('Warning modal should appear within 30 seconds (next check interval)');
@@ -67,15 +72,13 @@ export const triggerWarning = () => {
  * Usage in console: window.showSessionStatus()
  */
 export const showSessionStatus = () => {
-  const sessionData = localStorage.getItem('sessionUserData');
-  if (!sessionData) {
+  const userData = store.getState().user.userData as any;
+  if (!userData) {
     console.error('No session data found');
     return;
   }
 
-  const userData = JSON.parse(sessionData);
   const now = Math.floor(Date.now() / 1000);
-
   const timeUntilExpiry = userData.tokenExpiry - now;
   const minutesUntilExpiry = Math.floor(timeUntilExpiry / 60);
   const secondsUntilExpiry = timeUntilExpiry % 60;
@@ -103,22 +106,22 @@ export const showSessionStatus = () => {
  * Usage in console: window.resetSession()
  */
 export const resetSession = () => {
-  const sessionData = localStorage.getItem('sessionUserData');
-  if (!sessionData) {
+  const userData = store.getState().user.userData as any;
+  if (!userData) {
     console.error('No session data found');
     return;
   }
 
-  const userData = JSON.parse(sessionData);
   const now = Math.floor(Date.now() / 1000);
+  const updatedUser = {
+    ...userData,
+    tokenExpiry: now + 3600, // 1 hour from now
+    tokenIssuedAt: now,
+  };
 
-  userData.tokenExpiry = now + 3600; // 1 hour from now
-  userData.tokenIssuedAt = now;
-
-  localStorage.setItem('sessionUserData', JSON.stringify(userData));
-
+  store.dispatch(setCredentials({ token: updatedUser.token, user: updatedUser }));
   console.log('Session reset to fresh state');
-  console.log('Token expires:', new Date(userData.tokenExpiry * 1000).toLocaleString());
+  console.log('Token expires:', new Date(updatedUser.tokenExpiry * 1000).toLocaleString());
 };
 
 // Expose functions to window object for console access
@@ -128,14 +131,4 @@ if (typeof window !== 'undefined') {
   (window as any).triggerWarning = triggerWarning;
   (window as any).showSessionStatus = showSessionStatus;
   (window as any).resetSession = resetSession;
-
-  // console.log('Session Testing Helpers Loaded!');
-  // console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  // console.log('Available commands:');
-  // console.log('  window.showSessionStatus()    - Show current session info');
-  // console.log('  window.expireToken()          - Expire token immediately');
-  // console.log('  window.setTokenExpiry(5)      - Set token to expire in 5 minutes');
-  // console.log('  window.triggerWarning()       - Trigger warning modal (sets expiry to 4 min)');
-  // console.log('  window.resetSession()         - Reset to fresh session (1 hour)');
-  // console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }

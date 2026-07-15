@@ -316,7 +316,7 @@ const ListView: React.FC<LineageListViewProps> = ({ listData, entry }) => {
           onClick={() => setSelectedFilter('all')}
           sx={{
             backgroundColor: selectedFilter === 'all' ? '#E7F0FE' : '#FFFFFF',
-            color: selectedFilter === 'all' ? '#0E4DCA' : '#1F1F1F',
+            color: selectedFilter === 'all' ? '#022FCD' : '#1F1F1F',
             border: selectedFilter === 'all' ? 'none' : '1px solid #DADCE0',
             fontSize: '0.75rem',
             fontWeight: 400,
@@ -336,7 +336,7 @@ const ListView: React.FC<LineageListViewProps> = ({ listData, entry }) => {
           onClick={() => setSelectedFilter('upstream')}
           sx={{
             backgroundColor: selectedFilter === 'upstream' ? '#E7F0FE' : '#FFFFFF',
-            color: selectedFilter === 'upstream' ? '#0E4DCA' : '#1F1F1F',
+            color: selectedFilter === 'upstream' ? '#022FCD' : '#1F1F1F',
             border: selectedFilter === 'upstream' ? 'none' : '1px solid #DADCE0',
             fontSize: '0.75rem',
             fontWeight: 400,
@@ -356,7 +356,7 @@ const ListView: React.FC<LineageListViewProps> = ({ listData, entry }) => {
           onClick={() => setSelectedFilter('downstream')}
           sx={{
             backgroundColor: selectedFilter === 'downstream' ? '#E7F0FE' : '#FFFFFF',
-            color: selectedFilter === 'downstream' ? '#0E4DCA' : '#1F1F1F',
+            color: selectedFilter === 'downstream' ? '#022FCD' : '#1F1F1F',
             border: selectedFilter === 'downstream' ? 'none' : '1px solid #DADCE0',
             fontSize: '0.75rem',
             fontWeight: 400,
@@ -484,7 +484,7 @@ const ListView: React.FC<LineageListViewProps> = ({ listData, entry }) => {
             gap: '0.375rem',
             padding: '0.25rem 0.5rem',
             backgroundColor: '#E7F0FE',
-            border: '1px solid #0E4DCA',
+            border: '1px solid #022FCD',
             borderRadius: '16px',
             fontSize: '11px'
           }}
@@ -492,7 +492,7 @@ const ListView: React.FC<LineageListViewProps> = ({ listData, entry }) => {
           <Typography sx={{ 
             fontSize: '0.6875rem', 
             fontWeight: 500,
-            color: '#0E4DCA'
+            color: '#022FCD'
           }}>
             {formatPropertyName(filter.property)}:
           </Typography>
@@ -509,7 +509,7 @@ const ListView: React.FC<LineageListViewProps> = ({ listData, entry }) => {
               padding: '0.125rem',
               width: '16px',
               height: '16px',
-              color: '#0E4DCA',
+              color: '#022FCD',
               '&:hover': {
                 backgroundColor: '#D93025',
                 color: '#FFFFFF'
