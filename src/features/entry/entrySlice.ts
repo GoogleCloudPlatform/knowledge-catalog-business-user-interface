@@ -1,4 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import type { PayloadAction } from '@reduxjs/toolkit';
 import { URLS } from '../../constants/urls';
 import axios, { AxiosError } from 'axios';
 import type { GlossaryItem } from '../../component/Glossaries/GlossaryDataType';
@@ -156,6 +157,8 @@ type EntryState = {
   lineageEntryError: string | undefined | unknown | null;
   lineageToEntryCopy: boolean;
   history: unknown[]; // Stack to track previous entries
+  tabHistory: (string | null)[]; // Parallel stack: tab name active when each history entry was pushed
+  pendingTabName: string | null; // Tab name to restore after popFromHistory (consumed by ViewDetails)
   accessCheckCache: Record<string, { status: 'loading' | 'succeeded' | 'failed'; error?: unknown }>;
   entryLinks: GlossaryItem[];
   entryLinksStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -171,6 +174,8 @@ const initialState: EntryState = {
   lineageEntryError: null,
   lineageToEntryCopy:false,
   history: [],
+  tabHistory: [],
+  pendingTabName: null,
   accessCheckCache: {},
   entryLinks: [],
   entryLinksStatus: 'idle',
@@ -189,10 +194,12 @@ export const entrySlice = createSlice({
     setLineageToEntryCopy: (state, action) => {
       state.lineageToEntryCopy = action.payload;
     },
-    pushToHistory: (state) => {
-      // Push current entry to history before setting new entry
+    pushToHistory: (state, action: PayloadAction<string | undefined>) => {
+      // Push current entry to history before setting new entry.
+      // Optional payload = the tab name active when leaving, so back can restore it.
       if (state.items && Object.keys(state.items).length > 0) {
         state.history.push(state.items);
+        state.tabHistory.push(action.payload ?? null);
       }
     },
     popFromHistory: (state) => {
@@ -200,10 +207,17 @@ export const entrySlice = createSlice({
       if (state.history.length > 0) {
         state.items = state.history.pop();
         state.status = 'succeeded';
+        // Restore the tab that was active for this entry (consumed by ViewDetails).
+        state.pendingTabName = state.tabHistory.length > 0 ? (state.tabHistory.pop() ?? null) : null;
       }
     },
     clearHistory: (state) => {
       state.history = [];
+      state.tabHistory = [];
+      state.pendingTabName = null;
+    },
+    clearPendingTab: (state) => {
+      state.pendingTabName = null;
     },
     resetAccessCheck: (state) => {
       state.accessCheckCache = {};
@@ -282,5 +296,5 @@ export const entrySlice = createSlice({
   },
 });
 
-export const { setEntry, pushToHistory, popFromHistory, clearHistory, resetAccessCheck } = entrySlice.actions;
+export const { setEntry, pushToHistory, popFromHistory, clearHistory, clearPendingTab, resetAccessCheck } = entrySlice.actions;
 export default entrySlice.reducer;

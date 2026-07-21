@@ -102,6 +102,8 @@ const getInitialState = () => ({
   lineageEntryError: null,
   lineageToEntryCopy: false,
   history: [] as unknown[],
+  tabHistory: [] as (string | null)[],
+  pendingTabName: null as string | null,
   accessCheckCache: {} as Record<string, { status: 'loading' | 'succeeded' | 'failed'; error?: unknown }>,
   entryLinks: [] as import('../../component/Glossaries/GlossaryDataType').GlossaryItem[],
   entryLinksStatus: "idle" as const,

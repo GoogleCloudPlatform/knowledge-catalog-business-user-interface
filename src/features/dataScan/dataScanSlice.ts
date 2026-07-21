@@ -191,7 +191,7 @@ export const dataScanSlice = createSlice({
       })
       .addCase(fetchAllDataScans.fulfilled, (state, action) => {
         state.allScansStatus = 'succeeded';
-        console.log('allScans: ', action.payload);
+        // console.log('allScans: ', action.payload);
         state.allScans = action.payload || [];
       })
       .addCase(fetchAllDataScans.rejected, (state, action) => {

@@ -28,12 +28,12 @@ const TableInsights: React.FC<TableInsightsProps> = ({ entry, scanName }) => {
   const { setAccessPanelOpen } = useAccessRequest();
   const id_token = user?.token || '';
 
-  console.log('TableInsights rendered with scanName:', scanName);
+  // console.log('TableInsights rendered with scanName:', scanName);
 
   // Get resource ID from entry
   const resourceId = entry?.entrySource?.resource || '';
-  console.log('Derived resourceId:', resourceId);
-  console.log('Entry data:', entry);
+  // console.log('Derived resourceId:', resourceId);
+  // console.log('Entry data:', entry);
 
   // Redux selectors
   const insightsData = useSelector(selectInsightsData(resourceId)) as InsightJob[] | undefined;

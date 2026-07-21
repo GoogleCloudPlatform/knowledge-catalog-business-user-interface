@@ -371,13 +371,10 @@ describe("dataProductsSlice", () => {
         );
 
         expect(axios.get).toHaveBeenCalledWith(
-          expect.stringContaining(
-            "https://dataplex.googleapis.com/v1/projects/test-project/locations/us-central1:lookupEntry"
-          ),
+          expect.stringContaining("data-product-details"),
           expect.objectContaining({
             params: expect.objectContaining({
               entry: expect.stringContaining("projects/test-project"),
-              view: "ALL",
             }),
           })
         );
@@ -578,7 +575,12 @@ describe("dataProductsSlice", () => {
         );
 
         expect(axios.get).toHaveBeenCalledWith(
-          "https://dataplex.googleapis.com/v1/projects/test-project/locations/us-central1/dataProducts/product-1/dataAssets"
+          expect.stringContaining("data-product-assets"),
+          expect.objectContaining({
+            params: expect.objectContaining({
+              dataProduct: "projects/test-project/locations/us-central1/dataProducts/product-1",
+            }),
+          })
         );
       });
 
@@ -1027,7 +1029,12 @@ describe("dataProductsSlice", () => {
       );
 
       expect(axios.get).toHaveBeenCalledWith(
-        "https://dataplex.googleapis.com/v1/projects/my-project/locations/europe-west1/dataProducts/complex-product-name-123/dataAssets"
+        expect.stringContaining("data-product-assets"),
+        expect.objectContaining({
+          params: expect.objectContaining({
+            dataProduct: "projects/my-project/locations/europe-west1/dataProducts/complex-product-name-123",
+          }),
+        })
       );
     });
 
@@ -1053,8 +1060,12 @@ describe("dataProductsSlice", () => {
       );
 
       expect(axios.get).toHaveBeenCalledWith(
-        expect.stringContaining("project-with-dashes"),
-        expect.any(Object)
+        expect.stringContaining("data-product-details"),
+        expect.objectContaining({
+          params: expect.objectContaining({
+            project: "project-with-dashes",
+          }),
+        })
       );
     });
   });

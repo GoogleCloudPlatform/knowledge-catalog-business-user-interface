@@ -24,4 +24,10 @@ export const URLS = {
     SEND_FEEDBACK: '/send-feedback',
     LINEAGE_SEARCH_COLUMN_LEVEL: '/lineage-column-level',
     GET_SCAN_JOBS: '/get-data-scan-jobs',
+    DATA_PRODUCTS: '/data-products',
+    DATA_PRODUCT_DETAILS: '/data-product-details',
+    DATA_PRODUCT_ASSETS: '/data-product-assets',
+    GLOSSARY_CHILDREN: '/glossary-children',
+    LOOKUP_ENTRY_REST: '/lookup-entry-rest',
+    SEARCH_ENTRIES: '/search-entries',
 }

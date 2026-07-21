@@ -9,6 +9,7 @@ import AnnotationFilter from '../Annotation/AnnotationFilter'
 import type { AppDispatch } from '../../app/store'
 import { useAuth } from '../../auth/AuthProvider'
 import { getMimeType, getName  } from '../../utils/resourceUtils'
+import DetailPageOverviewSkeleton from '../DetailPageOverview/DetailPageOverviewSkeleton';
 import { fetchDataProductsAssetsList, fetchDataProductsList, getDataProductDetails, setDataProductsDetailTabValue } from '../../features/dataProducts/dataProductsSlice'
 import Assets from './Assets'
 import AccessGroup from './AccessGroup'
@@ -1075,8 +1076,8 @@ const tabProps = (index: number)  => {
         </Box>
 
         {/* 4. Tab Content Body Skeleton */}
-        <Box sx={{ paddingTop: '20px', flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: '2rem' }}>
-          <Skeleton variant="rounded" width="100%" height={400} sx={{ borderRadius: '12px' }} />
+        <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: '2rem' }}>
+          <DetailPageOverviewSkeleton />
         </Box>
       </Box>
     </div>

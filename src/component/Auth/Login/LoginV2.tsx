@@ -9,6 +9,19 @@ import dataplexLogo from '../../../assets/svg/knowledge-catalog-logo-v2.svg';
 import googleLogo from '../../../assets/images/google-logo-figma-53c44d.png';
 import { REQUIRED_SCOPES } from '../../../constants/auth';
 
+const GOOGLE_OAUTH_SCOPES = import.meta.env.VITE_IS_SERVICE_ACCOUNT === "true" ? [
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'openid'
+] : [
+  'https://www.googleapis.com/auth/cloud-platform',
+  'https://www.googleapis.com/auth/bigquery',
+  'https://www.googleapis.com/auth/dataplex.readonly',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/gmail.send'
+];
+
 const LoginV2: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -54,7 +67,7 @@ const LoginV2: React.FC = () => {
     },
     onError: () => console.error('Google Login Failed'),
     flow: 'implicit',
-    scope: 'https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/bigquery https://www.googleapis.com/auth/dataplex.readonly https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.send',
+    scope: GOOGLE_OAUTH_SCOPES.join(' '), 
   });
 
   return (

@@ -14,6 +14,7 @@ const { sendAccessRequestEmail, sendFeedbackEmail, sendDataplexAccessRequest } =
 const { BigQuery } = require('@google-cloud/bigquery');
 const rateLimit = require('express-rate-limit');
 const { default: axios } = require('axios');
+const { googleAuthMiddleware } = require('./middleware/googleAuth');
 
 
 class CustomGoogleAuth extends GoogleAuth {
@@ -32,6 +33,36 @@ class CustomGoogleAuth extends GoogleAuth {
   async getUniverseDomain() {
     return 'googleapis.com'; // default public cloud domain
   }
+}
+
+// When IS_SERVICE_ACCOUNT=true, all Google Cloud service clients authenticate
+// with the runtime's service account (Application Default Credentials).
+// Otherwise they use the caller's OAuth access token forwarded from the frontend.
+const SERVICE_ACCOUNT_SCOPES = ['https://www.googleapis.com/auth/cloud-platform'];
+let serviceAccountAuth = null;
+
+function isServiceAccountMode() {
+  return process.env.IS_SERVICE_ACCOUNT === 'true';
+}
+
+function getServiceAccountAuth() {
+  if (!serviceAccountAuth) {
+    serviceAccountAuth = new GoogleAuth({ scopes: SERVICE_ACCOUNT_SCOPES });
+  }
+  return serviceAccountAuth;
+}
+
+// Returns the auth object passed as `auth`/`authClient` to Google Cloud
+// service clients. Service-account mode ignores the caller's token.
+function getAuthClient(accessToken) {
+  return isServiceAccountMode() ? getServiceAccountAuth() : new CustomGoogleAuth(accessToken);
+}
+
+// Returns a raw OAuth access token string for direct REST (axios) calls.
+// In service-account mode this mints a token from the service account;
+// otherwise it returns the caller's forwarded access token.
+async function getRequestAccessToken(accessToken) {
+  return isServiceAccountMode() ? await getServiceAccountAuth().getAccessToken() : accessToken;
 }
 const searchEntries = async (dataplexClientv1, query, parent) => {
   try {
@@ -118,6 +149,12 @@ app.use((req, res, next) => {
 // Middleware to parse JSON request bodies
 app.use(express.json());
 
+// Verify the Google OAuth access token on every backend API request.
+// Mounted on /api so it protects all /api/* routes while leaving static asset
+// serving and the SPA catch-all untouched. Public endpoints (health checks)
+// are skipped inside the middleware.
+app.use('/api', googleAuthMiddleware);
+
 // Serve static files from the React build folder
 const staticFilesPath = path.join(__dirname, 'dist'); 
 
@@ -199,7 +236,7 @@ app.post('/api/v1/check-permissions', async (req, res) => {
     }
 
     try {
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         // Get the Cloud Resource Manager API client
         const cloudResourceManager = google.cloudresourcemanager({
@@ -267,7 +304,7 @@ app.post('/api/v1/search', async (req, res) => {
     const location = process.env.GCP_LOCATION;
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -324,7 +361,7 @@ app.post('/api/v1/aspects', async (req, res) => {
 
   try {
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -367,7 +404,7 @@ app.post('/api/v1/batch-aspects', async (req, res) => {
 
     try {
 
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         const dataplexClientv1 = new CatalogServiceClient({
             auth: oauth2Client,
@@ -408,7 +445,7 @@ app.get('/api/v1/aspect-types', async (req, res) => {
     const location = process.env.GCP_LOCATION;
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -443,7 +480,7 @@ app.get('/api/v1/entry-list', async (req, res) => {
     const location = process.env.GCP_LOCATION;
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -478,7 +515,7 @@ app.get('/api/v1/entry-types', async (req, res) => {
     const location = process.env.GCP_LOCATION;
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -514,7 +551,7 @@ app.get('/api/v1/get-entry', async (req, res) => {
     const entryName = req.query.entryName; // Get entryName from query parameters
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -545,7 +582,7 @@ app.get('/api/v1/check-entry-access', async (req, res) => {
     const entryName = req.query.entryName;
     const accessToken = req.headers.authorization?.split(' ')[1];
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
     const dataplexClientv1 = new CatalogServiceClient({
       auth: oauth2Client,
     });
@@ -581,7 +618,7 @@ app.get('/api/v1/get-entry-by-fqn', async (req, res) => {
     const location = process.env.GCP_LOCATION;
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -629,7 +666,7 @@ app.get('/api/v1/lookup-entry', async (req, res) => {
     const entryName = req.query.entryName; // Get entryName from query parameters
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -669,10 +706,11 @@ app.get('/api/v1/lookup-entry-links', async (req, res) => {
     }
     const [, project, location] = match;
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
     const dataplexClientv1 = new CatalogServiceClient({ auth: oauth2Client });
 
     const url = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:lookupEntryLinks`;
+    const bearerToken = await getRequestAccessToken(accessToken);
 
     const response = await axios.get(url, {
       params: {
@@ -683,7 +721,7 @@ app.get('/api/v1/lookup-entry-links', async (req, res) => {
         page_size: 50,
       },
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${bearerToken}`,
         'Content-Type': 'application/json',
       },
     });
@@ -742,6 +780,220 @@ app.get('/api/v1/lookup-entry-links', async (req, res) => {
   }
 });
 
+
+
+/**
+ * GET /api/v1/data-products
+ * Lists the Dataplex data products for the configured (or supplied) project.
+ * Proxies the Dataplex `dataProducts` REST API.
+ *
+ * Query params:
+ *   projectId (optional) - overrides GOOGLE_CLOUD_PROJECT_ID
+ */
+app.get('/api/v1/data-products', async (req, res) => {
+  try {
+    const accessToken = req.headers.authorization?.split(' ')[1];
+    const projectId = req.query.projectId || process.env.GOOGLE_CLOUD_PROJECT_ID;
+
+    if (!projectId) {
+      return res.status(500).json({ message: 'Server Configuration Error: GOOGLE_CLOUD_PROJECT_ID must be set in the .env file.' });
+    }
+
+    const bearerToken = await getRequestAccessToken(accessToken);
+    const url = `https://dataplex.googleapis.com/v1/projects/${projectId}/locations/-/dataProducts`;
+
+    const response = await axios.get(url, {
+      headers: { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' },
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error listing data products', error?.response?.data || error);
+    const err = error?.response?.data?.error || error;
+    return checkErrorAndSendResponse(res, err, 'An error occurred while listing data products.');
+  }
+});
+
+/**
+ * GET /api/v1/data-product-details
+ * Looks up the full Dataplex entry for a data product. Proxies the Dataplex
+ * `:lookupEntry` REST API.
+ *
+ * Query params:
+ *   project  - project id of the data product
+ *   location - location of the data product
+ *   entry    - fully-qualified entry name to look up
+ */
+app.get('/api/v1/data-product-details', async (req, res) => {
+  try {
+    const { project, location, entry } = req.query;
+    const accessToken = req.headers.authorization?.split(' ')[1];
+
+    if (!project || !location || !entry) {
+      return res.status(400).json({ message: 'Bad Request: "project", "location" and "entry" query params are required.' });
+    }
+
+    const bearerToken = await getRequestAccessToken(accessToken);
+    const url = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:lookupEntry`;
+
+    const response = await axios.get(url, {
+      params: { entry, view: 'ALL' },
+      headers: { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' },
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error fetching data product details', error?.response?.data || error);
+    const err = error?.response?.data?.error || error;
+    return checkErrorAndSendResponse(res, err, 'An error occurred while fetching data product details.');
+  }
+});
+
+/**
+ * GET /api/v1/data-product-assets
+ * Lists the data assets that belong to a data product. Proxies the Dataplex
+ * `dataAssets` REST API.
+ *
+ * Query params:
+ *   dataProduct - data product resource path
+ *                 (projects/{p}/locations/{l}/dataProducts/{id})
+ */
+app.get('/api/v1/data-product-assets', async (req, res) => {
+  try {
+    const { dataProduct } = req.query;
+    const accessToken = req.headers.authorization?.split(' ')[1];
+
+    if (!dataProduct) {
+      return res.status(400).json({ message: 'Bad Request: A "dataProduct" query param is required.' });
+    }
+
+    const bearerToken = await getRequestAccessToken(accessToken);
+    const url = `https://dataplex.googleapis.com/v1/${dataProduct}/dataAssets`;
+
+    const response = await axios.get(url, {
+      headers: { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' },
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error listing data product assets', error?.response?.data || error);
+    const err = error?.response?.data?.error || error;
+    return checkErrorAndSendResponse(res, err, 'An error occurred while listing data product assets.');
+  }
+});
+
+/**
+ * GET /api/v1/glossary-children
+ * Lists the categories and terms directly under a glossary/category. Proxies
+ * the Dataplex `{parent}/categories` and `{parent}/terms` REST APIs.
+ *
+ * Query params:
+ *   parent - glossary/category resource path
+ *            (projects/{p}/locations/{l}/glossaries/{g}[/categories/{c}])
+ */
+app.get('/api/v1/glossary-children', async (req, res) => {
+  try {
+    const { parent } = req.query;
+    const accessToken = req.headers.authorization?.split(' ')[1];
+
+    if (!parent) {
+      return res.status(400).json({ message: 'Bad Request: A "parent" query param is required.' });
+    }
+
+    const bearerToken = await getRequestAccessToken(accessToken);
+    const headers = { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' };
+
+    const [categoriesRes, termsRes] = await Promise.all([
+      axios.get(`https://dataplex.googleapis.com/v1/${parent}/categories`, { headers }).catch(() => ({ data: { categories: [] } })),
+      axios.get(`https://dataplex.googleapis.com/v1/${parent}/terms`, { headers }).catch(() => ({ data: { terms: [] } })),
+    ]);
+
+    res.json({
+      categories: categoriesRes.data.categories || [],
+      terms: termsRes.data.terms || [],
+    });
+  } catch (error) {
+    console.error('Error fetching glossary children', error?.response?.data || error);
+    const err = error?.response?.data?.error || error;
+    return checkErrorAndSendResponse(res, err, 'An error occurred while fetching glossary children.');
+  }
+});
+
+/**
+ * GET /api/v1/lookup-entry-rest
+ * Looks up a full Knowledge Catalog entry. Proxies the Dataplex `:lookupEntry`
+ * REST API.
+ *
+ * Query params:
+ *   project  - project id in whose location scope to look up
+ *   location - location scope
+ *   entry    - fully-qualified entry name to look up
+ *   view     - optional entry view (defaults to ALL)
+ */
+app.get('/api/v1/lookup-entry-rest', async (req, res) => {
+  try {
+    const { project, location, entry, view } = req.query;
+    const accessToken = req.headers.authorization?.split(' ')[1];
+
+    if (!project || !location || !entry) {
+      return res.status(400).json({ message: 'Bad Request: "project", "location" and "entry" query params are required.' });
+    }
+
+    const bearerToken = await getRequestAccessToken(accessToken);
+    const url = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:lookupEntry`;
+
+    const response = await axios.get(url, {
+      params: { entry, view: view || 'ALL' },
+      headers: { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' },
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error looking up entry', error?.response?.data || error);
+    const err = error?.response?.data?.error || error;
+    return checkErrorAndSendResponse(res, err, 'An error occurred while looking up the entry.');
+  }
+});
+
+/**
+ * POST /api/v1/search-entries
+ * Searches Knowledge Catalog entries. Proxies the Dataplex `:searchEntries`
+ * REST API.
+ *
+ * Body:
+ *   project  - optional project id (defaults to GOOGLE_CLOUD_PROJECT_ID)
+ *   location - optional location scope (defaults to "global")
+ *   ...rest  - forwarded as the searchEntries request body (query, pageSize, orderBy, pageToken, ...)
+ */
+app.post('/api/v1/search-entries', async (req, res) => {
+  try {
+    const { project, location, ...searchBody } = req.body || {};
+    const accessToken = req.headers.authorization?.split(' ')[1];
+    const proj = project || process.env.GOOGLE_CLOUD_PROJECT_ID;
+    const loc = location || 'global';
+
+    if (!proj) {
+      return res.status(500).json({ message: 'Server Configuration Error: GOOGLE_CLOUD_PROJECT_ID must be set in the .env file.' });
+    }
+    if (!searchBody.query) {
+      return res.status(400).json({ message: 'Bad Request: A "query" field is required.' });
+    }
+
+    const bearerToken = await getRequestAccessToken(accessToken);
+    const url = `https://dataplex.googleapis.com/v1/projects/${proj}/locations/${loc}:searchEntries`;
+
+    const response = await axios.post(url, searchBody, {
+      headers: { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' },
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error searching entries', error?.response?.data || error);
+    const err = error?.response?.data?.error || error;
+    return checkErrorAndSendResponse(res, err, 'An error occurred while searching entries.');
+  }
+});
+
 app.get('/api/v1/get-sample-data', async (req, res) => {
   try {
 
@@ -752,13 +1004,16 @@ app.get('/api/v1/get-sample-data', async (req, res) => {
         return checkErrorAndSendResponse(res, error, 'fqn is required');
     }
 
-    // const oauth2Client = new CustomGoogleAuth(accessToken);
-    const oauth2Client = new OAuth2Client();
-    oauth2Client.setCredentials({ access_token: accessToken });
-    const bigquery = new BigQuery({
-        authClient: oauth2Client,
-        projectId: fqn.split(':')[1].split('.')[0],
-    });
+    const projectId = fqn.split(':')[1].split('.')[0];
+    let bigquery;
+    if (isServiceAccountMode()) {
+        // Service account (ADC) — no caller token needed.
+        bigquery = new BigQuery({ projectId });
+    } else {
+        const oauth2Client = new OAuth2Client();
+        oauth2Client.setCredentials({ access_token: accessToken });
+        bigquery = new BigQuery({ authClient: oauth2Client, projectId });
+    }
 
     const rows = await querySampleFromBigQuery(bigquery, fqn.split(':')[1], 10);
 
@@ -789,7 +1044,7 @@ app.post('/api/v1/lineage', async (req, res) => {
   try {
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexLineageClientv1 = new LineageClient({
         auth: oauth2Client,
@@ -871,7 +1126,7 @@ app.post('/api/v1/lineage-downstream', async (req, res) => {
   try {
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexLineageClientv1 = new LineageClient({
         auth: oauth2Client,
@@ -906,7 +1161,7 @@ app.post('/api/v1/lineage-upstream', async (req, res) => {
   try {
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexLineageClientv1 = new LineageClient({
         auth: oauth2Client,
@@ -941,7 +1196,7 @@ app.post('/api/v1/lineage-processes', async (req, res) => {
   try {
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexLineageClientv1 = new LineageClient({
         auth: oauth2Client,
@@ -973,7 +1228,7 @@ app.post('/api/v1/get-process-and-job-details', async (req, res) => {
   try {
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexLineageClientv1 = new LineageClient({
         auth: oauth2Client,
@@ -1117,7 +1372,7 @@ app.post('/api/v1/lineage-column-level', async (req, res) => {
   try {
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClinetv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -1292,7 +1547,7 @@ app.get('/api/v1/projects', async (req, res) => {
     console.log('Listing all accessible GCP projects.');
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const resourceManagerClient = new ProjectsClient({
         auth: oauth2Client,
@@ -1327,7 +1582,7 @@ app.get('/api/v1/tag-templates', async (req, res) => {
     console.log(`Listing tag templates for parent: ${parent}`);
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataCatalogClientv1 = new DataCatalogClient({
         auth: oauth2Client,
@@ -1355,7 +1610,7 @@ app.post('/api/v1/get-aspect-detail', async (req, res) => {
     try {
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -1378,7 +1633,7 @@ app.get('/api/v1/app-configs', async (req, res) => {
     const location = process.env.GCP_LOCATION;
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const dataplexClientv1 = new CatalogServiceClient({
         auth: oauth2Client,
@@ -1550,7 +1805,7 @@ app.get('/api/v1/get-projects', async (req, res) => {
     const location = process.env.GCP_LOCATION;
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-    const oauth2Client = new CustomGoogleAuth(accessToken);
+    const oauth2Client = getAuthClient(accessToken);
 
     const resourceManagerClientv1 = new ProjectsClient({
         auth: oauth2Client,
@@ -1594,7 +1849,7 @@ app.get('/api/v1/data-scans', async (req, res) => {
 
         const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         const dataplexDataScanClientv1 = new DataScanServiceClient({
             auth: oauth2Client,
@@ -1633,7 +1888,7 @@ app.get('/api/v1/data-quality-scan-jobs/:scanId', async (req, res) => {
 
         const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         const dataplexDataScanClientv1 = new DataScanServiceClient({
             auth: oauth2Client,
@@ -1673,7 +1928,7 @@ app.get('/api/v1/get-data-scan-jobs', async (req, res) => {
 
         const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         const dataplexDataScanClientv1 = new DataScanServiceClient({
             auth: oauth2Client,
@@ -1682,11 +1937,12 @@ app.get('/api/v1/get-data-scan-jobs', async (req, res) => {
         // The listDataScanJobs method returns recent jobs. The result of each job contains the quality metrics.
         const [jobs] = await dataplexDataScanClientv1.listDataScanJobs({ parent: parent });
 
+        const bearerToken = await getRequestAccessToken(accessToken);
         for (const job of jobs) {
             //const [jobDetails] = await dataplexDataScanClientv1.getDataScanJob({ name: job.name, view:'FULL' });
             const jobDetails = await axios.get(`https://dataplex.googleapis.com/v1/${job.name}?view=FULL`, {
                 headers: {
-                    'Authorization': `Bearer ${accessToken}`,
+                    'Authorization': `Bearer ${bearerToken}`,
                     'Content-Type': 'application/json'
                 }
             });
@@ -1722,7 +1978,7 @@ app.post('/api/v1/entry-data-quality', async (req, res) => {
 
         const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         const dataplexDataScanClientv1 = new DataScanServiceClient({
             auth: oauth2Client,
@@ -1776,7 +2032,7 @@ app.get('/api/v1/get-data-scan', async (req, res) => {
 
         const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         const dataplexDataScanClientv1 = new DataScanServiceClient({
             auth: oauth2Client,
@@ -1818,7 +2074,7 @@ app.post('/api/v1/get-jobs-scan', async (req, res) => {
 
         const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         const dataplexDataScanClientv1 = new DataScanServiceClient({
             auth: oauth2Client,
@@ -1854,7 +2110,7 @@ app.post('/api/batch-data-quality-scan-jobs', async (req, res) => {
     try {
         const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         const dataplexDataScanClientv1 = new DataScanServiceClient({
             auth: oauth2Client,
@@ -1892,7 +2148,7 @@ app.post('/api/v1/get-dataset-entries', async (req, res) => {
     try {
         const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
 
-        const oauth2Client = new CustomGoogleAuth(accessToken);
+        const oauth2Client = getAuthClient(accessToken);
 
         const dataplexCatalogClientv1 = new CatalogServiceClient({
             auth: oauth2Client,

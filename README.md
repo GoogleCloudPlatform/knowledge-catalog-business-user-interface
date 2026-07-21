@@ -1,4 +1,4 @@
-# Knowledge Catalog Business Interface - 1.4.0
+# Knowledge Catalog Business Interface - 1.4.1
 
 An open-source, web-based application called **`Knowledge Catalog Business Interface`** which aims to help business users of BigQuery customers discover and access data assets in the **Knowledge Catalog** (formerly Dataplex Universal Catalog).
 ## Key objectives of the application include:
@@ -252,6 +252,41 @@ If you don't want it to be publicly accessible please use **--no-allow-unauthent
 
 Also if your organisation policy enforce the **Domain Restricted Sharing** then you also have to add the users to IAP(Identity Aware proxy) for security reasons.
 
+
+##### Service Account setup for API Calls
+By Default the Application will use ask for permissions during the login authentication time for accessing the API's via your credential so it will generate access_token once you allow those permissions.
+
+But now we have added the option to auth API calls via service accounts. For this you need to create the service account.
+Go to [https://console.cloud.google.com/iam-admin/serviceaccounts](https://console.cloud.google.com/iam-admin/serviceaccounts)
+
+select `Create Service Account` option 
+fill the form and in the permissions tab just add the role `Viewer` and `Dataplex Viewer` and save
+You will get the service account email replace it un the below command.
+
+```shell
+gcloud run deploy [SERVICE_NAME] \
+  --image us-central1-docker.pkg.dev/[PROJECT_ID]/[REPO_NAME]/[APP_NAME]:latest \
+  --service-account='[your-service-account]@[PROJECT_ID].iam.gserviceaccount.com' \ 
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --port 8080 \
+  --set-env-vars  VITE_API_URL="/api" \
+  --set-env-vars  VITE_API_VERSION="v1" \
+  --set-env-vars  VITE_ADMIN_EMAIL="[ADMIN_EMAIL_ID]" \
+  --set-env-vars  VITE_GOOGLE_PROJECT_ID="[PROJECT_ID]" \
+  --set-env-vars  VITE_GOOGLE_CLIENT_ID="[CLIENT_ID]" \
+  --set-env-vars  VITE_GOOGLE_REDIRECT_URI="/auth/google/callback" \
+  --set-env-vars  VITE_IS_SERVICE_ACCOUNT="true" \
+  --set-env-vars  GOOGLE_CLOUD_PROJECT_ID="[PROJECT_ID]" \
+  --set-env-vars  GCP_LOCATION="global" \
+  --set-env-vars  GCP_REGION="global" \
+  --set-env-vars  IS_SERVICE_ACCOUNT="true"
+```
+**--service-account**: Specifies which service account needs tp attach to Cloud Run environment to access ADC.
+
+Now you have the running based on service account auth API Calls and it will not ask permissions during authentication use Cloud-sdk and google cloud for API Calls.
+
 Cloud Run will provide you with a public URL for your service or IAP accessible URL accordingly.
 
 #### Step 8: Update OAuth Credentials for Production
@@ -317,23 +352,12 @@ gcloud run deploy [SERVICE_NAME] \
 **Your application is now redeployed and accessible, with both front-end and backend in one single container and cloud run service!**
 
 
-## Release Note : 1.4.0
-This is a minor release with features, identified bug/fixes and some user interface changes.
+## Release Note : 1.4.1
+This is a sub-minor release with features, identified bug/fixes.
 Feature Enhancements:
 
-  - API optimizations and performance
-  - Debouncing added for large list for project and other large filter list
-  - Dataproduct UI revamped end to end
-  - New Access Request workflow implemented for Dataproduct as per GCP console.
-  - UI component modifications for multiple components
-  - - Cards
-  - - Buttons
-  - - Icons
-  - - Tags
-  - - Tabs Style
-  - - Side Nav
+  - Service Acoount option for API Calls authentication.
 
 Bug Fixes:
 
-  - Insights and Data profile / Data Quality Scans are not visible in some cases
-  - List loading issue in larger list of filters and sub-filter modals.
+  - Bugs related to random blinking of view detail page.

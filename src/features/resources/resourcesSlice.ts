@@ -136,15 +136,8 @@ export const searchResourcesByTerm = createAsyncThunk('resources/searchResources
     // return data;
 
     const response = await axios.post(
-      `https://dataplex.googleapis.com/v1/projects/${import.meta.env.VITE_GOOGLE_PROJECT_ID}/locations/global:searchEntries`,
-      requestResourceData
-      // },
-      // {
-      //   headers: {
-      //     Authorization: `Bearer ${requestData.id_token}`,
-      //     'Content-Type': 'application/json',
-      //   },
-      // }
+      URLS.API_URL + URLS.SEARCH_ENTRIES,
+      { project: import.meta.env.VITE_GOOGLE_PROJECT_ID, location: 'global', ...requestResourceData }
     );
 
     //console.log(response);

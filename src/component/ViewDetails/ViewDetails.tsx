@@ -16,7 +16,7 @@ import DataProfile from '../DataProfile/DataProfile'
 import EntryList from '../EntryList/EntryList'
 import type { AppDispatch } from '../../app/store'
 import { getSampleData } from '../../features/sample-data/sampleDataSlice'
-import { popFromHistory, pushToHistory, fetchEntry, fetchEntryLinks } from '../../features/entry/entrySlice'
+import { popFromHistory, pushToHistory, clearPendingTab, fetchEntry, fetchEntryLinks } from '../../features/entry/entrySlice'
 import type { GlossaryItem } from '../Glossaries/GlossaryDataType'
 import { fetchAllDataScans, selectAllScans, selectAllScansStatus } from '../../features/dataScan/dataScanSlice';
 import { useAuth } from '../../auth/AuthProvider'
@@ -35,6 +35,7 @@ import GlossariesSynonyms from '../Glossaries/GlossariesSynonyms';
 import GlossariesSynonymsSkeleton from '../Glossaries/GlossariesSynonymsSkeleton';
 import ResourcePreview from '../Common/ResourcePreview';
 import TableInsights from '../TableInsights/TableInsights'
+import DatasetInsights from '../TableInsights/DatasetInsights'
 import { useNoAccess } from '../../contexts/NoAccessContext';
 // import { useFavorite } from '../../hooks/useFavorite'
 
@@ -103,6 +104,7 @@ const ViewDetails = () => {
   const entryStatus = useSelector((state: any) => state.entry.status);
   const entryError = useSelector((state: any) => state.entry.error);
   const entryHistory = useSelector((state: any) => state.entry.history);
+  const pendingTabName = useSelector((state: any) => state.entry.pendingTabName);
   const entryLinks = useSelector((state: any) => state.entry.entryLinks) as GlossaryItem[];
   const entryLinksStatus = useSelector((state: any) => state.entry.entryLinksStatus);
   const { triggerNoAccess } = useNoAccess();
@@ -117,6 +119,7 @@ const ViewDetails = () => {
   const allScansStatus = useSelector(selectAllScansStatus);
   const initialTabName = (location.state as any)?.tabName as string | undefined;
   const tabNameApplied = React.useRef(false);
+  const fetchedLinksEntryId = React.useRef<string | null>(null);
   const [tabValue, setTabValue] = React.useState(0);
   const [sampleTableData, setSampleTableData] = React.useState<any>();
   const [filteredEntry, setFilteredEntry] = useState<any>(null);
@@ -422,20 +425,20 @@ useEffect(() => {
 
       const tableInsightsScanFiltered = allScans.filter(
         (scan: any) =>{
-          console.log("Checking scan:", scan.name, "for resource:", resourceName, "with type:", scan.type);
+          // console.log("Checking scan:", scan.name, "for resource:", resourceName, "with type:", scan.type);
           return (scan.data.resource === '//bigquery.googleapis.com/'+resourceName && (scan.type === 'DATA_DOCUMENTATION' || scan.type === 4))
         }
       );
-      console.log("Table Insights Scans filtered:", tableInsightsScanFiltered);
+      // console.log("Table Insights Scans filtered:", tableInsightsScanFiltered);
 
       let tableInsightsScan = tableInsightsScanFiltered.length > 0 ? tableInsightsScanFiltered.reduce((latest:any, current:any) => {
         return new Date(current.updateTime.seconds * 1000) < new Date(latest.updateTime.seconds * 1000) ? current : latest;
       }) : null;
 
-      console.log("Table Insights Scans found:", tableInsightsScan);
+      // console.log("Table Insights Scans found:", tableInsightsScan);
 
       setTableInsightsScanName(tableInsightsScan ? tableInsightsScan?.name : null);
-      console.log(`tableInsightsScanName for resource [${resourceName}]:`, tableInsightsScanName);
+      // console.log(`tableInsightsScanName for resource [${resourceName}]:`, tableInsightsScanName);
     }
   }, [entry, entryStatus, allScans, allScansStatus, entry?.entrySource?.resource, isAssetPreviewOpen]);
   useEffect(() => {
@@ -533,10 +536,21 @@ useEffect(() => {
     if (isAssetPreviewOpen) return;
 
     if (entry) {
-      setTabValue(0);
+      // Restore the tab active before a back-navigation (set by popFromHistory),
+      // otherwise default to Overview.
+      if (pendingTabName) {
+        setTabValue(resolveTabName(pendingTabName));
+        dispatch(clearPendingTab());
+      } else {
+        setTabValue(0);
+      }
       setContentSearchTerm('');
       setRelationFilter('all');
-      setFetchedEntryId(null);
+      // Don't drop the glossary-details cache when restoring from history (Back) —
+      // it would trigger a needless refetch of the entry we already have.
+      if (!pendingTabName) {
+        setFetchedEntryId(null);
+      }
       setAssetPreviewData(null);
       setIsAssetPreviewOpen(false);
       setTermsSearch('');
@@ -550,7 +564,10 @@ useEffect(() => {
     if (!entry?.name || !id_token || entryStatus !== 'succeeded') return;
     const gType = getGlossaryType(entry);
     const isGlossaryLike = gType === 'glossary' || gType === 'category' || gType === 'term';
-    if (!isGlossaryLike) {
+    // Skip if we've already fetched links for this exact entry (avoids redundant
+    // refetches when the effect re-runs for the same entry).
+    if (!isGlossaryLike && fetchedLinksEntryId.current !== entry.name) {
+      fetchedLinksEntryId.current = entry.name;
       dispatch(fetchEntryLinks({ entryName: entry.name, id_token }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -602,11 +619,11 @@ useEffect(() => {
   // Terms tab content for non-glossary entries (linked glossary terms via lookupEntryLinks)
   const linkedTermsTab = (
     entryLinksStatus === 'loading' ? (
-      <Box sx={{ height: '100%' }}>
+      <Box sx={{ height: '100%', marginTop: '-2px' }}>
         <GlossariesCategoriesTermsSkeleton />
       </Box>
     ) : (
-      <Box sx={{ height: '100%', minHeight: 'calc(100vh - 350px)' }}>
+      <Box sx={{ height: '100%', minHeight: 'calc(100vh - 350px)', marginTop: '-2px' }}>
         <GlossariesCategoriesTerms
           mode="terms"
           items={sortedEntryLinks}
@@ -730,9 +747,9 @@ const ctaButtons = (
 
   const showCta = displayEntry.entrySource?.system?.toLowerCase() === 'bigquery';
 
-  const headerTitle = displayEntry.entrySource.displayName.length > 0
+  const headerTitle = (displayEntry?.entrySource?.displayName?.length ?? 0) > 0
     ? displayEntry.entrySource.displayName
-    : getName(displayEntry.name || '', '/');
+    : getName(displayEntry?.name || '', '/');
 
   // Dynamic tab items, reused in the normal nav bar + compact sticky tab bar
   const tabItems = getEntryType(displayEntry.name, '/') === 'Tables' && displayEntry.entrySource?.system.toLowerCase() === 'bigquery' ? [
@@ -769,7 +786,7 @@ const ctaButtons = (
   ];
 
   return (
-    <div ref={scrollContainerRef} onScroll={handleScroll} style={{display: "flex", flexDirection: "column", padding: "0px 0", background:"#F7F9F9", height: "100%", overflowY: "auto" }}>
+    <div ref={scrollContainerRef} onScroll={handleScroll} style={{display: "flex", flexDirection: "column", padding: "0px 0", background:"#f9fafc", height: "100%", overflowY: "auto" }}>
       {loading ? (
         <div style={{display: "flex", flexDirection: "column", flex: 1}}>
           
@@ -839,7 +856,7 @@ const ctaButtons = (
                             gap: isScrolled ? "12px" : "0px",
                             position: "sticky",
                             top: 0,
-                            backgroundColor: isScrolled ? "#F9F9FC" : "#F7F9F9",
+                            backgroundColor: isScrolled ? "#F9F9FC" : "#f9fafc",
                             zIndex: 1001,
                             boxShadow: isScrolled ? "0px 1px 6.6px rgba(171, 171, 179, 0.5)" : "none",
                             transition: "all 0.2s ease",
@@ -1017,7 +1034,7 @@ const ctaButtons = (
                             {/* Tags */}
                             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                                 <Tag
-                                    text={(() => { const sys = displayEntry.entrySource.system; if (!sys) return 'Custom'; const lower = sys.toLowerCase(); if (lower === 'dataplex universal catalog' || lower === 'dataplex') return 'Knowledge Catalog'; if (lower === 'bigquery') return 'BigQuery'; return sys.replace("_", " ").replace("-", " ").toLowerCase(); })()}
+                                    text={(() => { const sys = displayEntry?.entrySource?.system; if (!sys) return 'Custom'; const lower = sys.toLowerCase(); if (lower === 'dataplex universal catalog' || lower === 'dataplex') return 'Knowledge Catalog'; if (lower === 'bigquery') return 'BigQuery'; return sys.replace("_", " ").replace("-", " ").toLowerCase(); })()}
                                     css={{
                                         fontFamily: '"Google Sans", sans-serif',
                                         backgroundColor: 'rgba(7, 106, 255, 0.1)',
@@ -1235,7 +1252,7 @@ const ctaButtons = (
                             {linkedTermsTab}
                         </CustomTabPanel>
                         <CustomTabPanel value={tabValue} index={4}>
-                            <TableInsights entry={entry} scanName={tableInsightsScanName} />
+                            <DatasetInsights entry={entry} scanName={tableInsightsScanName} />
                         </CustomTabPanel>
                       </>
                     ) : glossaryType === 'glossary' || glossaryType === 'category' ? (

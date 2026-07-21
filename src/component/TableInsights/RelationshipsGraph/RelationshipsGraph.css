@@ -1,0 +1,27 @@
+/* Relationships graph edge styling: glow on hover and when selected. */
+
+.relationships-graph .react-flow__edge-path {
+  transition: stroke 0.15s ease, stroke-width 0.15s ease, filter 0.15s ease;
+}
+
+.relationships-graph .react-flow__edge:hover .react-flow__edge-path,
+.relationships-graph .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #1a73e8;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgba(26, 115, 232, 0.7));
+}
+
+/* Keep the edge label readable / above the glowing path on hover. */
+.relationships-graph .react-flow__edge:hover .react-flow__edge-textbg,
+.relationships-graph .react-flow__edge.selected .react-flow__edge-textbg {
+  fill: #ffffff;
+}
+
+/* Selected node: blue glow (override xy-theme.css pink --xy-theme-selected). */
+.relationships-graph .react-flow__node.selectable.selected,
+.relationships-graph .react-flow__node.selectable:focus,
+.relationships-graph .react-flow__node.selectable:focus-visible {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.35);
+  outline: none;
+}

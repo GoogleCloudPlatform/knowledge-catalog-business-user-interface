@@ -27,6 +27,20 @@ import { sanitizeRedirectURL } from '../../../services/urlPreservationService';
  * @returns {JSX.Element} The rendered React component for the login page.
  */
 
+const GOOGLE_OAUTH_SCOPES = import.meta.env.VITE_IS_SERVICE_ACCOUNT == "true" ? [
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'openid'
+] : [
+  'https://www.googleapis.com/auth/cloud-platform',
+  'https://www.googleapis.com/auth/bigquery',
+  'https://www.googleapis.com/auth/dataplex.readonly',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/gmail.send'
+];
+
+
 const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -55,8 +69,7 @@ const Login: React.FC = () => {
     },
     onError: () => console.error('Google Login Failed'),
     flow: 'implicit', // or 'auth-code' depending on your OAuth setup
-    scope: 'https://www.googleapis.com/auth/cloud-platform.read-only https://www.googleapis.com/auth/bigquery https://www.googleapis.com/auth/dataplex.readonly https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.send',
-
+    scope: GOOGLE_OAUTH_SCOPES.join(' '),
   });
   
   return (<div className='login-container-parent'>

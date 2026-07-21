@@ -722,7 +722,6 @@ describe("glossariesSlice", () => {
 
     describe("Error Handling", () => {
       it("handles API errors gracefully by returning empty children", async () => {
-        // The thunk catches individual API errors and returns empty data
         vi.mocked(axios.get).mockRejectedValue(new Error("Network error"));
 
         const store = createTestStore();
@@ -733,9 +732,9 @@ describe("glossariesSlice", () => {
           }) as any
         );
 
-        // Since errors are caught internally, the action fulfills with empty children
-        expect(result.payload.children).toEqual([]);
-        expect(result.payload.parentId).toBe(mockGlossaryItem.id);
+        // The thunk rejects with an error message
+        expect(result.meta.requestStatus).toBe("rejected");
+        expect(result.payload).toBe("Failed to fetch children");
       });
 
       it("handles rejection when processing error occurs", async () => {
@@ -796,7 +795,7 @@ describe("glossariesSlice", () => {
         );
 
         expect(axios.get).toHaveBeenCalledWith(
-          expect.stringContaining("lookupEntry"),
+          expect.stringContaining("lookup-entry-rest"),
           expect.objectContaining({
             params: expect.objectContaining({
               entry: expect.stringContaining("entryGroups/@dataplex/entries"),
@@ -1605,7 +1604,8 @@ describe("glossariesSlice", () => {
         );
 
         expect(axios.get).toHaveBeenCalledWith(
-          expect.stringContaining("/categories")
+          expect.stringContaining("glossary-children"),
+          expect.anything()
         );
       });
     });
@@ -2986,17 +2986,13 @@ describe("glossariesSlice", () => {
     });
 
     it("handles term with parent in hierarchy build", async () => {
-      vi.mocked(axios.get)
-        .mockResolvedValueOnce({
-          data: {
-            categories: [{ name: "cat1", displayName: "Cat 1" }],
-          },
-        })
-        .mockResolvedValueOnce({
-          data: {
-            terms: [{ name: "term1", displayName: "Term 1", parent: "cat1" }],
-          },
-        });
+      // New implementation makes a single call returning both categories and terms
+      vi.mocked(axios.get).mockResolvedValueOnce({
+        data: {
+          categories: [{ name: "cat1", displayName: "Cat 1" }],
+          terms: [{ name: "term1", displayName: "Term 1", parent: "cat1" }],
+        },
+      });
 
       const store = createTestStore({
         ...getInitialState(),
