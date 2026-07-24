@@ -1276,9 +1276,20 @@ describe('BrowseByAnnotation', () => {
       });
 
       // Reset mock to set up individual field error for aspect2
+      // aspect2's whitelist is ['FieldA', 'FieldB', 'FieldC'], so the response must include those fields
+      const mockAspect2DetailResponse = {
+        ...mockAspectDetailResponse,
+        metadataTemplate: {
+          recordFields: [
+            { name: 'FieldA', type: 'string', annotations: { displayName: 'Field A' } },
+            { name: 'FieldB', type: 'string', annotations: { displayName: 'Field B' } },
+            { name: 'FieldC', type: 'string', annotations: { displayName: 'Field C' } },
+          ],
+        },
+      };
       mockUnwrap.mockReset();
       mockUnwrap
-        .mockResolvedValueOnce(mockAspectDetailResponse) // getAspectDetail for aspect2
+        .mockResolvedValueOnce(mockAspect2DetailResponse) // getAspectDetail for aspect2
         .mockResolvedValueOnce(mockEntryResponse) // fetchEntry for aspect2
         .mockRejectedValueOnce(new Error('Field fetch failed')) // One field count fails
         .mockResolvedValue({ results: { totalSize: 20 } }); // Other field counts succeed
