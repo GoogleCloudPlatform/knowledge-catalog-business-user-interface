@@ -70,10 +70,10 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
   // Column config for resize hook (SearchTableView pattern)
   const COLUMN_CONFIGS = React.useMemo(() => [
     { key: 'name', initialWidth: 200, minWidth: 100 },
-    { key: 'type', initialWidth: 180, minWidth: 80 },
-    { key: 'system', initialWidth: 180, minWidth: 80 },
+    { key: 'type', initialWidth: 160, minWidth: 80 },
+    { key: 'system', initialWidth: 150, minWidth: 80 },
     { key: 'sourceProject', initialWidth: 200, minWidth: 100 },
-    { key: 'mappedPermissions', initialWidth: 200, minWidth: 150 },
+    { key: 'mappedPermissions', initialWidth: 240, minWidth: 150 },
   ], []);
 
   const { columnWidths, activeIndex, handleMouseDown } = useColumnResize({
@@ -522,7 +522,13 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                     </TableCell>
 
                     {/* Mapped-Permissions */}
-                    <TableCell sx={{ padding: '10px 20px', verticalAlign: 'top', textAlign: 'right' }}>
+                    <TableCell 
+                      sx={{ 
+                        padding: '10px 20px', 
+                        verticalAlign: Array.isArray(row['Mapped-Permissions']) && row['Mapped-Permissions'].length > 0 ? 'top' : 'middle', 
+                        textAlign: 'right' 
+                      }}
+                    >
                       {Array.isArray(row['Mapped-Permissions']) && row['Mapped-Permissions'].length > 0 ? (
                         row['Mapped-Permissions'].map((mp: string, mpIndex: number) => (
                           <Box key={mpIndex} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 0px' }}>
@@ -531,7 +537,15 @@ const AccessGroup: React.FC<AccessGroupProps> = ({ entry, css }) => {
                           </Box>
                         ))
                       ) : (
-                        <Typography sx={{ fontSize: '14px', color: '#575757' }}>-</Typography>
+                        <Typography sx={{ 
+                          fontFamily: '"Product Sans", "Google Sans Text", sans-serif',
+                          fontSize: '14px', 
+                          fontWeight: 400, 
+                          color: '#575757',
+                          textAlign: 'right'
+                        }}>
+                          -
+                        </Typography>
                       )}
                     </TableCell>
                   </TableRow>

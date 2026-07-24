@@ -57,9 +57,11 @@ jobs:
             VITE_GOOGLE_PROJECT_ID=YOUR-GCP_PROJECT_ID
             VITE_GOOGLE_CLIENT_ID=YOUR-GOOGLE-CLIENT-ID.apps.googleusercontent.com
             VITE_GOOGLE_REDIRECT_URI=/auth/google/callback
+            VITE_IS_SERVICE_ACCOUNT=false
             GOOGLE_CLOUD_PROJECT_ID=YOUR-GCP_PROJECT_ID
             GCP_LOCATION=global
             GCP_REGION=global
+            IS_SERVICE_ACCOUNT=false
 
           secrets:
             VITE_GOOGLE_CLIENT_SECRET=VITE_GOOGLE_CLIENT_SECRET:latest

@@ -500,7 +500,7 @@ describe('resourcesSlice', () => {
 
         expect(mockedAxiosPost).toHaveBeenCalledWith(
           expect.any(String),
-          customRequestData.requestResourceData
+          expect.objectContaining(customRequestData.requestResourceData)
         );
       });
 

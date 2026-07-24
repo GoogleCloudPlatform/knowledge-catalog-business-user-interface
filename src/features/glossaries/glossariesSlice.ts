@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios, { AxiosError } from "axios";
+import { URLS } from "../../constants/urls";
 import {
   type GlossaryItem,
   type GlossaryRelation,
@@ -129,18 +130,13 @@ export const fetchGlossaryChildren = createAsyncThunk(
     try {
       axios.defaults.headers.common["Authorization"] = `Bearer ${id_token}`;
 
-      const baseUrl = `https://dataplex.googleapis.com/v1/${parentId}`;
+      // Fetch Categories and Terms via backend proxy
+      const childrenRes = await axios.get(URLS.API_URL + URLS.GLOSSARY_CHILDREN, {
+        params: { parent: parentId },
+      });
 
-      // 1. Fetch Categories and Terms
-      const [categoriesRes, termsRes] = await Promise.all([
-        axios
-          .get(`${baseUrl}/categories`)
-          .catch(() => ({ data: { categories: [] } })),
-        axios.get(`${baseUrl}/terms`).catch(() => ({ data: { terms: [] } })),
-      ]);
-
-      const rawCategories = categoriesRes.data.categories || [];
-      const rawTerms = termsRes.data.terms || [];
+      const rawCategories = childrenRes.data.categories || [];
+      const rawTerms = childrenRes.data.terms || [];
 
       // 2. Map raw API data to GlossaryItem
       // Use 'any' temporarily in map to allow adding 'parent' property which might not be in GlossaryItem interface
@@ -231,10 +227,10 @@ export const fetchItemDetails = createAsyncThunk(
         finalEntryName = `projects/${project}/locations/${location}/entryGroups/@dataplex/entries/${entryName}`;
       }
 
-      const lookupUrl = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:lookupEntry`;
-
-      const response = await axios.get(lookupUrl, {
+      const response = await axios.get(URLS.API_URL + URLS.LOOKUP_ENTRY_REST, {
         params: {
+          project,
+          location,
           entry: finalEntryName,
           view: "ALL",
         },
@@ -268,9 +264,9 @@ export const fetchTermRelationships = createAsyncThunk(
 
       // Use the project/location from the term ID for the search scope
       const { project, location } = extractProjectLocation(termId);
-      const searchUrl = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:searchEntries`;
+      const searchUrl = URLS.API_URL + URLS.SEARCH_ENTRIES;
 
-      const commonBody = { pageSize: 100, orderBy: "relevance" };
+      const commonBody = { project, location, pageSize: 100, orderBy: "relevance" };
 
       // Parallelize the 3 search calls
       const [linkedRes, synonymRes, relatedRes] = await Promise.all([
@@ -340,10 +336,10 @@ export const fetchGlossaryEntryDetails = createAsyncThunk(
         finalEntryName = `projects/${project}/locations/${location}/entryGroups/@dataplex/entries/${entryName}`;
       }
 
-      const lookupUrl = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:lookupEntry`;
-
-      const response = await axios.get(lookupUrl, {
+      const response = await axios.get(URLS.API_URL + URLS.LOOKUP_ENTRY_REST, {
         params: {
+          project,
+          location,
           entry: finalEntryName,
           view: "ALL",
         },
@@ -402,9 +398,7 @@ export const fetchGlossaries = createAsyncThunk(
   "glossaries/fetchGlossaries",
   async (requestData: any, { rejectWithValue }) => {
     try {
-      const url = `https://dataplex.googleapis.com/v1/projects/${
-        import.meta.env.VITE_GOOGLE_PROJECT_ID
-      }/locations/global:searchEntries`;
+      const url = URLS.API_URL + URLS.SEARCH_ENTRIES;
 
       // Set Auth Header
       axios.defaults.headers.common["Authorization"] = requestData.id_token
@@ -413,6 +407,8 @@ export const fetchGlossaries = createAsyncThunk(
 
       // Query specifically for Glossaries
       const response = await axios.post(url, {
+        project: import.meta.env.VITE_GOOGLE_PROJECT_ID,
+        location: "global",
         query: "type=GLOSSARY EXP:SEMANTIC", // Standard Knowledge Catalog syntax for finding glossaries
         pageSize: 100,
         ...requestData.options,
@@ -440,24 +436,20 @@ export const fetchViewDetailsChildren = createAsyncThunk(
 
       // For categories, we need to extract the glossary ID and fetch from there
       // because the API doesn't support /categories/{id}/categories
-      let baseUrl = `https://dataplex.googleapis.com/v1/${parentId}`;
+      let baseParent = parentId;
 
       // If parentId is a category, extract the glossary path
       if (parentId.includes('/categories/')) {
-        const glossaryPath = parentId.substring(0, parentId.indexOf('/categories/'));
-        baseUrl = `https://dataplex.googleapis.com/v1/${glossaryPath}`;
+        baseParent = parentId.substring(0, parentId.indexOf('/categories/'));
       }
 
-      // 1. Fetch Categories and Terms
-      const [categoriesRes, termsRes] = await Promise.all([
-        axios
-          .get(`${baseUrl}/categories`)
-          .catch(() => ({ data: { categories: [] } })),
-        axios.get(`${baseUrl}/terms`).catch(() => ({ data: { terms: [] } })),
-      ]);
+      // Fetch Categories and Terms via backend proxy
+      const childrenRes = await axios.get(URLS.API_URL + URLS.GLOSSARY_CHILDREN, {
+        params: { parent: baseParent },
+      });
 
-      const rawCategories = categoriesRes.data.categories || [];
-      const rawTerms = termsRes.data.terms || [];
+      const rawCategories = childrenRes.data.categories || [];
+      const rawTerms = childrenRes.data.terms || [];
 
       // 2. Map raw API data to GlossaryItem
       const allCategoryItems = rawCategories.map((c: any) => ({
@@ -546,10 +538,10 @@ export const fetchViewDetailsEntryDetails = createAsyncThunk(
         finalEntryName = `projects/${project}/locations/${location}/entryGroups/@dataplex/entries/${entryName}`;
       }
 
-      const lookupUrl = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:lookupEntry`;
-
-      const response = await axios.get(lookupUrl, {
+      const response = await axios.get(URLS.API_URL + URLS.LOOKUP_ENTRY_REST, {
         params: {
+          project,
+          location,
           entry: finalEntryName,
           view: "ALL",
         },
@@ -574,9 +566,9 @@ export const fetchViewDetailsTermRelationships = createAsyncThunk(
       axios.defaults.headers.common["Authorization"] = `Bearer ${id_token}`;
 
       const { project, location } = extractProjectLocation(termId);
-      const searchUrl = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:searchEntries`;
+      const searchUrl = URLS.API_URL + URLS.SEARCH_ENTRIES;
 
-      const commonBody = { pageSize: 100, orderBy: "relevance" };
+      const commonBody = { project, location, pageSize: 100, orderBy: "relevance" };
 
       const [linkedRes, synonymRes, relatedRes] = await Promise.all([
         axios.post(searchUrl, {
@@ -929,13 +921,15 @@ export const filterGlossaries = createAsyncThunk(
   ) => {
     try {
       const projectId = import.meta.env.VITE_GOOGLE_PROJECT_ID;
-      const searchUrl = `https://dataplex.googleapis.com/v1/projects/${projectId}/locations/global:searchEntries`;
+      const searchUrl = URLS.API_URL + URLS.SEARCH_ENTRIES;
 
       axios.defaults.headers.common["Authorization"] = `Bearer ${id_token}`;
 
       const query = buildFilterQuery(filters);
 
       const response = await axios.post(searchUrl, {
+        project: projectId,
+        location: "global",
         query,
         pageSize: pageSize ?? 100,
         orderBy: "relevance",

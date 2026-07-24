@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios, { AxiosError } from 'axios';
+import { URLS } from '../../constants/urls';
 
 const getProjectNumber = (projectId: string, appConfig: any) => {
   let projects:any[] = appConfig?.projects ?? [];
@@ -18,9 +19,7 @@ export const fetchDataProductsList = createAsyncThunk('dataProducts/fetchDataPro
   try {
     // fetching data products from API endpoint 
     axios.defaults.headers.common['Authorization'] = requestData.id_token ? `Bearer ${requestData.id_token}` : '';
-    const response = await axios.get(
-        `https://dataplex.googleapis.com/v1/projects/${import.meta.env.VITE_GOOGLE_PROJECT_ID}/locations/-/dataProducts`
-    );
+    const response = await axios.get(URLS.API_URL + URLS.DATA_PRODUCTS);
 
     return response.status === 200 || response.status !== 401 ? [
       ...response.data.dataProducts
@@ -52,12 +51,12 @@ export const getDataProductDetails = createAsyncThunk('dataProducts/getDataProdu
     const location = requestData.dataProductId.split('/')[3];
     const appConfig = (getState() as any).user.userData?.appConfig;
     const finalEntryName = `projects/${project}/locations/${location}/entryGroups/@dataplex/entries/projects/${getProjectNumber(project, appConfig)}/locations/${location}/dataProducts/${requestData.dataProductId.split('/')[5]}`;
-    const lookupUrl = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${location}:lookupEntry`;
 
-    const response = await axios.get(lookupUrl, {
+    const response = await axios.get(URLS.API_URL + URLS.DATA_PRODUCT_DETAILS, {
     params: {
-        entry: finalEntryName,
-        view: 'ALL'
+        project,
+        location,
+        entry: finalEntryName
     }
     });
 
@@ -96,10 +95,10 @@ export const fetchDataProductsAssetsList = createAsyncThunk('dataProducts/fetchD
     const project = requestData.dataProductId.split('/')[1];
     const location = requestData.dataProductId.split('/')[3];
     const finalEntryName = `projects/${project}/locations/${location}/dataProducts/${requestData.dataProductId.split('/').pop()}`;
-    
-    const response = await axios.get(
-        `https://dataplex.googleapis.com/v1/${finalEntryName}/dataAssets`
-    );
+
+    const response = await axios.get(URLS.API_URL + URLS.DATA_PRODUCT_ASSETS, {
+        params: { dataProduct: finalEntryName }
+    });
     console.log("Data Products Assets API response", response);
     return response.status === 200 || response.status !== 401 ? [
       ...response.data.dataAssets

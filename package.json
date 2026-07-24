@@ -1,7 +1,7 @@
 {
   "name": "knowledge-catalog-buisness-user-interface",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.4.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

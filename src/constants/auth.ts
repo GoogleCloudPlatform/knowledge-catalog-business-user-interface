@@ -55,7 +55,11 @@ export const AUTH_CONFIG = {
  * OAuth scopes required by the application.
  * Checked against granted scopes at login time.
  */
-export const REQUIRED_SCOPES = [
+export const REQUIRED_SCOPES = import.meta.env.VITE_IS_SERVICE_ACCOUNT ? [
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'openid',
+] as const : [
   'https://www.googleapis.com/auth/cloud-platform',
   'https://www.googleapis.com/auth/bigquery',
   'https://www.googleapis.com/auth/dataplex.readonly',

@@ -82,6 +82,23 @@ export const getMostRecentSuccessfulJob = (jobs: InsightJob[]): InsightJob | nul
 };
 
 /**
+ * Get the most recent successful job that contains a datasetResult.
+ * Dataset scans return `datasetResult` (overview / queries / schemaRelationships)
+ * instead of the `tableResult` used by table scans.
+ */
+export const getMostRecentSuccessfulDatasetJob = (jobs: InsightJob[]): InsightJob | null => {
+  const successfulJobs = jobs.filter(
+    job => job.state === 'SUCCEEDED' && job.dataDocumentationResult?.datasetResult
+  );
+
+  if (successfulJobs.length === 0) return null;
+
+  return successfulJobs.sort(
+    (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+  )[0];
+};
+
+/**
  * Filter queries by search term (matches description)
  */
 export const filterQueriesBySearchTerm = (

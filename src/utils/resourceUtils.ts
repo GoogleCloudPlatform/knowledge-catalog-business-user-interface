@@ -99,7 +99,8 @@ export const getName = (namePath: string = '', separator: string = '') => {
 
 export const getEntryType = (namePath: string = '', separator: string = '') => {
   const segments: string[] = namePath.split(separator);
-  let eType = segments[segments.length - 2];
+  const eType = segments[segments.length - 2];
+  if (!eType) return '';
   return (`${eType[0].toUpperCase()}${eType.slice(1)}`);
 };
 

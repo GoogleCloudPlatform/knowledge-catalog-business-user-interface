@@ -254,9 +254,17 @@ const BrowseByAnnotation = () => {
         const fullyQualifiedName = entryResponse?.fullyQualifiedName || '';
         const labels = entryResponse?.entrySource?.labels || {};
 
+        // Apply configData whitelist: if browseByAspectTypes has a non-empty entry for this aspect,
+        // show only those fields; otherwise fall back to the full Dataplex list
+        const allowedFields: string[] | undefined = (browseByAspectTypes as Record<string, string[]>)?.[item.name];
+        const filteredRecordFields =
+          allowedFields && allowedFields.length > 0
+            ? recordFields.filter((field: { name: string }) => allowedFields.includes(field.name))
+            : recordFields;
+
         // Create initial subItems with loading state for counts
         // Check cache to avoid showing loader for already-fetched data
-        const initialSubItems = recordFields.map((field: { name: string; annotations?: { displayName?: string; description?: string; stringType?: string }; type?: string }) => {
+        const initialSubItems = filteredRecordFields.map((field: { name: string; annotations?: { displayName?: string; description?: string; stringType?: string }; type?: string }) => {
           const cacheKey = generateCacheKey(item.title, field.name);
           const cachedData = aspectBrowseCache[cacheKey];
           const hasCachedData = !!cachedData;
@@ -310,7 +318,7 @@ const BrowseByAnnotation = () => {
         abortControllerRef.current = new AbortController();
         const signal = abortControllerRef.current.signal;
 
-        const countAndDataPromises = recordFields.map(async (field: any, index: number) => {
+        const countAndDataPromises = filteredRecordFields.map(async (field: any, index: number) => {
           try {
             // Check if data already in cache
             const cacheKey = generateCacheKey(item.title, field.name);
