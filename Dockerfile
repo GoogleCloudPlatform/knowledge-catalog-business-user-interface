@@ -3,8 +3,8 @@ FROM node:20-alpine AS builder
 # Set working directory
 WORKDIR /app/frontend
 
-COPY package.json .pnp.cjs .pnp.loader.mjs ./
-RUN npm install -f
+COPY package.json package-lock.json .pnp.cjs .pnp.loader.mjs ./
+RUN npm ci
 COPY . .
 RUN VITE_API_URL=__VITE_API_URL__ \
     VITE_API_VERSION=__VITE_API_VERSION__ \
@@ -23,8 +23,8 @@ FROM node:20-alpine AS backend
 WORKDIR /app
 
 # Copy backend files
-COPY backend/package.json ./
-RUN npm install
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci
 
 COPY backend/ ./
 
