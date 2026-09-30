@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { ContentCopy, Close, Check, Schedule } from '@mui/icons-material';
 import { Highlight, themes } from 'prism-react-renderer';
+import { toJsDate } from '../../utils/resourceUtils';
 // import { useAppSelector } from '../../app/store';
 
 /**
@@ -68,13 +69,12 @@ const QueryPanel: React.FC<QueryPanelProps> = ({ queryPanelDataStatus, queryPane
   const [runsData, setRunsData] = useState<any[]>([]);
 
   const getFormattedDateTimeParts = (timestamp: any) => {
-    if (!timestamp) {
+    const myDate = toJsDate(timestamp);
+    if (!myDate) {
       return { date: '-', time: '' };
     }
-    
-    const myDate = new Date(timestamp * 1000);
 
-    const date = new Intl.DateTimeFormat('en-US', { 
+    const date = new Intl.DateTimeFormat('en-US', {
       month: "short", 
       day: "numeric", 
       year: "numeric",
@@ -121,8 +121,8 @@ const QueryPanel: React.FC<QueryPanelProps> = ({ queryPanelDataStatus, queryPane
             bigQueryJobId: r.displayName,
             name: r.name,
             status: r.state,
-            startTime: getFormattedDateTimeParts(r.startTime.seconds),
-            endTime: getFormattedDateTimeParts(r.endTime.seconds),//'May 21, 2025, 12:15:33 AM',
+            startTime: getFormattedDateTimeParts(r.startTime),
+            endTime: getFormattedDateTimeParts(r.endTime),//'May 21, 2025, 12:15:33 AM',
             duration: r.endTime.seconds - r.startTime.seconds,
             rowsProcessed: '',
             //jobLink: queryPanelData?.jobDetails[1]?.selfLink

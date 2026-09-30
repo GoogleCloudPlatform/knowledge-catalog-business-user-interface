@@ -812,6 +812,41 @@ describe('DataProductsDetailView', () => {
 
       expect(mockNavigate).toHaveBeenCalledWith('/data-products');
     });
+
+    it('shows an inline access-denied state instead of navigating away on PERMISSION_DENIED', () => {
+      const permissionDeniedState = {
+        ...defaultStoreState,
+        dataProducts: {
+          ...defaultStoreState.dataProducts,
+          selectedDataProductStatus: 'failed',
+          selectedDataProductError: {
+            type: 'PERMISSION_DENIED',
+            message: "You don't have access to this resource",
+            itemId: 'projects/test-project/locations/us/dataProducts/test-product',
+          },
+        },
+      };
+
+      renderWithProviders(<DataProductsDetailView />, permissionDeniedState);
+
+      // No raw-JSON toast, no forced redirect.
+      expect(mockShowError).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(mockNavigate).not.toHaveBeenCalledWith('/data-products');
+
+      // The inline Access Denied card renders instead.
+      expect(screen.getByText('Access Denied')).toBeInTheDocument();
+      // The top-level product card (with the Request Access CTA) still shows,
+      // built from the list-item data cached at click-time.
+      expect(screen.getByText('Request Access')).toBeInTheDocument();
+      // The tab bar still renders for a consistent look, even though every
+      // tab's content is unavailable without access.
+      expect(screen.getByText('Overview')).toBeInTheDocument();
+      expect(screen.getByText('Assets')).toBeInTheDocument();
+    });
   });
 
   describe('Data Fetching', () => {

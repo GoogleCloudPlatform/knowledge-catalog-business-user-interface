@@ -10,7 +10,7 @@ import './SearchEntriesCard.css';
 import { type SxProps, type Theme } from '@mui/material/styles';
 import { fetchEntry, checkEntryAccess, clearHistory } from '../../features/entry/entrySlice';
 import type { AppDispatch } from '../../app/store';
-import { generateBigQueryLink, generateLookerStudioLink, getEntryType } from '../../utils/resourceUtils';
+import { generateBigQueryLink, generateLookerStudioLink, getEntryType, toJsDate } from '../../utils/resourceUtils';
 import { FEATURE_FLAGS } from '../../utils/featureFlags';
 import { debounce } from '../../utils/debounce';
 import DatabaseIcon from '../../assets/svg/database_icon.svg';
@@ -271,8 +271,16 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
     const SYSTEM_DISPLAY_NAMES: Record<string, string> = { "dataplex universal catalog": "Knowledge Catalog", "dataplex": "Knowledge Catalog" };
     setSystemName(SYSTEM_DISPLAY_NAMES[rawSystem.toLowerCase()] || rawSystem);
     setEntryType(entry.entryType.split('-').length > 1 ? entry.entryType.split('-').pop() : entry.name.split('/').at(-2).charAt(0).toUpperCase() + entry.name.split('/').at(-2).slice(1));
-    const myDate = (typeof entry.updateTime !== 'string') ? new Date(entry.updateTime.seconds * 1000) : new Date(entry.updateTime);
-    const formattedDate = new Intl.DateTimeFormat('en-US', { month: "short" , day: "numeric", year: "numeric" }).format(myDate);
+    // Prefer entrySource's update time (the underlying resource's actual
+    // last-modified time) over the top-level entry field, which reflects
+    // Dataplex's catalog/aspect metadata and can drift from the real
+    // resource (e.g. after a re-scan touches an aspect without the
+    // underlying resource actually changing). Same convention as
+    // ResourcePreview/DetailPageOverview.
+    const myDate = toJsDate(entry.entrySource?.updateTime ?? entry.updateTime);
+    const formattedDate = myDate
+      ? new Intl.DateTimeFormat('en-US', { month: "short" , day: "numeric", year: "numeric" }).format(myDate)
+      : '-';
     setModifiedDate(formattedDate);
     setDescription(entry.entrySource.description ?? '');
     

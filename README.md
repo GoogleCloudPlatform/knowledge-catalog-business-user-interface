@@ -1,4 +1,4 @@
-# Knowledge Catalog Business Interface - 1.4.2
+# Knowledge Catalog Business Interface - 1.4.3
 
 An open-source, web-based application called **`Knowledge Catalog Business Interface`** which aims to help business users of BigQuery customers discover and access data assets in the **Knowledge Catalog** (formerly Dataplex Universal Catalog).
 ## Key objectives of the application include:
@@ -392,20 +392,43 @@ gcloud run deploy [SERVICE_NAME] \
 
 **Your application is now redeployed and accessible, with both front-end and backend in one single container and cloud run service!**
 
+## ScreenShot Links
+  - [Links here](https://github.com/GoogleCloudPlatform/knowledge-catalog-business-user-interface/tree/main/src/assets/screenshots)
 
-## Release Note : 1.4.2
+
+## Release Note : 1.4.3
 This is a sub-minor release with features, identified bug/fixes.
 Feature Enhancements:
 
-  - Request Access Button under the feature flag accept data products VITE_FEATURE_REQUEST_ACCESS needs to set true to enable request access in details and preview else it will be not be visible.
-  - Project attribute in configData.json is added to control/restrict the search results and projects visible to user in filters.
-  - Shareable links for every routes in BUI. Now users can share the assets they are viewing to others who have access to it via links
-  - UI Modification browse by aspect page to remove Documentation section as in GCP we don't have option of documentation for aspects.
-  - Data Quality generation from aspects data-quality-scorecards
-  - Data Products list view change flow from only data-quality list to search available data-products
-  - Readme modification to add more details for local setup requested in github issues.
+  - Aspect field values containing h1/h2/h3/pre markup are now rendered as rich text (headings/preformatted blocks) instead of raw HTML strings, safely without `dangerouslySetInnerHTML`.
+  - Created/modified timestamps in the Resource Viewer, Data Products, and Data Profile pages now display in the viewer's local time zone instead of UTC.
+  - Glossary Categories and Terms now show their parent Glossary/Category name in the detail overview.
+  - Redesigned Data Product cards and the table view to remove the asset count and owner information, simplifying the layout to name, description, location, and last modified date.
+  - The app now recovers gracefully when a workspace has a very large number of Google Cloud projects (tens of thousands): the project list request is given a realistic time limit instead of failing prematurely, and pages that don't need the full list (e.g. Home, Glossaries, Browse by Aspect) no longer wait on it to render.
+  - The Project name shown on an entry's Info card now displays a loading placeholder while it resolves, instead of appearing blank.
+  - Data Product cards now show a tooltip with the full name when it's too long to fit and gets truncated.
+  - The Glossaries sidebar now auto-collapses sibling categories when you expand another one under the same parent, for cleaner accordion-style navigation.
+
 
 Bug Fixes:
 
-  - Bugs related to Ui View Detail button enable in preview section because of lazy loading.
-  - Bugs reported for Ui tag for US camel casing fixed to remove manual casing 
+  - Fixed Data Quality scores for custom (aspect-based) entries being double-scaled and showing malformed percentages (e.g. `9372%`, `10000%`) instead of the correct value (e.g. `93.72%`, `100%`).
+  - Fixed a jarring experience when opening a Data Product found only via search outside the user's current project: it previously hit a permission error, showed a raw JSON toast, and force-redirected back to the list after 2 seconds. The detail page now stays open with a clear "Access Denied" state (showing the product's cached name, description, and icon) and a Request Access option.
+  - Fixed dates not displaying on the Data Product detail view page and the Data Profile configuration panel.
+  - Fixed incorrect date parsing for zero-value and millisecond-based timestamps in the shared date-formatting utility.
+  - Fixed Search Entry cards and Resource Preview showing a stale "last modified"/"created" date from catalog metadata instead of the underlying resource's actual timestamps.
+  - Fixed a stray, mismatched-color divider line and a page-layout sizing issue causing a visible seam at the bottom of the Data Products page; also removed the table view's internal scrollbar to avoid nested/double scrolling.
+  - Fixed opening a shared "Copy Link" for a resource, or reloading certain pages, sometimes leaving the app running with incomplete configuration — causing filters, project-based restrictions, and search scoping to behave inconsistently until the user navigated back to the Home page.
+  - Fixed signing out and back in as a different user sometimes carrying over the previous user's project list, which could briefly show incorrect project names or access restrictions to the new user.
+  - Fixed the "Browse by Aspect" page intermittently showing "No Aspects" for organizations with project-based access restrictions, caused by a timing race between loading aspects and loading the project list.
+  - Fixed sub-type asset counts on the "Browse by Aspect" page getting stuck and never loading after refreshing the page, or after being prompted to sign in again due to session expiry.
+  - Fixed duplicate/racing configuration requests that could occur when loading certain pages, improving load reliability and reducing unnecessary network calls.
+  - Fixed the "Knowledge Catalog" product filter — in Search, Browse by Aspect, Glossaries, and Data Products, and when typing a matching search term — not including assets whose system is reported as the short form "Dataplex"; only the full "Dataplex Universal Catalog" name was recognized, so some Dataplex-sourced assets were silently excluded from results.
+  - Fixed clicking a search-term suggestion chip on the Home page (or otherwise submitting a search with no aspect-type filter) unnecessarily waiting on the full project list to finish loading before running the search. It now runs as soon as app configuration is ready, only waiting on the project list when the search actually needs it (an aspect-type filter is selected), showing a loading state for that narrower wait instead of appearing to return no results.
+  - Fixed opening a shared "Copy Link" to a specific sub-type on the Browse by Aspect page sometimes silently reusing another aspect's already-cached (and possibly stale) data instead of fetching fresh results for the linked sub-type.
+  - Fixed the Browse by Aspect page's sub-type asset counts querying before the project list had loaded, which could return incorrect counts; the wait is now scoped to each sub-type card's own loading indicator instead of blocking the aspect's overview and sub-type list from displaying.
+  - Fixed refreshing the Browse by Aspect page with a sub-type already selected sometimes leaving its asset counts stuck loading forever instead of re-fetching them.
+  - Fixed trailing/leading whitespace in resource and entry descriptions being displayed instead of trimmed.
+  - Fixed a misaligned "No Data Product Assets found" empty-state message on the Data Product Assets tab.
+  - Fixed the Glossaries Aspects tab clipping its content instead of scrolling when it overflowed.
+  - Fixed the account/profile chip in the navbar not keeping its hover background highlighted while its tooltip was open.

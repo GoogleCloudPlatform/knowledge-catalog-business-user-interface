@@ -16,6 +16,17 @@ vi.mock("../Navbar/Navbar", () => ({
   )),
 }));
 
+// Layout mounts useAppBootstrap once for the whole authenticated app (see
+// src/hooks/useAppBootstrap.test.ts for its own coverage); this test only
+// cares about Layout's own structure, so replace it with a no-op.
+vi.mock("../../hooks/useAppBootstrap", async () => {
+  const actual = await vi.importActual("../../hooks/useAppBootstrap");
+  return {
+    ...actual,
+    useAppBootstrap: () => ({ isBootstrapping: false }),
+  };
+});
+
 describe("Layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();

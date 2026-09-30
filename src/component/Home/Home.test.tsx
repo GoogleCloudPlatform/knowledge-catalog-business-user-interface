@@ -4,9 +4,6 @@ import { vi, beforeEach, it, describe, expect } from 'vitest';
 import Home from './Home';
 import axios from 'axios';
 
-// Track projects loaded state across tests
-let mockProjectsLoaded = false;
-
 // Mock react-router-dom
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -17,20 +14,6 @@ vi.mock('react-router-dom', async (importOriginal) => {
   };
 });
 
-// Mock NotificationContext
-const mockShowSuccess = vi.fn();
-const mockShowError = vi.fn();
-vi.mock('../../contexts/NotificationContext', () => ({
-  useNotification: () => ({
-    showSuccess: mockShowSuccess,
-    showError: mockShowError,
-    showWarning: vi.fn(),
-    showInfo: vi.fn(),
-    clearNotification: vi.fn(),
-    clearAllNotifications: vi.fn(),
-  })
-}));
-
 // Mock react-redux
 const mockDispatch = vi.fn();
 vi.mock('react-redux', async () => {
@@ -38,30 +21,14 @@ vi.mock('react-redux', async () => {
   return {
     ...actual,
     useDispatch: () => mockDispatch,
-    useSelector: (selector: (state: { projects: { isloaded: boolean } }) => unknown) => {
-      const mockState = {
-        projects: { isloaded: mockProjectsLoaded }
-      };
-      return selector(mockState);
-    }
   };
 });
 
-// Mock getProjects action
-vi.mock('../../features/projects/projectsSlice', () => ({
-  getProjects: vi.fn((data: { id_token?: string }) => ({ type: 'projects/getProjects', payload: data }))
-}));
-
-// Mock axios - use actual axios module and spy on it
+// Mock axios - only used here for the OAuth-scope/IAM permission check effect
 vi.mock('axios');
 
 // Mock auth provider - will be set per test
-let mockAuthContext: { user: unknown; login: unknown; logout: unknown; updateUser: unknown } = {
-  user: null,
-  login: vi.fn(),
-  logout: vi.fn(),
-  updateUser: vi.fn()
-};
+let mockAuthContext: { user: unknown } = { user: null };
 vi.mock('../../auth/AuthProvider', () => ({
   useAuth: () => mockAuthContext
 }));
@@ -77,11 +44,23 @@ vi.mock('../../contexts/NoAccessContext', () => ({
   }),
 }));
 
+// Mock the shared app bootstrap status - Home only *reads* it now; the
+// fetch/dispatch logic itself is covered by useAppBootstrap.test.ts.
+// Home gates on isAppConfigReady only: it needs neither appConfig nor the
+// project list, so it must not wait on a /get-projects round-trip.
+let mockIsBootstrapping = false;
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: () => ({
+    isAppConfigReady: !mockIsBootstrapping,
+    areProjectsReady: !mockIsBootstrapping,
+    isBootstrapping: mockIsBootstrapping,
+  }),
+}));
+
 // Mock constants
 vi.mock('../../constants/urls', () => ({
   URLS: {
     API_URL: 'http://localhost:3000/api',
-    APP_CONFIG: '/app-config',
     CHECK_PERMISSIONS: '/check-permissions',
   }
 }));
@@ -90,18 +69,6 @@ vi.mock('../../constants/auth', () => ({
   REQUIRED_PERMISSIONS: [
     'dataplex.lakes.get',
     'dataplex.lakes.list',
-    'dataplex.zones.get',
-    'dataplex.zones.list',
-    'dataplex.assets.get',
-    'dataplex.assets.list',
-    'dataplex.entryGroups.get',
-    'dataplex.entryGroups.list',
-    'dataplex.entries.get',
-    'dataplex.entries.list',
-    'dataplex.aspectTypes.get',
-    'dataplex.aspectTypes.list',
-    'dataplex.entryTypes.get',
-    'dataplex.entryTypes.list',
   ],
 }));
 
@@ -130,11 +97,7 @@ vi.mock('../SearchBar/SearchBar', () => ({
 vi.mock('./Home.css', () => ({}));
 
 describe('Home', () => {
-  const mockLogout = vi.fn();
-  const mockUpdateUser = vi.fn();
-
-  // Mock user data
-  const mockUserWithAppConfig = {
+  const mockUser = {
     token: 'test-token',
     name: 'Test User',
     email: 'test@example.com',
@@ -147,37 +110,8 @@ describe('Home', () => {
     appConfig: {
       aspects: ['aspect1'],
       projects: ['project1'],
-      defaultSearchProduct: { name: 'BigQuery' },
-      defaultSearchAssets: { type: 'table' },
-      browseByAspectTypes: { type1: 'value1' },
-      browseByAspectTypesLabels: { label1: 'Label 1' }
-    }
+    },
   };
-
-  const mockUserWithoutAppConfig = {
-    ...mockUserWithAppConfig,
-    appConfig: {} as Record<string, never>
-  };
-
-  type MockUser = typeof mockUserWithAppConfig | typeof mockUserWithoutAppConfig | {
-    token: string;
-    name: string;
-    email: string;
-    picture: string;
-    tokenExpiry: number;
-    tokenIssuedAt: number;
-    hasRole: boolean;
-    roles: never[];
-    permissions: never[];
-    appConfig: Record<string, unknown>;
-  };
-
-  const createMockAuthContext = (user: MockUser) => ({
-    user,
-    login: vi.fn(),
-    logout: mockLogout,
-    updateUser: mockUpdateUser
-  });
 
   // Mock sessionStorage
   const mockSessionStorage = (() => {
@@ -196,20 +130,15 @@ describe('Home', () => {
     };
   })();
 
-  // Setup and teardown
   beforeEach(() => {
     vi.clearAllMocks();
     mockSessionStorage.clear();
-    mockProjectsLoaded = false;
+    mockIsBootstrapping = false;
     Object.defineProperty(window, 'sessionStorage', {
       value: mockSessionStorage,
       writable: true
     });
 
-    // Setup axios mock
-    vi.mocked(axios.get).mockClear();
-    vi.mocked(axios.post).mockClear();
-    // Mock permission check to succeed by default
     vi.mocked(axios.post).mockResolvedValue({ data: { hasPermission: true } });
     if (!axios.defaults) {
       (axios as any).defaults = { headers: { common: {} } };
@@ -217,9 +146,9 @@ describe('Home', () => {
     localStorage.removeItem('scopeCheckFailed');
   });
 
-  const renderHome = (authContext = createMockAuthContext(mockUserWithAppConfig)) => {
-    // Set the mock auth context before rendering
-    mockAuthContext = authContext;
+  const renderHome = (user: unknown = mockUser, isBootstrapping = false) => {
+    mockAuthContext = { user };
+    mockIsBootstrapping = isBootstrapping;
 
     return render(
       <BrowserRouter>
@@ -229,187 +158,25 @@ describe('Home', () => {
   };
 
   describe('Loading state', () => {
-    it('shows CircularProgress when appConfig is empty', async () => {
-      const authContext = createMockAuthContext(mockUserWithoutAppConfig);
-      vi.mocked(axios.get).mockResolvedValue({
-        data: {
-          aspects: [],
-          projects: [],
-          defaultSearchProduct: {},
-          defaultSearchAssets: {},
-          browseByAspectTypes: {},
-          browseByAspectTypesLabels: {}
-        }
-      } as any);
+    it('shows CircularProgress while the app bootstrap is in progress', () => {
+      renderHome(mockUser, true);
 
-      renderHome(authContext);
-
-      const loader = screen.getByRole('progressbar');
-      expect(loader).toBeInTheDocument();
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
     });
 
-    it('shows home banner when appConfig is populated', () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
+    it('shows home banner once the app bootstrap has completed', async () => {
+      renderHome(mockUser, false);
 
-      waitFor(() => {
+      await waitFor(() => {
         expect(screen.getByText('What would you like to discover?')).toBeInTheDocument();
-        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-      });
-    });
-
-    it('hides loader after appConfig is fetched', async () => {
-      const authContext = createMockAuthContext(mockUserWithoutAppConfig);
-      vi.mocked(axios.get).mockResolvedValue({
-        data: {
-          aspects: [],
-          projects: [],
-          defaultSearchProduct: {},
-          defaultSearchAssets: {},
-          browseByAspectTypes: {},
-          browseByAspectTypesLabels: {}
-        }
-      } as any);
-
-      renderHome(authContext);
-
-      expect(screen.getByRole('progressbar')).toBeInTheDocument();
-
-      await waitFor(() => {
-        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-      });
-    });
-  });
-
-  describe('App config fetching', () => {
-    it('makes API call to URLS.APP_CONFIG when appConfig is empty', async () => {
-      const authContext = createMockAuthContext(mockUserWithoutAppConfig);
-      vi.mocked(axios.get).mockResolvedValue({
-        data: {
-          aspects: [],
-          projects: [],
-          defaultSearchProduct: {},
-          defaultSearchAssets: {},
-          browseByAspectTypes: {},
-          browseByAspectTypesLabels: {}
-        }
-      } as any);
-
-      renderHome(authContext);
-
-      await waitFor(() => {
-        expect(axios.get).toHaveBeenCalledWith('http://localhost:3000/api/app-config');
-      });
-    });
-
-    it('does NOT make API call when appConfig is already populated', () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
-
-      expect(axios.get).not.toHaveBeenCalled();
-    });
-
-    it('calls updateUser with correct data on successful fetch', async () => {
-      const authContext = createMockAuthContext(mockUserWithoutAppConfig);
-      const mockAppConfig = {
-        aspects: ['aspect1'],
-        projects: ['project1'],
-        defaultSearchProduct: {},
-        defaultSearchAssets: {},
-        browseByAspectTypes: {},
-        browseByAspectTypesLabels: {}
-      };
-      vi.mocked(axios.get).mockResolvedValue({ data: mockAppConfig } as any);
-
-      renderHome(authContext);
-
-      await waitFor(() => {
-        expect(mockUpdateUser).toHaveBeenCalledWith(
-          'test-token',
-          expect.objectContaining({
-            name: 'Test User',
-            email: 'test@example.com',
-            picture: 'test-picture',
-            token: 'test-token',
-            hasRole: true,
-            roles: [],
-            permissions: [],
-            appConfig: mockAppConfig
-          })
-        );
-      });
-    });
-
-    it('shows error notification and calls logout on API error', async () => {
-      const authContext = createMockAuthContext(mockUserWithoutAppConfig);
-      vi.mocked(axios.get).mockRejectedValue(new Error('Network error'));
-
-      renderHome(authContext);
-
-      await waitFor(() => {
-        expect(mockShowError).toHaveBeenCalledWith(
-          'Access token expired or you do not have enough permissions',
-          2000
-        );
-        expect(mockLogout).toHaveBeenCalled();
-      });
-    });
-
-    it('sets loader to false after fetch completes', async () => {
-      const authContext = createMockAuthContext(mockUserWithoutAppConfig);
-      vi.mocked(axios.get).mockResolvedValue({
-        data: {
-          aspects: [],
-          projects: [],
-          defaultSearchProduct: {},
-          defaultSearchAssets: {},
-          browseByAspectTypes: {},
-          browseByAspectTypesLabels: {}
-        }
-      } as any);
-
-      renderHome(authContext);
-
-      expect(screen.getByRole('progressbar')).toBeInTheDocument();
-
-      await waitFor(() => {
         expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
       });
     });
   });
 
   describe('Redux integration', () => {
-    it('dispatches getProjects when projectsLoaded is false', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      mockProjectsLoaded = false;
-
-      renderHome(authContext);
-
-      await waitFor(() => {
-        expect(mockDispatch).toHaveBeenCalledWith(
-          expect.objectContaining({
-            type: 'projects/getProjects',
-            payload: { id_token: 'test-token' }
-          })
-        );
-      });
-    });
-
-    it('does NOT dispatch getProjects when projectsLoaded is true', () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      mockProjectsLoaded = true;
-
-      renderHome(authContext);
-
-      const projectsCall = mockDispatch.mock.calls.find(
-        (call: unknown[]) => (call[0] as { type?: string })?.type === 'projects/getProjects'
-      );
-      expect(projectsCall).toBeUndefined();
-    });
-
     it('dispatches resources state reset actions on mount', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
+      renderHome();
 
       await waitFor(() => {
         expect(mockDispatch).toHaveBeenCalledWith({
@@ -428,60 +195,13 @@ describe('Home', () => {
           type: 'resources/setItems',
           payload: []
         });
-      });
-    });
-
-    it('dispatches resources state reset actions before search', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('search-bar')).toBeInTheDocument();
-      });
-
-      mockDispatch.mockClear();
-
-      const searchInput = screen.getByTestId('search-input');
-      fireEvent.change(searchInput, { target: { value: 'test search' } });
-
-      await waitFor(() => {
-        expect(mockDispatch).toHaveBeenCalledWith({
-          type: 'resources/setItemsPreviousPageRequest',
-          payload: null
-        });
-        expect(mockDispatch).toHaveBeenCalledWith({
-          type: 'resources/setItemsPageRequest',
-          payload: null
-        });
-        expect(mockDispatch).toHaveBeenCalledWith({
-          type: 'resources/setItemsStoreData',
-          payload: []
-        });
-        expect(mockDispatch).toHaveBeenCalledWith({
-          type: 'resources/setItems',
-          payload: []
-        });
-      });
-    });
-
-    it('verifies all 4 resource reset actions are dispatched', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
-
-      await waitFor(() => {
-        const dispatchedTypes = mockDispatch.mock.calls.map((call: unknown[]) => (call[0] as { type?: string })?.type);
-        expect(dispatchedTypes).toContain('resources/setItemsPreviousPageRequest');
-        expect(dispatchedTypes).toContain('resources/setItemsPageRequest');
-        expect(dispatchedTypes).toContain('resources/setItemsStoreData');
-        expect(dispatchedTypes).toContain('resources/setItems');
       });
     });
   });
 
   describe('Search functionality', () => {
     it('handleSearch navigates to /search route', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
+      renderHome();
 
       await waitFor(() => {
         expect(screen.getByTestId('search-bar')).toBeInTheDocument();
@@ -496,8 +216,7 @@ describe('Home', () => {
     });
 
     it('handleSearch dispatches all 4 resource reset actions', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
+      renderHome();
 
       await waitFor(() => {
         expect(screen.getByTestId('search-bar')).toBeInTheDocument();
@@ -514,8 +233,7 @@ describe('Home', () => {
     });
 
     it('SearchBar receives correct props', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
+      renderHome();
 
       await waitFor(() => {
         expect(screen.getByTestId('search-variant')).toHaveTextContent('default');
@@ -531,117 +249,36 @@ describe('Home', () => {
 
   describe('Rendering', () => {
     it('renders correct heading text', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
+      renderHome();
 
       await waitFor(() => {
         expect(screen.getByText('What would you like to discover?')).toBeInTheDocument();
-      });
-    });
-
-    it('renders SearchBar with correct variant', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('search-variant')).toHaveTextContent('default');
-      });
-    });
-
-    it('renders SearchBar with correct dataSearch array', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
-
-      await waitFor(() => {
-        const searchData = screen.getByTestId('search-data');
-        expect(searchData.textContent).toContain('BigQuery');
-        expect(searchData.textContent).toContain('Data Warehouse');
-        expect(searchData.textContent).toContain('Data Lake');
-        expect(searchData.textContent).toContain('Data Pipeline');
-        expect(searchData.textContent).toContain('GCS');
       });
     });
 
     it('applies correct CSS classes', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
+      renderHome();
 
       await waitFor(() => {
-        const homeElement = document.querySelector('.home');
-        const homeBodyElement = document.querySelector('.home-body');
-        const homeBannerElement = document.querySelector('.home-banner');
-        const homeSearchContainer = document.querySelector('.home-search-container');
-
-        expect(homeElement).toBeInTheDocument();
-        expect(homeBodyElement).toBeInTheDocument();
-        expect(homeBannerElement).toBeInTheDocument();
-        expect(homeSearchContainer).toBeInTheDocument();
+        expect(document.querySelector('.home')).toBeInTheDocument();
+        expect(document.querySelector('.home-body')).toBeInTheDocument();
+        expect(document.querySelector('.home-banner')).toBeInTheDocument();
+        expect(document.querySelector('.home-search-container')).toBeInTheDocument();
       });
     });
-  });
-
-  describe('Error handling', () => {
-    it('handles axios error with proper error message', async () => {
-      const authContext = createMockAuthContext(mockUserWithoutAppConfig);
-      vi.mocked(axios.get).mockRejectedValue(new Error('Network error'));
-
-      renderHome(authContext);
-
-      await waitFor(() => {
-        expect(mockShowError).toHaveBeenCalledWith(
-          'Access token expired or you do not have enough permissions',
-          2000
-        );
-      });
-    });
-
-    it('calls logout when API call fails', async () => {
-      const authContext = createMockAuthContext(mockUserWithoutAppConfig);
-      vi.mocked(axios.get).mockRejectedValue(new Error('API error'));
-
-      renderHome(authContext);
-
-      await waitFor(() => {
-        expect(mockLogout).toHaveBeenCalled();
-      });
-    });
-
   });
 
   describe('Edge cases', () => {
     it('handles user with empty token', async () => {
-      const userWithoutToken = {
-        ...mockUserWithAppConfig,
-        token: ''
-      };
-      const authContext = createMockAuthContext(userWithoutToken);
-
-      renderHome(authContext);
+      renderHome({ ...mockUser, token: '' });
 
       await waitFor(() => {
         expect(screen.getByText('What would you like to discover?')).toBeInTheDocument();
       });
     });
 
-    it('handles user with partial appConfig', async () => {
-      const userWithPartialConfig = {
-        ...mockUserWithAppConfig,
-        appConfig: {
-          aspects: []
-        } as any
-      };
-      const authContext = createMockAuthContext(userWithPartialConfig);
-
-      renderHome(authContext);
-
-      await waitFor(() => {
-        expect(screen.getByText('What would you like to discover?')).toBeInTheDocument();
-      });
-    });
-
-    it('handles multiple search submissions without duplicate API calls', async () => {
-      const authContext = createMockAuthContext(mockUserWithAppConfig);
-      renderHome(authContext);
+    it('handles multiple search submissions without duplicate navigation issues', async () => {
+      renderHome();
 
       await waitFor(() => {
         expect(screen.getByTestId('search-bar')).toBeInTheDocument();
@@ -656,9 +293,6 @@ describe('Home', () => {
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledTimes(3);
       });
-
-      // Should not make additional app config calls
-      expect(axios.get).not.toHaveBeenCalled();
     });
   });
 });

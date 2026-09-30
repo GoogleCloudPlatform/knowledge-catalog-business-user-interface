@@ -5,6 +5,8 @@ import { configureStore } from '@reduxjs/toolkit';
 import { Provider } from 'react-redux';
 import Glossaries from './Glossaries';
 import type { GlossaryItem } from './GlossaryDataType';
+import SidebarItem from './SidebarItem';
+import { getBreadcrumbs } from '../../utils/glossaryUtils';
 
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({
@@ -16,6 +18,17 @@ vi.mock('react-router-dom', () => ({
 // Mock auth provider
 vi.mock('../../auth/AuthProvider', () => ({
   useAuth: () => ({ user: { token: 'test-token' } }),
+}));
+
+// appConfig/get-projects bootstrapping is now handled globally by
+// useAppBootstrap (see src/hooks/useAppBootstrap.test.ts); these tests
+// assume the bootstrap has already completed.
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: () => ({
+    isAppConfigReady: true,
+    areProjectsReady: true,
+    isBootstrapping: false,
+  }),
 }));
 
 // Mock glossary utils with stable implementations
@@ -39,7 +52,9 @@ vi.mock('../../utils/glossaryUtils', () => ({
     };
     return find(items);
   },
-  getBreadcrumbs: () => [],
+  // Wrapped in vi.fn() so the accordion regression test can swap in the real
+  // implementation for its scope only, then restore this default.
+  getBreadcrumbs: vi.fn(() => []),
   collectAllIds: () => [],
   collectAncestorIdsOfMatches: () => [],
 }));
@@ -76,8 +91,12 @@ vi.mock('./glossaryUIHelpers', () => ({
 }));
 
 // Mock child components
+// Wrapped in vi.fn() (rather than a plain arrow function) so a single test can
+// override the implementation via mockImplementation — e.g. to render children
+// recursively for the sidebar-accordion regression test — without changing
+// behavior for the ~120 other tests that rely on this flat default stub.
 vi.mock('./SidebarItem', () => ({
-  default: ({ item, selectedId, onSelect, onToggle }: any) => (
+  default: vi.fn(({ item, selectedId, onSelect, onToggle }: any) => (
     <div
       data-testid={`sidebar-item-${item.id}`}
       data-selected={selectedId === item.id}
@@ -94,7 +113,7 @@ vi.mock('./SidebarItem', () => ({
         Toggle
       </button>
     </div>
-  ),
+  )),
 }));
 
 vi.mock('../Common/FilterBar', () => ({
@@ -1471,6 +1490,106 @@ describe('Glossaries', () => {
       await user.click(screen.getByTestId('toggle-glossary-1'));
 
       expect(screen.getByTestId('sidebar-item-glossary-1')).toBeInTheDocument();
+    });
+
+    it('collapses a sibling category when a new category is expanded (accordion behavior)', async () => {
+      // Regression test: expanding category-b while sibling category-a (under
+      // the same glossary) is already expanded must collapse category-a — this
+      // mirrors the pre-existing "collapse other root glossaries" behavior,
+      // which previously only applied at the root level, not to categories.
+      //
+      // The shared SidebarItem mock used by every other test in this file is a
+      // flat, non-recursive stub, so nested categories never render through
+      // it. We temporarily swap in a recursive implementation (and give
+      // getBreadcrumbs its real implementation) just for this test, then
+      // restore both so no other test is affected.
+      const user = userEvent.setup();
+      const originalSidebarItemImpl = (SidebarItem as unknown as ReturnType<typeof vi.fn>).getMockImplementation();
+      const originalGetBreadcrumbsImpl = (getBreadcrumbs as unknown as ReturnType<typeof vi.fn>).getMockImplementation();
+
+      const RecursiveSidebarItem = ({ item, selectedId, expandedIds, onSelect, onToggle }: any) => (
+        <div
+          data-testid={`sidebar-item-${item.id}`}
+          data-selected={selectedId === item.id}
+          onClick={() => onSelect(item.id)}
+        >
+          <span>{item.displayName}</span>
+          <button
+            data-testid={`toggle-${item.id}`}
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              onToggle(item.id);
+            }}
+          >
+            Toggle
+          </button>
+          {expandedIds?.has(item.id) &&
+            item.children?.map((child: GlossaryItem) => (
+              <SidebarItem
+                key={child.id}
+                item={child}
+                selectedId={selectedId}
+                expandedIds={expandedIds}
+                onSelect={onSelect}
+                onToggle={onToggle}
+              />
+            ))}
+        </div>
+      );
+
+      (SidebarItem as unknown as ReturnType<typeof vi.fn>).mockImplementation(RecursiveSidebarItem);
+      const actualGlossaryUtils = await vi.importActual<typeof import('../../utils/glossaryUtils')>(
+        '../../utils/glossaryUtils'
+      );
+      (getBreadcrumbs as unknown as ReturnType<typeof vi.fn>).mockImplementation(actualGlossaryUtils.getBreadcrumbs);
+
+      try {
+        // Don't pre-seed expandedIds via Redux: on mount, auto-selecting the
+        // first item drives a separate "expand ancestors of selection" effect
+        // (Glossaries.tsx, the effect keyed on `selectedId`) that recomputes
+        // expandedIds from scratch and would stomp any pre-seeded value before
+        // our clicks even happen. Instead let that effect settle naturally
+        // (it expands the root glossary), then drive category expansion
+        // purely via the toggle buttons, which never touch `selectedId` and
+        // so never re-trigger that effect.
+        const { store } = renderWithStore({
+          glossaries: {
+            status: 'succeeded',
+            glossaryItems: [mockGlossaryWithNestedTerms],
+          },
+        });
+        const dispatchSpy = vi.spyOn(store, 'dispatch');
+
+        await waitFor(() => {
+          expect(screen.getByTestId('toggle-category-a')).toBeInTheDocument();
+          expect(screen.getByTestId('toggle-category-b')).toBeInTheDocument();
+        });
+
+        // Expand category-a first (simulating the "one category already
+        // expanded" precondition from the bug report), then category-b.
+        await user.click(screen.getByTestId('toggle-category-a'));
+        dispatchSpy.mockClear();
+        await user.click(screen.getByTestId('toggle-category-b'));
+
+        await waitFor(() => {
+          const expandedIdsPayloads = dispatchSpy.mock.calls
+            .map(([action]: any) => action)
+            .filter((action: any) => action?.type === 'glossaries/setGlossaryExpandedIds')
+            .map((action: any) => action.payload as string[]);
+          expect(expandedIdsPayloads.length).toBeGreaterThan(0);
+
+          const lastPayload = expandedIdsPayloads[expandedIdsPayloads.length - 1];
+          expect(lastPayload).toContain('category-b');
+          expect(lastPayload).not.toContain('category-a');
+        });
+      } finally {
+        (SidebarItem as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+          originalSidebarItemImpl as any
+        );
+        (getBreadcrumbs as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+          originalGetBreadcrumbsImpl as any
+        );
+      }
     });
   });
 

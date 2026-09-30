@@ -55,7 +55,7 @@ const capitalizeFirstLetter = (str: string) => {
 };
 
 const DataProfileConfigurationsPanel: React.FC<DataProfileConfigurationsPanelProps> = ({ onClose, dataProfileScan }) => {
-  const { date: updateDate, time: updateTime } = getFormattedDateTimeParts(dataProfileScan.jobs[0]?.startTime.seconds);
+  const { date: updateDate, time: updateTime } = getFormattedDateTimeParts(dataProfileScan.jobs[0]?.startTime);
   return (
     <Box
       sx={{

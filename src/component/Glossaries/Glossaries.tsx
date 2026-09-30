@@ -32,9 +32,9 @@ import {
   setGlossaryExpandedIds,
   setGlossaryTabValue,
 } from "../../features/glossaries/glossariesSlice";
-import { getProjects } from "../../features/projects/projectsSlice";
 import { setSideNavOpen } from "../../features/search/searchSlice";
 import { useAuth } from "../../auth/AuthProvider";
+import { useAppBootstrapStatus } from "../../hooks/useAppBootstrap";
 import ShimmerLoader from "../Shimmer/ShimmerLoader";
 import GlossariesPageSkeleton from "./GlossariesPageSkeleton";
 import {
@@ -61,8 +61,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 /**
  * Transforms a GlossaryItem into the entry format expected by DetailPageOverview.
  * Maps glossary-specific fields to the standard entry structure.
+ * @param parentDisplayName - display name of the item's parent (Glossary/Category), if any.
  */
-const transformGlossaryToEntry = (item: GlossaryItem) => {
+const transformGlossaryToEntry = (item: GlossaryItem, parentDisplayName?: string) => {
   // Build labels object from array (e.g., ["key:value"] -> { key: "value" })
   const labelsObject = (item.labels || []).reduce((acc, label) => {
     const [key, ...valueParts] = label.split(':');
@@ -85,6 +86,7 @@ const transformGlossaryToEntry = (item: GlossaryItem) => {
     name: item.id,
     entryType: `glossary/${item.type}`,
     fullyQualifiedName: '',
+    parentEntry: parentDisplayName || '',
     createTime: null,
     updateTime: item.lastModified ? { seconds: item.lastModified } : null,
     entrySource: {
@@ -178,6 +180,10 @@ const activeFilterToChip = (filter: ActiveFilter): FilterChip => ({
 const Glossaries = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useAuth();
+  // fetchGlossaries only reads appConfig (projectsRestricted /
+  // configuredProjectIds) — it never touches the project list, so it shouldn't
+  // wait on /get-projects.
+  const { isAppConfigReady } = useAppBootstrapStatus();
 
   const {
     glossaryItems,
@@ -187,7 +193,6 @@ const Glossaries = () => {
     activeFilters,
     accessDeniedItemId,
   } = useSelector((state: any) => state.glossaries);
-  const projectsLoaded = useSelector((state: any) => state.projects.isloaded);
 
   const reduxSelectedId = useSelector((state: any) => state.glossaries.selectedId) as string;
   const reduxExpandedIds = useSelector((state: any) => state.glossaries.expandedIds) as string[];
@@ -288,17 +293,15 @@ const Glossaries = () => {
     return glossaryItems;
   }, [activeFilters, filteredTreeItems, glossaryItems]);
 
+  // Wait for appConfig (projectsRestricted/configuredProjectIds) to be
+  // bootstrapped before fetching: fetchGlossaries reads it at dispatch time
+  // to scope the query, so firing early on a cold deep-link/reload would
+  // silently skip the restricted-project filter.
   useEffect(() => {
-    if (!projectsLoaded && user?.token) {
-      dispatch(getProjects({ id_token: user?.token }));
-    }
-  }, [dispatch, projectsLoaded, user?.token]);
-
-  useEffect(() => {
-    if (glossaryItems.length === 0 && status === "idle" && user?.token) {
+    if (glossaryItems.length === 0 && status === "idle" && user?.token && isAppConfigReady) {
       dispatch(fetchGlossaries({ id_token: user?.token }));
     }
-  }, [dispatch, glossaryItems.length, status, user?.token]);
+  }, [dispatch, glossaryItems.length, status, user?.token, isAppConfigReady]);
 
   useEffect(() => {
     if (displayGlossaries.length > 0 && !selectedId && !searchParams.get('entry')) {
@@ -415,6 +418,9 @@ const Glossaries = () => {
     return getBreadcrumbs(glossaryItems, selectedId) || []; // Use glossaryItems
   }, [selectedId, glossaryItems]);
 
+  // Direct parent of selectedItem (the item just before it in the breadcrumb chain)
+  const parentItem = breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2] : null;
+
   const categories =
     selectedItem?.children?.filter((c) => c.type === "category") || [];
   const terms = useMemo(
@@ -455,6 +461,22 @@ const Glossaries = () => {
             newExpanded.delete(g.id);
           }
         });
+      } else if (!isRootGlossary && activeFilters.length === 0) {
+        // Collapse sibling categories under the same parent (accordion behavior)
+        const chain = getBreadcrumbs(displayGlossaries, id);
+        const parent = chain && chain.length >= 2 ? chain[chain.length - 2] : null;
+        if (parent?.children) {
+          parent.children.forEach((sibling) => {
+            if (sibling.id !== id && newExpanded.has(sibling.id)) {
+              newExpanded.delete(sibling.id);
+              if (sibling.children) {
+                collectAllIds(sibling.children).forEach((descId) =>
+                  newExpanded.delete(descId)
+                );
+              }
+            }
+          });
+        }
       }
 
       // If expanding and no children, fetch them
@@ -838,7 +860,7 @@ const Glossaries = () => {
           transition: "margin-left 0.3s ease-in-out, width 0.3s ease-in-out",
         }}
       >
-        {(status === "loading" && !selectedItem) || isContentLoading || (Boolean(searchParams.get('entry')) && !urlEntryHandled.current) ? (
+        {(status === "loading" && !selectedItem) || isContentLoading || !isAppConfigReady || (Boolean(searchParams.get('entry')) && !urlEntryHandled.current) ? (
           <GlossariesPageSkeleton />
         ) : (
         <>
@@ -1151,7 +1173,7 @@ const Glossaries = () => {
                 }}
               >
                 <DetailPageOverview
-                  entry={transformGlossaryToEntry(selectedItem)}
+                  entry={transformGlossaryToEntry(selectedItem, parentItem?.displayName)}
                   css={{ width: "100%" }}
                   accessDenied={accessDeniedItemId === selectedId}
                 />
@@ -1240,14 +1262,13 @@ const Glossaries = () => {
                     </Box>
 
                     {/* Aspect List Component */}
-                    <Box sx={{ 
-                      flex: 1, 
-                      overflowY: "auto", 
+                    <Box sx={{
+                      flex: 1,
+                      overflowY: "auto",
                       minHeight: 0,
                       border: '1px solid #DADCE0',
                       borderRadius: '12px',
                       backgroundColor: '#FFFFFF',
-                      overflow: 'hidden',
                       marginTop: '12px'
                     }}>
                       <PreviewAnnotation

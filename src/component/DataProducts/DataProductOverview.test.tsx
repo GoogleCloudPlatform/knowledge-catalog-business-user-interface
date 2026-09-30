@@ -816,14 +816,43 @@ describe('DataProductOverviewNew', () => {
       const dashElements = screen.getAllByText('-');
       expect(dashElements.length).toBeGreaterThan(0);
     });
+
+    it('prefers the createTime/updateTime props over entry.createTime/entry.updateTime', () => {
+      // entry's timestamps represent the Dataplex Catalog Entry's stale
+      // aspect-sync time; createTime/updateTime props represent the more
+      // authoritative Data Product resource time (e.g. from the list API).
+      renderDataProductOverviewNew({
+        createTime: '2026-06-16T16:57:39.790306698Z',
+        updateTime: '2026-06-16T17:19:26.795688112Z',
+      });
+
+      const createdSection = screen.getByText('Created').closest('div')?.parentElement;
+      const modifiedSection = screen.getByText('Last Modified').closest('div')?.parentElement;
+      expect(createdSection?.textContent).toContain('2026');
+      expect(modifiedSection?.textContent).toContain('2026');
+      expect(createdSection?.textContent).not.toContain('2022');
+      expect(modifiedSection?.textContent).not.toContain('2022');
+    });
+
+    it('falls back to entry.createTime/entry.updateTime when the props are not passed', () => {
+      renderDataProductOverviewNew();
+      const createdSection = screen.getByText('Created').closest('div')?.parentElement;
+      expect(createdSection?.textContent).toMatch(/2022/);
+    });
   });
 
   describe('data-product entryType handling', () => {
-    it('uses ISO date format for data-product type', () => {
+    it('formats the data-product ISO timestamp as a real parsed date/time (not raw sliced text)', () => {
       renderDataProductOverviewNew({ entry: mockDataProductEntry, entryType: 'data-product' });
-      // For data-product, the date is split from ISO format: '2022-01-01T10:30:00Z' -> '2022-01-01'
+      // createTime '2022-01-01T10:30:00Z' should be parsed as a real Date and
+      // formatted the same way as any other entry (e.g. "Jan 1, 2022"), never
+      // shown as the raw sliced ISO text ("2022-01-01"). This panel
+      // intentionally displays the value in UTC (to match the Google Cloud
+      // Dataplex console), not the viewer's local timezone.
       const createdSection = screen.getByText('Created').closest('div')?.parentElement;
-      expect(createdSection?.textContent).toContain('2022-01-01');
+      expect(createdSection?.textContent).toContain('2022');
+      expect(createdSection?.textContent).not.toContain('2022-01-01');
+      expect(createdSection?.textContent).toMatch(/AM|PM/);
     });
 
     it('renders contacts differently for data-product type', () => {

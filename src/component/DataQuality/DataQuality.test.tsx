@@ -476,6 +476,32 @@ describe('DataQuality Components', () => {
       expect(screen.getByText('test_col')).toBeInTheDocument();
       expect(screen.getByText('test_rule')).toBeInTheDocument();
     });
+
+    it('renders correctly-scaled percentages for custom-entry column scores (columnScores mode)', () => {
+      // Shape produced by adaptScorecardToScanShape for a custom
+      // data-quality-scorecard aspect entry — scores are already 0-100 and
+      // must not be double-scaled.
+      const columnScoresScan = {
+        scan: {
+          dataQualityResult: {
+            score: 93.72,
+            dimensions: [],
+            columns: [
+              { name: 'capturedate', score: 100, status: 'PASS' },
+              { name: 'text', score: 99.99, status: 'PASS' },
+            ]
+          }
+        }
+      };
+
+      render(<CurrentRules dataQualtyScan={columnScoresScan} mode="columnScores" />);
+
+      expect(screen.getByText('capturedate')).toBeInTheDocument();
+      expect(screen.getByText('100%')).toBeInTheDocument();
+      expect(screen.getByText('99.99%')).toBeInTheDocument();
+      expect(screen.queryByText('10000%')).not.toBeInTheDocument();
+      expect(screen.queryByText('9999%')).not.toBeInTheDocument();
+    });
   });
 
   describe('DataQualityStatus', () => {

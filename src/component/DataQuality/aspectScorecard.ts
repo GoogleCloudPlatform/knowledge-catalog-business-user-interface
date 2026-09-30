@@ -134,8 +134,11 @@ export const extractDataQualityScorecard = (entry: any): DataQualityScorecardDat
  * Data Quality tab's fallback UI can reuse those two components as-is
  * instead of a separate, differently-styled view.
  *
- * - `score` is normalized from the aspect's 0-1 fraction to the 0-100 scale
- *   real scan scores already use (`DataQualityStatus.tsx` doesn't multiply).
+ * - `score` values (scorecard, dimensions, columns) are consumed as-is: the
+ *   scorecard aspect already stores them on the same 0-100 scale real scan
+ *   scores use (`DataQualityStatus.tsx` doesn't multiply). Do NOT multiply
+ *   by 100 here — that previously double-scaled values like `93.72` into
+ *   `9372`.
  * - `dimensions` matches the `{dimension:{name}, score, passed}` shape read
  *   by `DataQualityStatus.tsx`'s `getDimensionScore`.
  * - `columns` has no equivalent in a real scan result — it's a new field,
@@ -146,15 +149,15 @@ export const extractDataQualityScorecard = (entry: any): DataQualityScorecardDat
 export const adaptScorecardToScanShape = (scorecard: DataQualityScorecardData) => ({
   scan: {
     dataQualityResult: {
-      score: scorecard.score * 100,
+      score: scorecard.score,
       dimensions: (scorecard.dimensions || []).map((d) => ({
         dimension: { name: d.name?.toUpperCase() },
-        score: d.score * 100,
+        score: d.score,
         passed: d.status?.toUpperCase() === 'PASS',
       })),
       columns: (scorecard.columns || []).map((c) => ({
         name: c.name,
-        score: c.score * 100,
+        score: c.score,
         status: c.status,
       })),
     },

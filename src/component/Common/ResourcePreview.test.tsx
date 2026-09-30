@@ -173,7 +173,8 @@ vi.mock('../../utils/resourceUtils', () => ({
     if (segments.length >= 2 && segments[0] === 'projects') return segments[1];
     return '';
   }),
-  resolveProjectDisplayName: vi.fn(() => '')
+  resolveProjectDisplayName: vi.fn(() => ''),
+  resolveProjectDisplayNameOrFallback: vi.fn(() => '')
 }));
 
 // Mock Redux slice

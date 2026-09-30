@@ -36,6 +36,7 @@ export const AUTH_CONFIG = {
     '/home',
     '/search',
     '/view-details',
+    '/data-products',
     '/data-products-details',
     '/admin-panel',
     '/browse-by-annotation',

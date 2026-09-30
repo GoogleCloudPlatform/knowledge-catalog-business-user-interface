@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Box, IconButton, Skeleton, Tab, Tabs, Tooltip } from '@mui/material'
-import { KeyboardArrowUp, KeyboardArrowDown, DashboardOutlined, Inventory2Outlined, GroupsOutlined, ArticleOutlined, LinkOutlined } from '@mui/icons-material'
+import { Box, IconButton, Skeleton, Tab, Tabs, Tooltip, Typography } from '@mui/material'
+import { KeyboardArrowUp, KeyboardArrowDown, DashboardOutlined, Inventory2Outlined, GroupsOutlined, ArticleOutlined, LinkOutlined, LockOutlined } from '@mui/icons-material'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import CustomTabPanel from '../TabPanel/CustomTabPanel'
@@ -8,6 +8,7 @@ import PreviewAnnotation from '../Annotation/PreviewAnnotation'
 import AnnotationFilter from '../Annotation/AnnotationFilter'
 import type { AppDispatch } from '../../app/store'
 import { useAuth } from '../../auth/AuthProvider'
+import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap'
 import { getMimeType, getName  } from '../../utils/resourceUtils'
 import DetailPageOverviewSkeleton from '../DetailPageOverview/DetailPageOverviewSkeleton';
 import { fetchDataProductsAssetsList, fetchDataProductsList, getDataProductDetails, setDataProductsDetailTabValue } from '../../features/dataProducts/dataProductsSlice'
@@ -77,8 +78,9 @@ interface DataProductsDetailViewProps {
 const DataProductsDetailView: React.FC<DataProductsDetailViewProps> = ({ onRequestAccess }) => {
 
   const { user } = useAuth();
+  const { isBootstrapping } = useAppBootstrapStatus();
   const {
-        dataProductsItems, 
+        dataProductsItems,
         status, 
         selectedDataProductDetails, 
         selectedDataProductStatus,
@@ -92,6 +94,8 @@ const DataProductsDetailView: React.FC<DataProductsDetailViewProps> = ({ onReque
   const [copyLinkSuccess, setCopyLinkSuccess] = useState(false);
   const dispatch = useDispatch<AppDispatch>();
   const { showError } = useNotification();
+  const isPermissionDeniedError = selectedDataProductStatus === 'failed' &&
+    (selectedDataProductError as { type?: string } | null | undefined)?.type === 'PERMISSION_DENIED';
 
   const { setAccessPanelOpen } = useAccessRequest();
 
@@ -258,19 +262,23 @@ const tabProps = (index: number)  => {
 }
 
   useEffect(() => {
-    if (dataProductsItems.length === 0 && status === 'idle' && user?.token) {
+    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && !isBootstrapping) {
        dispatch(fetchDataProductsList({ id_token: user?.token }));
     }
     if(status=== 'succeeded'){
         setDataProductsList(dataProductsItems);
     }
-  }, [dispatch, dataProductsItems.length, status, user?.token]);
+  }, [dispatch, dataProductsItems.length, status, user?.token, isBootstrapping]);
 
+    // Wait for the bootstrap before fetching: getDataProductDetails resolves the
+    // project number from the /get-projects list at dispatch time to build the
+    // entry name, so firing on a cold deep-link/reload before it's populated
+    // produces a malformed entry name and a false PERMISSION_DENIED.
     useEffect(() => {
-    if (selectedDataProductStatus === 'idle' && dataProductIdFromUrl && user?.token) {
+    if (selectedDataProductStatus === 'idle' && dataProductIdFromUrl && user?.token && !isBootstrapping) {
       dispatch(getDataProductDetails({ id_token: user.token, dataProductId: dataProductIdFromUrl }));
     }
-    }, [dispatch, selectedDataProductStatus, dataProductIdFromUrl, user?.token]);
+    }, [dispatch, selectedDataProductStatus, dataProductIdFromUrl, user?.token, isBootstrapping]);
 
     useEffect(() => {
     if(selectedDataProductStatus=== 'succeeded'){
@@ -280,11 +288,20 @@ const tabProps = (index: number)  => {
 
     if(selectedDataProductStatus === 'failed'){
         console.log("Error fetching selected data product details", selectedDataProductError);
-        showError(`Error fetching data product details: ${selectedDataProductError}`, 5000);
-        setTimeout(() => {
-          //setIsNotificationVisible(false);
-          navigate('/data-products');
-        }, 2000);
+        const errorInfo = selectedDataProductError as { type?: string; message?: string } | null | undefined;
+        if (errorInfo?.type === 'PERMISSION_DENIED') {
+          // Stay on this page and show an inline access-denied state instead
+          // of bouncing the user back to the list - they came here on
+          // purpose (e.g. a search-only result outside their project) and
+          // deserve a clear explanation + a way to request access, not a
+          // flash of a raw error toast.
+        } else {
+          showError(`Error fetching data product details: ${errorInfo?.message ?? selectedDataProductError}`, 5000);
+          setTimeout(() => {
+            //setIsNotificationVisible(false);
+            navigate('/data-products');
+          }, 2000);
+        }
     }
   }, [dispatch, selectedDataProductDetails.length, selectedDataProductStatus, user?.token]);
 
@@ -377,7 +394,7 @@ const tabProps = (index: number)  => {
     isDataProduct={true}
   />;
   
-  let overviewTab = <DataProductOverviewNew entry={selectedDataProductDetails} entryType={'data-product'} labels={selectedDataProduct?.labels} css={{width:"100%"}} />;
+  let overviewTab = <DataProductOverviewNew entry={selectedDataProductDetails} entryType={'data-product'} labels={selectedDataProduct?.labels} createTime={selectedDataProduct?.createTime} updateTime={selectedDataProduct?.updateTime} css={{width:"100%"}} />;
   let assetsTab = <Assets 
     entry={selectedDataProductDetails} css={{width:"100%"}} 
     onAssetPreviewChange={(data) => {
@@ -416,7 +433,21 @@ const tabProps = (index: number)  => {
     });
   };
 
- 
+  // Same as handleCopyLink, but for the PERMISSION_DENIED case: there's no
+  // selectedDataProductDetails to derive the plain DP path from (the fetch
+  // failed), but dataProductIdFromUrl already *is* that plain path - it's
+  // exactly what DataProducts.tsx's handleCardClick base64-encoded into the
+  // URL in the first place.
+  const handleCopyLinkForDeniedProduct = () => {
+    if (!dataProductIdFromUrl) return;
+    const url = `${window.location.origin}/data-products-details?dataProductId=${encodeURIComponent(btoa(dataProductIdFromUrl))}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopyLinkSuccess(true);
+      setTimeout(() => setCopyLinkSuccess(false), 2000);
+    });
+  };
+
+
 
 
   const headerDescription = (selectedDataProductDetails?.entrySource?.description || '').trim();
@@ -1049,6 +1080,310 @@ const tabProps = (index: number)  => {
           previewMode="isolated"
         />
       </Box>
+    </div>
+  ) : isPermissionDeniedError ? (
+    <div style={{display: "flex", flexDirection: "column", padding: "0px 0", background:"#F7F9F9", height: "100vh", overflow: "hidden" }}>
+      {/* Header: same "Back to Data Products" button as the normal page's
+          unscrolled state, since the full entry failed to load. */}
+      <div style={{
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        padding: "16px 20px 8px 20px",
+      }}>
+        <div
+          onClick={() => {
+            if (location.key === 'default' || (location.state as any)?.fromAuth) {
+              navigate('/data-products');
+            } else {
+              navigate(-1);
+            }
+          }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            cursor: "pointer"
+          }}
+        >
+          <IconButton
+            sx={{
+              p: '4px',
+              width: '30px',
+              height: '30px',
+              borderRadius: '50%',
+              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+            }}
+          >
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M7.825 13L13.425 18.6L12 20L4 12L12 4L13.425 5.4L7.825 11H20V13H7.825Z" fill="#1F1F1F"/>
+            </svg>
+          </IconButton>
+        </div>
+        <span style={{
+            width: "300px",
+            height: "40px",
+            marginLeft: "8px",
+            fontFamily: "'Product Sans Medium', 'Google Sans', sans-serif",
+            fontStyle: "normal",
+            fontWeight: 500,
+            fontSize: "14px",
+            lineHeight: "40px",
+            display: "flex",
+            alignItems: "center",
+            color: "#1F1F1F",
+            userSelect: "none"
+          }}>
+            Back to Data Products
+          </span>
+      </div>
+
+      <div style={{padding:"0px 20px", display: "flex", flexDirection: "column"}}>
+        {/* Top-level card - exact same layout/styling as the normal Overview
+            header, built from the list-item data cached at click-time
+            (selectedDataProduct) since the full entry failed to load. Gives
+            the user something concrete (icon, title, description) plus a
+            way to request access, instead of an empty page. */}
+        <div style={{
+            position: "relative",
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            padding: "24px",
+            gap: "20px",
+            background: "linear-gradient(88.29deg, #F6F7FF 0%, #F6FFFC 105.88%)",
+            borderRadius: "16px",
+            width: "100%",
+            border: "1px solid #E2E8F0",
+            boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.04)"
+        }}>
+            {/* Top Row: Icon and Title */}
+            <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center", width: "100%", gap: "20px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <Box sx={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '8px',
+                      background: '#EAEEFA',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      border: '1.25px solid #FFFFFF',
+                      overflow: 'hidden',
+                    }}>
+                      {selectedDataProduct.icon ? (
+                        <img
+                          src={`data:${getMimeType(selectedDataProduct.icon)};base64,${selectedDataProduct.icon}`}
+                          alt={selectedDataProduct.displayName}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <svg width="52" height="52" viewBox="0 0 54 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, transform: 'translate(0px, -1px)' }}>
+                          <g filter="url(#filter0_d_11345_132122)">
+                            <rect x="2.7002" y="1.69995" width="48" height="48" rx="8" fill="url(#paint0_linear_11345_132122)" shapeRendering="crispEdges"/>
+                            <path d="M25.4277 11.8923C26.2307 11.5023 27.1697 11.5023 27.9727 11.8923L40.2197 17.8435C40.5683 18.0129 40.7926 18.3624 40.7998 18.7488C40.8068 19.1351 40.5959 19.4925 40.2539 19.6746L35.5039 22.2019L40.2197 24.4939C40.5683 24.6633 40.7926 25.0128 40.7998 25.3992C40.8068 25.7854 40.5959 26.143 40.2539 26.325L35.5029 28.8523L40.2197 31.1443C40.5683 31.3136 40.7928 31.6631 40.7998 32.0496C40.807 32.4359 40.596 32.7934 40.2539 32.9753L28.0674 39.4587C27.2132 39.9134 26.1872 39.9133 25.333 39.4587L13.1465 32.9753C12.8044 32.7934 12.5935 32.4359 12.6006 32.0496C12.6077 31.6632 12.8321 31.3137 13.1807 31.1443L17.8965 28.8523L13.1465 26.325C12.8044 26.143 12.5935 25.7854 12.6006 25.3992C12.6077 25.0128 12.8321 24.6633 13.1807 24.4939L17.8955 22.2019L13.1465 19.6746C12.8044 19.4925 12.5935 19.1351 12.6006 18.7488C12.6077 18.3623 12.8321 18.0129 13.1807 17.8435L25.4277 11.8923ZM28.0674 32.8083C27.213 33.2629 26.1874 33.2629 25.333 32.8083L20.1445 30.0486L15.9033 32.1091L26.3066 37.6453C26.5521 37.7759 26.8473 37.7757 27.0928 37.6453L37.4961 32.1091L33.2539 30.0486L28.0674 32.8083ZM28.0674 26.158C27.213 26.6124 26.1874 26.6124 25.333 26.158L20.1445 23.3982L15.9033 25.4587L26.3066 30.9949C26.5522 31.1256 26.8482 31.1256 27.0938 30.9949L37.4961 25.4587L33.2549 23.3982L28.0674 26.158ZM27.0664 13.741C26.8357 13.6288 26.5647 13.6288 26.334 13.741L15.9033 18.8083L26.3066 24.3445C26.5522 24.4752 26.8482 24.4752 27.0938 24.3445L37.4961 18.8083L27.0664 13.741Z" fill="white" stroke="white" strokeWidth="0.2"/>
+                          </g>
+                          <defs>
+                            <filter id="filter0_d_11345_132122" x="0.000195265" y="-4.88758e-05" width="53.4" height="53.4" filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+                              <feFlood floodOpacity="0" result="BackgroundImageFix"/>
+                              <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+                              <feOffset dy="1"/>
+                              <feGaussianBlur stdDeviation="1.35"/>
+                              <feComposite in2="hardAlpha" operator="out"/>
+                              <feColorMatrix type="matrix" values="0 0 0 0 0.43645 0 0 0 0 0.530791 0 0 0 0 0.813815 0 0 0 0.4 0"/>
+                              <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_11345_132122"/>
+                              <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_11345_132122" result="shape"/>
+                            </filter>
+                            <linearGradient id="paint0_linear_11345_132122" x1="11.7002" y1="-10.3" x2="46.7002" y2="53.7" gradientUnits="userSpaceOnUse">
+                              <stop stopColor="#73C9FF"/>
+                              <stop offset="1" stopColor="#7B88FF"/>
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                      )}
+                    </Box>
+                    <label style={{
+                        fontFamily: '"Google Sans", sans-serif',
+                        color: "#1F1F1F",
+                        fontSize: "24px",
+                        fontWeight: "500",
+                        lineHeight: "32px",
+                    }}>
+                        {selectedDataProduct.displayName?.length > 0 ? selectedDataProduct.displayName : getName(dataProductIdFromUrl || '', '/')}
+                    </label>
+                </div>
+            </div>
+
+            {/* Middle Row: Action Buttons */}
+            <div style={{
+                position: "absolute",
+                top: "24px",
+                right: "24px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+            }}>
+              <RequestAccessButton
+                entry={selectedDataProduct}
+                onRequestAccess={handleRequestAccess}
+                changeRequests={[]}
+                changeRequestStatus="success"
+                userEmail={user?.email}
+                variant="card"
+                totalAccessGroups={0}
+              />
+              <Tooltip title={copyLinkSuccess ? 'Link copied!' : 'Copy link'} placement="bottom">
+                <IconButton onClick={handleCopyLinkForDeniedProduct} size="small" sx={{ border: '1px solid #DADCE0', borderRadius: '100px', padding: '8px', color: '#022FCD', backgroundColor: '#FFFFFF', '&:hover': { backgroundColor: 'rgba(0,0,0,0.04)' } }}>
+                  <LinkOutlined sx={{ fontSize: '20px' }} />
+                </IconButton>
+              </Tooltip>
+            </div>
+            {/* Bottom Row: Description text block */}
+            <div style={{ width: "100%" }}>
+              {(selectedDataProduct?.description || '').trim() ? (
+                <div style={{
+                    fontFamily: '"Google Sans", sans-serif',
+                    fontSize: "14px",
+                    lineHeight: "20px",
+                    color: "#0C1226",
+                    fontWeight: 400,
+                }}>
+                    {selectedDataProduct.description}
+                </div>
+              ) : (
+                <div style={{
+                    fontFamily: '"Google Sans", sans-serif',
+                    fontSize: "14px",
+                    lineHeight: "20px",
+                    color: "#0C1226CC",
+                    fontStyle: "italic",
+                }}>
+                    No description provided for this data product.
+                </div>
+              )}
+            </div>
+        </div>
+
+        {/* Navigation Tab Bar - exact same styling as the normal Overview
+            page. Every tab's content is unavailable without access, so it
+            stays wired to tabValue/handleTabChange for a consistent look,
+            but selecting a different tab still shows the Access Denied
+            message below rather than tab content we don't have data for. */}
+        <div style={{ paddingTop: "12px", marginTop: "0px" }}>
+          <Box sx={{ width: "100%" }}>
+            <Box sx={{
+              position: "relative",
+              "& .MuiTabs-root": {
+                minHeight: "47px",
+                height: "47px",
+                display: "flex",
+                flexDirection: "row",
+                alignItems: "flex-start",
+                padding: "0px",
+                width: "1203px",
+                maxWidth: "100%",
+                "& .MuiTabs-flexContainer": {
+                  gap: "4px",
+                }
+              },
+              "& .MuiTab-root": {
+                fontFamily: '"Google Sans", sans-serif',
+                fontSize: "14px",
+                fontWeight: 500,
+                color: "#0C1226",
+                textTransform: "none",
+                minHeight: "47px",
+                padding: "0px 16px",
+                display: "inline-flex",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "1px",
+                textAlign: "center",
+                verticalAlign: "middle",
+                "&.Mui-selected": {
+                  color: "#022FCD",
+                },
+              },
+              "& .MuiTabs-indicator": {
+                backgroundColor: "transparent",
+                "&::after": {
+                  content: '""',
+                  position: "absolute",
+                  left: "16px",
+                  right: "16px",
+                  bottom: "0px",
+                  height: "3px",
+                  backgroundColor: "#022FCD",
+                  borderRadius: "3px 3px 0 0",
+                },
+              },
+            }}>
+                <Tabs
+                  value={tabValue}
+                  onChange={handleTabChange}
+                  aria-label="basic tabs"
+                  TabIndicatorProps={{
+                    children: <span className="indicator" />,
+                  }}
+                >
+                    {/* Limited-access view: only the tabs that don't require
+                        ownership/access-group data are shown - Access Groups
+                        & Permissions and Access Requests are omitted here. */}
+                    <Tab value={0} key="overview" icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />
+                    <Tab value={1} key="assets" icon={<Inventory2Outlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Assets" {...tabProps(1)} />
+                    <Tab value={3} key="contract" icon={<ArticleOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Contracts" {...tabProps(3)} />
+                    <Tab value={5} key="annotations" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>newsmode</span>} iconPosition="start" label="Aspects" {...tabProps(5)} />
+                    <Tab value={6} key="insights" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>query_stats</span>} iconPosition="start" label="Insights" {...tabProps(6)} />
+                  </Tabs>
+                </Box>
+              </Box>
+            </div>
+
+        {/* Tab Content - unavailable without access, regardless of which
+            tab is selected. */}
+        <div style={{paddingTop:"0px", marginTop:"0px", paddingBottom: "2rem", borderTop: "1px solid #E0E0E0"}}>
+          <Box sx={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            padding: "40px 40px", gap: "12px", minHeight: "200px", backgroundColor: "#FAFAFA",
+            borderRadius: "8px", marginTop: "16px",
+          }}>
+            <LockOutlined sx={{ fontSize: 48, color: "#5F6368" }} />
+            <Typography variant="h6" sx={{ color: "#3C4043", fontWeight: 500 }}>
+              Access Denied
+            </Typography>
+            <Typography variant="body2" sx={{ color: "#5F6368", textAlign: "center", maxWidth: "400px" }}>
+              You don&apos;t have permission to view this data product. It was found via search outside your current project.
+            </Typography>
+          </Box>
+        </div>
+      </div>
+
+      {isSubmitAccessOpen && (
+        <Box
+          sx={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: 1200, cursor: 'pointer',
+          }}
+          onClick={handleCloseSubmitAccess}
+        />
+      )}
+      <SubmitAccess
+        isOpen={isSubmitAccessOpen}
+        onClose={handleCloseSubmitAccess}
+        assetName={selectedDataProduct?.displayName || getName(dataProductIdFromUrl || '', '/')}
+        entry={selectedDataProduct}
+        onSubmitSuccess={handleSubmitSuccess}
+        previewData={selectedDataProduct ?? null}
+        isLookup={true}
+        isCalledFromDataProducts={true}
+        dataProductsDescription={selectedDataProduct?.description || ''}
+        assetCounts={selectedDataProduct?.assetCount || 0}
+        accessGroups={[]}
+      />
     </div>
   ):(
     <div style={{display: "flex", flexDirection: "column", padding: "0px 0", background:"#F7F9F9", height: "100vh", overflow: "hidden" }}>

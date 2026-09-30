@@ -16,7 +16,8 @@ import NotificationBar from '../SearchPage/NotificationBar';
 import ShimmerLoader from '../Shimmer/ShimmerLoader';
 import PreviewAnnotationSkeleton from '../Annotation/PreviewAnnotationSkeleton';
 import type { AppDispatch } from '../../app/store';
-import { getName, getEntryType, generateBigQueryLink, hasValidAnnotationData, generateLookerStudioLink, getFormattedDateTimePartsByDateTime, extractProjectNumberFromEntryName, resolveProjectDisplayName } from '../../utils/resourceUtils';
+import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
+import { getName, getEntryType, generateBigQueryLink, hasValidAnnotationData, generateLookerStudioLink, getFormattedDateTimePartsByDateTime, extractProjectNumberFromEntryName, resolveProjectDisplayNameOrFallback } from '../../utils/resourceUtils';
 // import { useFavorite } from '../../hooks/useFavorite';
 import { useAuth } from '../../auth/AuthProvider';
 import { usePreviewEntry } from '../../hooks/usePreviewEntry';
@@ -128,6 +129,10 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
   const reduxEntryStatus = useSelector((state: any) => state.entry.status);
   const reduxEntryError = useSelector((state: any) => state.entry.error);
   const projectsList = useSelector((state: any) => state.projects.items);
+  // See DetailPageOverview: "settled" rather than "loaded", so a failed
+  // /get-projects falls back to the project number instead of showing '-'
+  // forever.
+  const { areProjectsReady } = useAppBootstrapStatus();
 
   // Isolated preview hook (used in 'isolated' mode)
   const {
@@ -168,8 +173,13 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
   const hasAnnotations = entry?.aspects ? Object.keys(entry.aspects).some(key => hasValidAnnotationData(entry.aspects[key])) : false;
 
 
-  const { date: creationDate, time: creationTime } = getFormattedDateTimePartsByDateTime(previewData?.createTime);
-  const { date: updateDate, time: updateTime } = getFormattedDateTimePartsByDateTime(previewData?.updateTime);
+  // Prefer entrySource's create/update time (the underlying resource's actual
+  // timestamps, e.g. from BigQuery) over the top-level entry fields, which
+  // reflect Dataplex's catalog/aspect metadata and can lag or drift ahead of
+  // the real resource (e.g. after a re-scan touches an aspect). Displayed in
+  // the viewer's local timezone, same as the rest of the app.
+  const { date: creationDate, time: creationTime } = getFormattedDateTimePartsByDateTime(previewData?.entrySource?.createTime ?? previewData?.createTime);
+  const { date: updateDate, time: updateTime } = getFormattedDateTimePartsByDateTime(previewData?.entrySource?.updateTime ?? previewData?.updateTime);
 
 
   const projectDisplayName = useMemo(() => {
@@ -182,13 +192,11 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
       extractProjectNumberFromEntryName(previewData?.parentEntry);
 
     if (projectNumber) {
-      const resolved = resolveProjectDisplayName(projectNumber, projectsList);
-      if (resolved) return resolved;
-      return projectNumber;
+      return resolveProjectDisplayNameOrFallback(projectNumber, projectsList, areProjectsReady) || '-';
     }
 
     return '-';
-  }, [previewData?.fullyQualifiedName, previewData?.name, previewData?.parentEntry, projectsList]);
+  }, [previewData?.fullyQualifiedName, previewData?.name, previewData?.parentEntry, projectsList, areProjectsReady]);
 
   const isTable = previewData?.name ? getEntryType(previewData.name, '/') == 'Tables' : false;
   const aspectsTabIndex = isTable ? 2 : 1;
@@ -348,7 +356,7 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
     annotationTab = <PreviewAnnotation entry={filteredAnnotationEntry || entry} css={{
       width: "100%",
       backgroundColor: mode === 'dark' ? '#131314' : '#FFFFFF',
-      overflow: "hidden",
+      overflow: "visible",
     }} isTopComponent={false}
     expandedItems={expandedAnnotations}
     setExpandedItems={setExpandedAnnotations}
@@ -707,7 +715,7 @@ const ResourcePreview: React.FC<ResourcePreviewProps> = ({
                   <div style={{ borderBottom: mode === 'dark' ? '1px solid #3c4043' : '1px solid #E8EAED', padding: 'var(--desc-section-padding)' }}>
                     <div style={{ color: mode === 'dark' ? '#dedfe0' : '#575757', fontSize: 'var(--desc-label-size)', fontWeight: 500 }}>Description</div>
                     {(() => {
-                      const desc = previewData.entrySource.description || '-';
+                      const desc = (previewData.entrySource.description || '-').trim();
                       const maxLength = 150;
                       const isLong = desc.length > maxLength;
                       return (

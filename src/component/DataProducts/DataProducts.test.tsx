@@ -64,6 +64,17 @@ vi.mock('../../auth/AuthProvider', () => ({
   })
 }));
 
+// appConfig/get-projects bootstrapping is now handled globally by
+// useAppBootstrap (see src/hooks/useAppBootstrap.test.ts); these tests
+// assume the bootstrap has already completed.
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: () => ({
+    isAppConfigReady: true,
+    areProjectsReady: true,
+    isBootstrapping: false,
+  }),
+}));
+
 // Use vi.hoisted to create mocks that can be used inside vi.mock
 const { mockAxiosPost, mockAxiosCancelToken } = vi.hoisted(() => ({
   mockAxiosPost: vi.fn(),
@@ -122,6 +133,20 @@ vi.mock('../../utils/resourceUtils', () => ({
     if (base64?.startsWith('iVBORw0KGgo')) return 'image/png';
     if (base64?.startsWith('/9j/')) return 'image/jpg';
     return 'image/png';
+  }),
+  toJsDate: vi.fn((input: any) => {
+    if (input === null || input === undefined || input === '') return null;
+    if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
+    if (typeof input === 'object' && 'seconds' in input) {
+      const d = new Date(Number(input.seconds) * 1000);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof input === 'number') {
+      const d = new Date(input * 1000);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(input);
+    return isNaN(d.getTime()) ? null : d;
   })
 }));
 
@@ -1704,7 +1729,7 @@ describe('DataProducts Components', () => {
         };
         const { container } = renderDataProducts();
         const skeletonRectangles = container.querySelectorAll('.MuiSkeleton-rectangular');
-        expect(skeletonRectangles.length).toBe(24);
+        expect(skeletonRectangles.length).toBe(18);
       });
     });
 
@@ -1764,10 +1789,21 @@ describe('DataProducts Components', () => {
         });
       });
 
-      it('should display asset count tags', async () => {
+      it('does not show an asset count tag or a "Limited access" badge for out-of-scope (search-only) products', async () => {
         mockReduxState = {
           dataProducts: {
-            dataProductsItems: mockDataProducts,
+            dataProductsItems: [
+              ...mockDataProducts,
+              {
+                name: 'projects/other-project/locations/us/dataProducts/product-4',
+                displayName: 'Search Only Product',
+                description: 'Found via search',
+                updateTime: '2024-01-25T10:00:00Z',
+                ownerEmails: [],
+                assetCount: 0,
+                isOutOfScope: true,
+              },
+            ],
             status: 'succeeded',
             dataProductAssets: [],
             dataProductAssetsStatus: 'idle'
@@ -1776,9 +1812,41 @@ describe('DataProducts Components', () => {
         };
         renderDataProducts();
         await waitFor(() => {
-          const tags = screen.getAllByTestId('tag');
-          expect(tags.some(tag => tag.textContent === '5 Assets')).toBe(true);
+          expect(screen.getByText('Search Only Product')).toBeInTheDocument();
         });
+        expect(screen.queryAllByTestId('limited-access-tag')).toHaveLength(0);
+        expect(screen.queryByText('Limited access')).not.toBeInTheDocument();
+      });
+
+      it('hides the asset count tag and the owner tooltip for out-of-scope products', async () => {
+        mockReduxState = {
+          dataProducts: {
+            dataProductsItems: [
+              {
+                name: 'projects/other-project/locations/us/dataProducts/product-4',
+                displayName: 'Search Only Product',
+                description: 'Found via search',
+                updateTime: '2024-01-25T10:00:00Z',
+                ownerEmails: ['owner@example.com'],
+                assetCount: 7,
+                isOutOfScope: true,
+              },
+            ],
+            status: 'succeeded',
+            dataProductAssets: [],
+            dataProductAssetsStatus: 'idle'
+          },
+          user: { mode: 'light' }
+        };
+        renderDataProducts();
+        await waitFor(() => {
+          expect(screen.getByText('Search Only Product')).toBeInTheDocument();
+        });
+
+        // No "N Assets" tag for out-of-scope cards.
+        expect(screen.queryByText('7 Assets')).not.toBeInTheDocument();
+        // No owner tooltip attached to the avatar cluster.
+        expect(document.querySelector('[aria-label^="Owner:"]')).not.toBeInTheDocument();
       });
 
       it('should display description or fallback text', async () => {
@@ -1795,42 +1863,6 @@ describe('DataProducts Components', () => {
         await waitFor(() => {
           expect(screen.getByText('Description for product 1')).toBeInTheDocument();
           expect(screen.getAllByText('No description available.').length).toBeGreaterThan(0);
-        });
-      });
-
-      it('should display owner email initials', async () => {
-        mockReduxState = {
-          dataProducts: {
-            dataProductsItems: mockDataProducts,
-            status: 'succeeded',
-            dataProductAssets: [],
-            dataProductAssetsStatus: 'idle'
-          },
-          user: { mode: 'light' }
-        };
-        renderDataProducts();
-        await waitFor(() => {
-          expect(screen.getAllByText('O').length).toBeGreaterThanOrEqual(1);
-        });
-      });
-
-      it('should display multiple owner indicator', async () => {
-        mockReduxState = {
-          dataProducts: {
-            dataProductsItems: mockDataProducts,
-            status: 'succeeded',
-            dataProductAssets: [],
-            dataProductAssetsStatus: 'idle'
-          },
-          user: { mode: 'light' }
-        };
-        renderDataProducts();
-        await waitFor(() => {
-          // Check that a card with the owner count (+1) is rendered
-          // First verify the card is displayed, then check for the +1 indicator
-          expect(screen.getByText('Test Product 1')).toBeInTheDocument();
-          // Test Product 1 has 2 owners — both rendered as avatar initials
-          expect(screen.getAllByText('O').length).toBeGreaterThanOrEqual(1);
         });
       });
 
@@ -2002,7 +2034,9 @@ describe('DataProducts Components', () => {
         renderDataProducts();
         await waitFor(() => {
           expect(screen.getByText('Description')).toBeInTheDocument();
-          expect(screen.getByText('Owner')).toBeInTheDocument();
+          expect(screen.getByText('Location')).toBeInTheDocument();
+          expect(screen.queryByText('Owner')).not.toBeInTheDocument();
+          expect(screen.queryByText('Assets')).not.toBeInTheDocument();
         });
       });
 
@@ -2180,18 +2214,6 @@ describe('DataProducts Components', () => {
         };
       });
 
-      it('should show multiple owner count in table view', async () => {
-        renderDataProducts();
-        await waitFor(() => {
-          // Check that the table is displayed with owner count indicator
-          const rows = document.querySelectorAll('tbody tr');
-          expect(rows.length).toBe(3);
-          // The owner count (+1) should be visible for the product with multiple owners
-          const container = document.body;
-          expect(container.textContent).toContain('+1');
-        });
-      });
-
       it('should display data product icons in table cells', async () => {
         renderDataProducts();
         await waitFor(() => {
@@ -2252,21 +2274,6 @@ describe('DataProducts Components', () => {
         });
       });
 
-      it('should handle assetCount of 0', async () => {
-        mockReduxState = {
-          dataProducts: {
-            dataProductsItems: [mockDataProducts[2]],
-            status: 'succeeded',
-            dataProductAssets: [],
-            dataProductAssetsStatus: 'idle'
-          },
-          user: { mode: 'light' }
-        };
-        renderDataProducts();
-        await waitFor(() => {
-          expect(screen.getByText('0 Assets')).toBeInTheDocument();
-        });
-      });
     });
 
     describe('cleanup on unmount', () => {

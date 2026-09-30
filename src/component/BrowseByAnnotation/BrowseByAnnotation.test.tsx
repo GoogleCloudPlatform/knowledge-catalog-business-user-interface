@@ -4,11 +4,31 @@ import userEvent from '@testing-library/user-event';
 import BrowseByAnnotation from './BrowseByAnnotation';
 
 // Mock functions using vi.hoisted
-const { mockDispatch, mockUnwrap, mockUseAuth, mockNavigate } = vi.hoisted(() => ({
+const { mockDispatch, mockUnwrap, mockUseAuth, mockNavigate, mockBootstrapState, mockProjectsState, mockSearchParams, mockResourcesState } = vi.hoisted(() => ({
   mockDispatch: vi.fn(),
   mockUnwrap: vi.fn(),
   mockUseAuth: vi.fn(),
   mockNavigate: vi.fn(),
+  // Mutable so individual tests can model bootstrap timing / failure.
+  mockBootstrapState: { isAppConfigReady: true, areProjectsReady: true, isBootstrapping: false },
+  mockProjectsState: { items: [] as any[] },
+  mockSearchParams: { value: '' },
+  // Mutable so tests can simulate the component mounting on top of state
+  // rehydrated from a refresh (persisted `resources`) or from a session-expiry
+  // unmount/remount (live Redux, same shape) mid-way through fetching counts.
+  mockResourcesState: {
+    aspectBrowseCache: {} as Record<string, any>,
+    browseSelectedItemName: null as string | null,
+    browseSelectedSubItem: null as any,
+    browseTabValue: 0,
+    browseDynamicAnnotationsData: [] as any[],
+    browseSubTypesWithCache: {} as Record<string, boolean>,
+    accessDeniedItemId: null as string | null,
+  },
+}));
+
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: () => mockBootstrapState,
 }));
 
 // Mock useAuth hook
@@ -20,29 +40,22 @@ vi.mock('../../auth/AuthProvider', () => ({
 vi.mock('react-redux', () => ({
   useDispatch: () => mockDispatch,
   useSelector: (selector: any) => {
-    // Return mock state for aspectBrowseCache
     const mockState = {
-      resources: {
-        aspectBrowseCache: {},
-        browseSelectedItemName: null,
-        browseSelectedSubItem: null,
-        browseTabValue: 0,
-        browseDynamicAnnotationsData: [],
-        browseSubTypesWithCache: {},
-        accessDeniedItemId: null,
-      },
+      resources: mockResourcesState,
       search: {
         isSideNavOpen: true,
       },
+      projects: mockProjectsState,
     };
     return selector(mockState);
   },
 }));
 
-// Mock react-router-dom (deep-link URL sync uses useNavigate/useSearchParams)
+// Mock react-router-dom (deep-link URL sync uses useNavigate/useSearchParams).
+// mockSearchParams is mutable so tests can simulate a ?aspect= deep link.
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
-  useSearchParams: () => [new URLSearchParams()],
+  useSearchParams: () => [new URLSearchParams(mockSearchParams.value)],
 }));
 
 // Mock browseResourcesByAspects action
@@ -343,6 +356,19 @@ const mockEntryResponse = {
 describe('BrowseByAnnotation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: bootstrap already complete, no projects needed (unrestricted org).
+    mockBootstrapState.isAppConfigReady = true;
+    mockBootstrapState.areProjectsReady = true;
+    mockBootstrapState.isBootstrapping = false;
+    mockProjectsState.items = [];
+    mockSearchParams.value = '';
+    mockResourcesState.aspectBrowseCache = {};
+    mockResourcesState.browseSelectedItemName = null;
+    mockResourcesState.browseSelectedSubItem = null;
+    mockResourcesState.browseTabValue = 0;
+    mockResourcesState.browseDynamicAnnotationsData = [];
+    mockResourcesState.browseSubTypesWithCache = {};
+    mockResourcesState.accessDeniedItemId = null;
     mockDispatch.mockReturnValue({ unwrap: mockUnwrap });
     // Default mock returns browse results, aspect details, and entry, will be overridden as needed
     mockUnwrap
@@ -357,6 +383,7 @@ describe('BrowseByAnnotation', () => {
 
   describe('loading state', () => {
     it('should show loading spinner initially when user config is not ready', () => {
+      mockBootstrapState.isAppConfigReady = false;
       mockUseAuth.mockReturnValue({ user: null });
 
       render(<BrowseByAnnotation />);
@@ -365,11 +392,139 @@ describe('BrowseByAnnotation', () => {
     });
 
     it('should show loading spinner when appConfig is undefined', () => {
+      mockBootstrapState.isAppConfigReady = false;
       mockUseAuth.mockReturnValue({ user: { token: 'test' } });
 
       render(<BrowseByAnnotation />);
 
       expect(screen.getByTestId('circular-progress')).toBeInTheDocument();
+    });
+
+    it('stops spinning when appConfig has settled without aspects (fetch failed for good)', async () => {
+      // Previously `loader` was only cleared inside `if (aspects)`, so a failed
+      // app-config fetch left this page spinning forever.
+      mockBootstrapState.isAppConfigReady = true;
+      mockUseAuth.mockReturnValue({ user: { token: 'test' } });
+
+      render(<BrowseByAnnotation />);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('circular-progress')).not.toBeInTheDocument();
+      });
+      expect(screen.getByText('No Aspects for browse by experience available')).toBeInTheDocument();
+    });
+  });
+
+  describe('projectsRestricted scoping', () => {
+    // Aspect names are `projects/test/...`, so 'test' is the project number the
+    // scope filter matches on.
+    const restrictedUser = (appConfigExtras: Record<string, unknown>) => ({
+      token: 'test-token-123',
+      appConfig: {
+        aspects: mockAspects,
+        browseByAspectTypes: mockBrowseByAspectTypes,
+        projectsRestricted: true,
+        configuredProjectIds: ['configured-project'],
+        ...appConfigExtras,
+      },
+    });
+
+    it('scopes using configuredProjects even when the project list is empty', async () => {
+      // The whole point of the change: scoping matches project numbers supplied
+      // by appConfig, so it works with no /get-projects data at all and the page
+      // never waits on that (slow, ~31s at 40k projects) request.
+      mockBootstrapState.areProjectsReady = false;
+      mockProjectsState.items = [];
+      mockUseAuth.mockReturnValue({
+        user: restrictedUser({
+          configuredProjects: [{ projectId: 'configured-project', projectNumber: 'test' }],
+          configuredProjectsComplete: true,
+        }),
+      });
+
+      render(<BrowseByAnnotation />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('side-nav')).toBeInTheDocument();
+      });
+    });
+
+    it('hides aspects whose project is not in the configured set', async () => {
+      mockBootstrapState.areProjectsReady = false;
+      mockProjectsState.items = [];
+      mockUseAuth.mockReturnValue({
+        user: restrictedUser({
+          // No aspect lives under this project number, so all are filtered out.
+          configuredProjects: [{ projectId: 'other-project', projectNumber: '999999' }],
+          configuredProjectsComplete: true,
+        }),
+      });
+
+      render(<BrowseByAnnotation />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('No Aspects for browse by experience available')
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('fails open when configuredProjects is missing', async () => {
+      // Never hide aspects we cannot verify — an unrecoverable empty list is
+      // worse than showing more than the admin scoped.
+      mockUseAuth.mockReturnValue({ user: restrictedUser({}) });
+
+      render(<BrowseByAnnotation />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('side-nav')).toBeInTheDocument();
+      });
+    });
+
+    it('resolves an ?aspect= deep link with an empty project list', async () => {
+      // Deep links previously had to wait for /get-projects (and could be
+      // silently filtered out by a partial list, leaving nothing selected).
+      mockBootstrapState.areProjectsReady = false;
+      mockProjectsState.items = [];
+      mockSearchParams.value = `aspect=${encodeURIComponent(
+        btoa('projects/test/locations/us/aspectTypes/aspect2')
+      )}`;
+      mockUseAuth.mockReturnValue({
+        user: restrictedUser({
+          configuredProjects: [{ projectId: 'configured-project', projectNumber: 'test' }],
+          configuredProjectsComplete: true,
+        }),
+      });
+
+      render(<BrowseByAnnotation />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('side-nav')).toBeInTheDocument();
+      });
+      // The deep-linked aspect must actually be selected, not silently dropped.
+      await waitFor(() => {
+        expect(screen.getByTestId('main-component')).toBeInTheDocument();
+      });
+    });
+
+    it('fails open when the backend flagged configuredProjects as incomplete', async () => {
+      mockUseAuth.mockReturnValue({
+        user: restrictedUser({
+          // One configured project failed to resolve server-side, so the set
+          // cannot be trusted to filter with.
+          configuredProjects: [{ projectId: 'other-project', projectNumber: '999999' }],
+          configuredProjectsComplete: false,
+        }),
+      });
+
+      render(<BrowseByAnnotation />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('side-nav')).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByText('No Aspects for browse by experience available')
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -677,6 +832,76 @@ describe('BrowseByAnnotation', () => {
       });
     });
 
+    it('resumes fetching counts after a remount that catches Phase 1 done but Phase 2 mid-flight', async () => {
+      // Reproduces the reported bug: `resources` (which holds this data) is
+      // persisted, so a page refresh — or a session-expiry unmount/remount via
+      // SessionExpirationWrapper swapping to <SessionExpired> and back —
+      // remounts this component on top of exactly this state: Phase 1 (aspect
+      // detail + entry) already completed, Phase 2 (per-sub-type asset counts)
+      // never got to finish. Before the fix, subTypesLoaded:true alone skipped
+      // the whole fetch and the counts were stuck forever.
+      mockResourcesState.browseSelectedItemName = 'projects/test/locations/us/aspectTypes/aspect2';
+      mockResourcesState.browseDynamicAnnotationsData = [
+        {
+          name: 'projects/test/locations/us/aspectTypes/aspect2',
+          title: 'Aspect Two',
+          subTypesLoaded: true,
+          countsFetched: false,
+          subItems: [{ title: 'field1', fieldValues: 0, assets: 0, isCountLoading: true }],
+        },
+      ];
+
+      mockUnwrap.mockResolvedValue(mockAspectDetailResponse);
+      mockUseAuth.mockReturnValue({ user: mockUserWithConfig });
+
+      render(<BrowseByAnnotation />);
+
+      await waitFor(() => {
+        expect(mockDispatch).toHaveBeenCalled();
+      });
+
+      const fetchDispatches = mockDispatch.mock.calls.filter((call: any) => {
+        const type = call[0]?.type || '';
+        return type.includes('getAspectDetail') || type.includes('fetchEntry');
+      });
+      expect(fetchDispatches.length).toBeGreaterThan(0);
+    });
+
+    it('fetches counts on mount when a sub-item is already selected (refresh with persisted selection)', async () => {
+      // Reproduces the reported bug: on a browser refresh while a sub-item was
+      // selected, `resources` (persisted) hydrates browseSelectedSubItem to a
+      // non-null value on the very first render — before the counts-fetch effect
+      // ever sees it as null. The old outer guard (`selectedItem && !selectedSubItem`)
+      // permanently skipped the fetch in this case, even though Phase 2 had never
+      // actually completed for this aspect (countsFetched: false).
+      mockResourcesState.browseSelectedItemName = 'projects/test/locations/us/aspectTypes/aspect2';
+      mockResourcesState.browseSelectedSubItem = { title: 'field1', fieldValues: 0, assets: 0 };
+      mockResourcesState.browseDynamicAnnotationsData = [
+        {
+          name: 'projects/test/locations/us/aspectTypes/aspect2',
+          title: 'Aspect Two',
+          subTypesLoaded: false,
+          countsFetched: false,
+          subItems: [],
+        },
+      ];
+
+      mockUnwrap.mockResolvedValue(mockAspectDetailResponse);
+      mockUseAuth.mockReturnValue({ user: mockUserWithConfig });
+
+      render(<BrowseByAnnotation />);
+
+      await waitFor(() => {
+        expect(mockDispatch).toHaveBeenCalled();
+      });
+
+      const fetchDispatches = mockDispatch.mock.calls.filter((call: any) => {
+        const type = call[0]?.type || '';
+        return type.includes('getAspectDetail') || type.includes('fetchEntry');
+      });
+      expect(fetchDispatches.length).toBeGreaterThan(0);
+    });
+
     it('should skip fetch if countsFetched is true', async () => {
       mockUseAuth.mockReturnValue({ user: mockUserWithConfig });
       const user = userEvent.setup();
@@ -826,7 +1051,7 @@ describe('BrowseByAnnotation', () => {
       });
     });
 
-    it('should stay in loading state when aspects array is undefined', async () => {
+    it('should stay in loading state when aspects is undefined and appConfig is still loading', async () => {
       const userWithUndefinedAspects = {
         token: 'test-token',
         appConfig: {
@@ -834,11 +1059,13 @@ describe('BrowseByAnnotation', () => {
         },
       };
 
+      // Still in flight — spinning is correct here. (Once appConfig settles
+      // without aspects the loader is released instead; covered above.)
+      mockBootstrapState.isAppConfigReady = false;
       mockUseAuth.mockReturnValue({ user: userWithUndefinedAspects });
 
       render(<BrowseByAnnotation />);
 
-      // When aspects is undefined, component stays in loading state
       expect(screen.getByTestId('circular-progress')).toBeInTheDocument();
     });
 

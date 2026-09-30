@@ -7,6 +7,7 @@ import type { AppDispatch } from '../../app/store'
 import { searchResourcesByTerm } from '../../features/resources/resourcesSlice'
 import { setSearchFiltersOpen } from '../../features/search/searchSlice'
 import { useAuth } from '../../auth/AuthProvider'
+import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap'
 import ResourceViewer from '../Common/ResourceViewer'
 import ResourcePreview from '../Common/ResourcePreview'
 import { typeAliases } from '../../utils/resourceUtils'
@@ -49,6 +50,12 @@ import { typeAliases } from '../../utils/resourceUtils'
 
 const SearchPage: React.FC = () => {
   const { user } = useAuth();
+  // searchResourcesByTerm reads appConfig (projectsRestricted /
+  // configuredProjectIds) at dispatch time and silently drops the project
+  // scoping clause when it is missing, so searches must wait for appConfig.
+  // get-projects is only needed to resolve aspectType filters (project number
+  // -> project id), so it's not worth blocking every search on it.
+  const { isAppConfigReady, areProjectsReady, isBootstrapping } = useAppBootstrapStatus();
   const dispatch = useDispatch<AppDispatch>();
   const searchTerm = useSelector((state:any) => state.search.searchTerm);
   const searchType = useSelector((state:any) => state.search.searchType);
@@ -60,6 +67,11 @@ const SearchPage: React.FC = () => {
   const [previewData, setPreviewData] = useState<any | null>(null);
   const [filters, setFilters] = useState<any[]>(searchFilters || []);
   const [prevFilters, setPrevFilters] = useState<any[]>(searchFilters || []);
+  // get-projects is only needed to resolve aspectType filters (project number
+  // -> project id, see getAspectName in resourcesSlice.ts) — a search with no
+  // aspectType filter can run as soon as appConfig is ready.
+  const hasAspectTypeFilter = filters.some((f: any) => f.type === 'aspectType');
+  const isSearchBlocked = !isAppConfigReady || (hasAspectTypeFilter && !areProjectsReady);
   const [viewMode, setViewMode] = useState<'list' | 'table'>('list');
   const isFiltersOpen = useSelector((state: any) => state.search.isSearchFiltersOpen);
   const isSmallScreen = useMediaQuery('(max-width: 1280px)');
@@ -67,6 +79,7 @@ const SearchPage: React.FC = () => {
   const [pageSize, setPageSize] = useState<number>(20);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const isInitialMount = useRef(true);
+  const initialSearchEvaluated = useRef(false);
   const isInitialFiltersMount = useRef(true);
   const isInitialSearchTypeMount = useRef(true);
   const currentSearchRef = useRef<{ abort: (reason?: string) => void } | null>(null);
@@ -107,6 +120,14 @@ const SearchPage: React.FC = () => {
   }, [mode]);
 
   useEffect(() => {
+    if (initialSearchEvaluated.current) return;
+    // Wait only for what this specific search actually needs: appConfig always,
+    // and get-projects too if an aspectType filter needs project-id resolution.
+    if (isSearchBlocked) return;
+    // Evaluate exactly once, the moment we're ready (matches the original
+    // mount-only semantics, just deferred until appConfig is available).
+    initialSearchEvaluated.current = true;
+
     if (!searchSubmitted) return; // Back navigation: retain existing data
 
     setPageSize(20);
@@ -120,7 +141,7 @@ const SearchPage: React.FC = () => {
       dispatch(searchResourcesByTerm({term : searchTerm, id_token: id_token, filters: filters, semanticSearch: semanticSearch}) );
     }
     dispatch({ type: 'search/setSearchSubmitted', payload: false });
-  }, []);
+  }, [isSearchBlocked, searchSubmitted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -136,6 +157,11 @@ const SearchPage: React.FC = () => {
   }, [searchTerm]);
 
   useEffect(() => {
+    // Wait before consuming the initial-mount flag, so the "skip on mount" pass
+    // happens once we're ready rather than during the bootstrap — otherwise the
+    // first real filter change would be treated as the mount pass and dropped,
+    // or would race the initial search above.
+    if (isBootstrapping) return;
     if (isInitialFiltersMount.current) {
       isInitialFiltersMount.current = false;
       return; // Skip on mount — filters haven't actually changed
@@ -152,7 +178,7 @@ const SearchPage: React.FC = () => {
       currentSearchRef.current = dispatch(searchResourcesByTerm({term : searchTerm, id_token: id_token, filters: filters, semanticSearch: semanticSearch}));
     }
     setPrevFilters(filters);
-  }, [filters]);
+  }, [filters, isBootstrapping]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isInitialSearchTypeMount.current) {
@@ -185,6 +211,10 @@ const SearchPage: React.FC = () => {
   const resources = useSelector((state: any) => state.resources.items);
   const resourcesStatus = useSelector((state: any) => state.resources.status);
   const error = useSelector((state: any) => state.resources.error);
+  // While a submitted search is still blocked on get-projects (aspectType filter
+  // case), resourcesStatus is still 'idle' — show the shimmer instead of a blank
+  // state so waiting on get-projects doesn't look like "no results".
+  const displayResourcesStatus = (isSearchBlocked && searchSubmitted) ? 'loading' : resourcesStatus;
 
   useEffect(() => {
     if(resourcesStatus === 'succeeded' || resourcesStatus === 'failed'){
@@ -345,7 +375,7 @@ const SearchPage: React.FC = () => {
                     dispatch({ type: 'search/setSearchFilters', payload: { searchFilters: updated } });
                   }}
                   resourcesTotalSize={resourcesTotalSize}
-                  resourcesStatus={resourcesStatus}
+                  resourcesStatus={displayResourcesStatus}
                 />
             </div>
 
@@ -359,7 +389,7 @@ const SearchPage: React.FC = () => {
                 }}>
                       <ResourceViewer
                       resources={resources}
-                      resourcesStatus={resourcesStatus}
+                      resourcesStatus={displayResourcesStatus}
                       error={error}
                       previewData={previewData}
                       onPreviewDataChange={handlePreviewDataChange}

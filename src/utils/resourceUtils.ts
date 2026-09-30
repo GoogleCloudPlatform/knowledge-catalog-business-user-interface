@@ -104,31 +104,67 @@ export const getEntryType = (namePath: string = '', separator: string = '') => {
   return (`${eType[0].toUpperCase()}${eType.slice(1)}`);
 };
 
+/**
+ * Normalizes any timestamp shape an API response can hand us into a real
+ * JS Date (rendered in the viewer's local timezone by every consumer below).
+ * Accepts: a Date, a Unix-seconds number, a protobuf-style {seconds} object,
+ * or a raw date/ISO-8601 string. Returns null when the input is missing or
+ * unparseable so callers can fall back to their own placeholder text.
+ */
+export const toJsDate = (
+  input: string | number | { seconds: string | number } | Date | null | undefined
+): Date | null => {
+  if (input === null || input === undefined || input === '') return null;
+
+  if (input instanceof Date) {
+    return isNaN(input.getTime()) ? null : input;
+  }
+
+  if (typeof input === 'object' && 'seconds' in input) {
+    const myDate = new Date(Number(input.seconds) * 1000);
+    return isNaN(myDate.getTime()) ? null : myDate;
+  }
+
+  if (typeof input === 'number') {
+    // Existing convention in this codebase: 0 means "no timestamp" (matches
+    // the `if (!timestamp)` guards every formatter used before consolidation).
+    if (input === 0) return null;
+    // Bare numbers are Unix seconds, unless clearly already milliseconds
+    // (getFormattedDateTimePartsByDateTime historically accepted raw ms).
+    const ms = Math.abs(input) > 1e12 ? input : input * 1000;
+    const myDate = new Date(ms);
+    return isNaN(myDate.getTime()) ? null : myDate;
+  }
+
+  // String input - handles ISO-8601 (with or without offset) via native parsing.
+  const myDate = new Date(input);
+  return isNaN(myDate.getTime()) ? null : myDate;
+};
+
 export const getFormatedDate = (date: any) => {
-  if (!date) return '-';
-  const myDate = new Date(date * 1000);
-  const formatedDate = new Intl.DateTimeFormat('en-US', { 
-    month: "short", 
-    day: "numeric", 
+  const myDate = toJsDate(date);
+  if (!myDate) return '-';
+  const formatedDate = new Intl.DateTimeFormat('en-US', {
+    month: "short",
+    day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    second: "2-digit", 
-    hour12: true 
+    second: "2-digit",
+    hour12: true
   }).format(myDate);
   return formatedDate;
 };
 
 export const getFormattedDateTimeParts = (timestamp: any) => {
-  if (!timestamp) {
+  const myDate = toJsDate(timestamp);
+  if (!myDate) {
     return { date: '-', time: '' };
   }
-  
-  const myDate = new Date(timestamp * 1000);
 
-  const date = new Intl.DateTimeFormat('en-US', { 
-    month: "short", 
-    day: "numeric", 
+  const date = new Intl.DateTimeFormat('en-US', {
+    month: "short",
+    day: "numeric",
     year: "numeric",
   }).format(myDate);
 
@@ -139,22 +175,12 @@ export const getFormattedDateTimeParts = (timestamp: any) => {
     hour12: true
   }).format(myDate);
 
-  return { date, time }; 
+  return { date, time };
 };
 
 export const getFormattedDateTimePartsByDateTime = (dateTime: any) => {
-  if (!dateTime) {
-    return { date: '-', time: '' };
-  }
-
-  let timeValue = dateTime;
-  if (typeof dateTime === 'object' && dateTime !== null && 'seconds' in dateTime) {
-    timeValue = Number(dateTime.seconds) * 1000;
-  }
-
-  const myDate = new Date(timeValue);
-
-  if (isNaN(myDate.getTime())) {
+  const myDate = toJsDate(dateTime);
+  if (!myDate) {
     return { date: '-', time: '' };
   }
 
@@ -171,7 +197,7 @@ export const getFormattedDateTimePartsByDateTime = (dateTime: any) => {
     hour12: true
   }).format(myDate);
 
-  return { date, time }; 
+  return { date, time };
 };
 
 
@@ -284,12 +310,54 @@ export const extractProjectNumberFromEntryName = (entryName: string | undefined)
   return '';
 };
 
+type ProjectLike = { projectId: string; name: string; displayName?: string };
+
+// Forward lookup: projects/{projectNumber} -> the project entry from
+// /get-projects. This is the single matcher for number-keyed lookups; callers
+// should use it rather than re-implementing the `projects/${n}` comparison.
+export const findProjectByNumber = (
+  projectNumber: string,
+  projectsList: ProjectLike[]
+): ProjectLike | undefined => {
+  if (!projectNumber || !projectsList?.length) return undefined;
+  return projectsList.find((p) => p?.name === `projects/${projectNumber}`);
+};
+
+// Reverse lookup: projectId -> the project number from its `projects/{number}`
+// resource name. Returns '' when unknown (caller must treat that as "unknown",
+// never as a valid value — /get-projects returns [] on a backend error).
+export const resolveProjectNumber = (
+  projectId: string,
+  projectsList: ProjectLike[]
+): string => {
+  if (!projectId || !projectsList?.length) return '';
+  const match = projectsList.find((p) => p?.projectId === projectId);
+  const segments = match?.name?.split('/') ?? [];
+  return segments.length > 1 ? segments[1] : '';
+};
+
 export const resolveProjectDisplayName = (
   projectNumber: string,
-  projectsList: Array<{ projectId: string; name: string; displayName?: string }>
+  projectsList: ProjectLike[]
 ): string => {
-  if (!projectNumber || !projectsList?.length) return '';
-  const match = projectsList.find((p: any) => p.name === `projects/${projectNumber}`);
+  const match = findProjectByNumber(projectNumber, projectsList);
   if (!match) return '';
   return match.projectId || match.displayName || '';
+};
+
+// Resolves a project number to its display name, but only falls back to the
+// raw project number once get-projects has actually finished loading and
+// still found no match — never while it's still in flight. Without the
+// projectsLoaded check, a cold load (fresh deep link or a plain reload, where
+// state.projects is never persisted) would render the raw number and then
+// silently swap to the resolved name once the fetch completes.
+export const resolveProjectDisplayNameOrFallback = (
+  projectNumber: string,
+  projectsList: ProjectLike[],
+  projectsLoaded: boolean
+): string => {
+  if (!projectNumber) return '';
+  const resolved = resolveProjectDisplayName(projectNumber, projectsList);
+  if (resolved) return resolved;
+  return projectsLoaded ? projectNumber : '';
 };

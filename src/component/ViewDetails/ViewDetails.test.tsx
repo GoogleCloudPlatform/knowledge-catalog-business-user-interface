@@ -1666,6 +1666,47 @@ describe('ViewDetails', () => {
       // No description section should be shown
       expect(screen.queryByText('Show more')).not.toBeInTheDocument();
     });
+
+    it('does not show "Show more" for a short description padded with trailing whitespace past the threshold', async () => {
+      // Regression test: the button used to be gated on the raw, untrimmed
+      // description length. A description whose visible text is well under
+      // the 200-char threshold but padded with trailing whitespace/newlines
+      // past 200 raw characters must NOT show the button.
+      const shortVisibleText = 'A short description.'; // 21 visible chars
+      const paddedDescription = shortVisibleText + '\n'.repeat(200);
+      const entryWithPaddedDescription = {
+        ...mockEntry,
+        entrySource: {
+          ...mockEntry.entrySource,
+          description: paddedDescription
+        }
+      };
+
+      renderViewDetails(entryWithPaddedDescription);
+
+      await waitFor(() => {
+        expect(screen.getByText(shortVisibleText)).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Show more')).not.toBeInTheDocument();
+    });
+
+    it('still shows "Show more" for a genuinely long description', async () => {
+      const longDescription = 'A'.repeat(250);
+      const entryWithLongDescription = {
+        ...mockEntry,
+        entrySource: {
+          ...mockEntry.entrySource,
+          description: longDescription
+        }
+      };
+
+      renderViewDetails(entryWithLongDescription);
+
+      await waitFor(() => {
+        expect(screen.getByText('Show more')).toBeInTheDocument();
+      });
+    });
   });
 
   describe('Entry Status Handling', () => {

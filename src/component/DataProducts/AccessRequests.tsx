@@ -18,6 +18,7 @@ import FilterBar from '../Common/FilterBar';
 import type { ActiveFilter, PropertyConfig } from '../Common/FilterBar';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import ResizeHandle from '../Schema/ResizeHandle';
+import { toJsDate } from '../../utils/resourceUtils';
 
 // interface for the AccessRequests Props
 interface AccessRequestsProps {
@@ -80,9 +81,8 @@ const TruncatedTooltip = ({ value, sxProps, isResizing }: { value: string, sxPro
 
 // Format an ISO timestamp into "May 7, 2025"
 const formatDate = (iso?: string): string => {
-  if (!iso) return '-';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '-';
+  const d = toJsDate(iso);
+  if (!d) return '-';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 

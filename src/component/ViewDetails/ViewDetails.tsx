@@ -374,19 +374,19 @@ const ViewDetails = () => {
   const bigQueryLink = generateBigQueryLink(displayEntry);
   const lookerLink = generateLookerStudioLink(displayEntry);
 
-  const headerDescription = displayEntry?.entrySource?.description || '';
+  const headerDescription = (displayEntry?.entrySource?.description || '').trim();
 
 let annotationTab = (
-  <Box sx={{ 
-    flex: 1, 
-    overflowY: "auto", 
+  <Box sx={{
+    flex: 1,
+    overflowY: "auto",
     minHeight: 0,
     border: '1px solid #DADCE0',
     borderRadius: '12px',
     backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
+    overflowX: 'hidden',
     marginRight: '8px',
-    marginTop: '12px' 
+    marginTop: '12px'
   }}>
     <PreviewAnnotation
       entry={filteredEntry || displayEntry}

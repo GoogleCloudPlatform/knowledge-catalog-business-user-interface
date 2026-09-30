@@ -5,9 +5,8 @@ import { Box, CircularProgress, Typography, useMediaQuery } from '@mui/material'
 import { useAuth } from '../../auth/AuthProvider';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import axios from 'axios';
-import { URLS } from '../../constants/urls';
 import { extractProjectNumberFromEntryName } from '../../utils/resourceUtils';
+import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
 import { browseResourcesByAspects, setAspectBrowseCache, setBrowseSelectedItemName, setBrowseSelectedSubItem, setBrowseTabValue, setBrowseDynamicAnnotationsData, setBrowseSubTypesWithCache, setAccessDeniedItemId, clearAccessDeniedItemId } from '../../features/resources/resourcesSlice';
 import { getAspectDetail } from '../../features/aspectDetail/aspectDetailSlice';
 import { fetchEntry } from '../../features/entry/entrySlice';
@@ -55,7 +54,7 @@ import { setSideNavOpen } from '../../features/search/searchSlice';
 
 const BrowseByAnnotation = () => {
 
-  const { user, updateUser } = useAuth();
+  const { user } = useAuth();
   const id_token = user?.token || '';
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
@@ -65,8 +64,25 @@ const BrowseByAnnotation = () => {
   // re-renders/StrictMode double-invocation (mirrors Glossaries.tsx's urlEntryHandled).
   const aspectParamHandled = useRef(false);
   const subTypeParamHandled = useRef(false);
-  // Guards the inline APP_CONFIG fetch (see below) so it fires at most once per mount.
-  const appConfigFetchAttempted = useRef(false);
+  // Cache key (aspectTitle__subTypeTitle) for a sub-item just selected via the
+  // ?subType= URL bootstrap below — tells MainComponent to bypass aspectBrowseCache
+  // on its next fetch for this key, so a copy-link/reload landing always hits the
+  // API once instead of silently serving whatever another aspect's background
+  // prefetch (fetchSubItemCounts' Phase 2) already cached for it. Cleared by
+  // MainComponent via onDeepLinkCacheBypassed once consumed.
+  const deepLinkBypassCacheKeyRef = useRef<string | null>(null);
+  // Lets Phase 2 (per-sub-type asset counts, below) await get-projects without
+  // blocking Phase 1 (aspect detail/entry) on it — only the count fetch itself
+  // (browseResourcesByAspects) needs get-projects, so only that should wait,
+  // scoped to each sub-type card's own isCountLoading state.
+  const areProjectsReadyRef = useRef(false);
+  const projectsReadyWaitersRef = useRef<Array<() => void>>([]);
+  const waitForProjectsReady = useCallback(() => {
+    if (areProjectsReadyRef.current) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      projectsReadyWaitersRef.current.push(resolve);
+    });
+  }, []);
 
   // Redux-backed state for navigation preservation
   const reduxSelectedItemName = useSelector((state: RootState) => state.resources.browseSelectedItemName);
@@ -130,7 +146,23 @@ const BrowseByAnnotation = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [loadingAspectName, setLoadingAspectName] = useState<string | null>(null);
   const isSidebarOpen = useSelector((state: any) => state.search.isSideNavOpen);
-  const projectsList = useSelector((state: any) => state.projects?.items ?? []);
+  // Aspect list scoping intentionally does NOT read state.projects: it matches
+  // project numbers from appConfig.configuredProjects, so building the visible
+  // aspect list doesn't wait on the large (and potentially slow or partial)
+  // /get-projects response. browseResourcesByAspects itself is a separate story:
+  // it always needs get-projects to resolve the aspect's project number -> project
+  // id (see getAspectName in resourcesSlice.ts). Only that call (Phase 2's
+  // per-sub-type count fetch below) waits on it, via areProjectsReadyRef/
+  // waitForProjectsReady — Phase 1 (aspect detail/entry) is unaffected.
+  const { isAppConfigReady, areProjectsReady } = useAppBootstrapStatus();
+  useEffect(() => {
+    areProjectsReadyRef.current = areProjectsReady;
+    if (areProjectsReady) {
+      const waiters = projectsReadyWaitersRef.current;
+      projectsReadyWaitersRef.current = [];
+      waiters.forEach((resolve) => resolve());
+    }
+  }, [areProjectsReady]);
   const isSmallScreen = useMediaQuery('(max-width: 1280px)');
   // NEW: AbortController for Phase 2
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -234,8 +266,18 @@ const BrowseByAnnotation = () => {
 
   useEffect(() => {
     const fetchSubItemCounts = async (item: any) => {
-      // Guard: skip if already loaded subtypes or counts (prevents infinite loop)
-      if (!item || item.countsFetched || item.subTypesLoaded) {
+      // Only `countsFetched` means fully done. `subTypesLoaded` alone means Phase 1
+      // (aspect detail + entry) finished but Phase 2 (per-sub-type asset counts)
+      // may still be in flight — that gap is real and observable: `resources`
+      // (which holds this item) is persisted, so a refresh mid-Phase-2 restores
+      // subTypesLoaded:true/countsFetched:false; session expiry unmounts/remounts
+      // this component the same way via SessionExpirationWrapper swapping to
+      // <SessionExpired> and back; and navigating away mid-fetch aborts Phase 2
+      // without setting countsFetched. Skipping on subTypesLoaded alone left all
+      // three cases permanently stuck with no asset counts. Re-running Phase 1 in
+      // that gap is a small, harmless extra fetch — the counts guard is what
+      // actually prevents redundant work once everything has completed.
+      if (!item || item.countsFetched) {
         return;
       }
 
@@ -339,7 +381,7 @@ const BrowseByAnnotation = () => {
         const countAndDataPromises = filteredRecordFields.map(async (field: any, index: number) => {
           try {
             // Check if data already in cache
-            const cacheKey = generateCacheKey(item.title, field.name);
+            const cacheKey = generateCacheKey(item.title, field?.name);
             const cachedData = aspectBrowseCache[cacheKey];
 
             if (cachedData) {
@@ -362,12 +404,25 @@ const BrowseByAnnotation = () => {
               // Update cache tracking
               setSubTypesWithCache(prev => ({ ...prev, [cacheKey]: true }));
 
-              return { field: field.name, count, success: true, cached: true };
+              return { field: field?.name, count, success: true, cached: true };
             }
 
             // Check if request was aborted
             if (signal.aborted) {
-              return { field: field.name, count: 0, success: false, aborted: true };
+              return { field: field?.name, count: 0, success: false, aborted: true };
+            }
+
+            // browseResourcesByAspects needs get-projects to resolve this aspect's
+            // project number -> project id (see getAspectName in resourcesSlice.ts);
+            // without it the query silently uses an invalid aspect path instead of
+            // erroring. Wait here rather than in the trigger below, so this stays
+            // scoped to the sub-type card's own isCountLoading spinner instead of
+            // blocking Phase 1 (aspect detail/entry) on get-projects too.
+            if (!areProjectsReadyRef.current) {
+              await waitForProjectsReady();
+              if (signal.aborted) {
+                return { field: field?.name, count: 0, success: false, aborted: true };
+              }
             }
 
             // Fetch fresh data
@@ -375,7 +430,7 @@ const BrowseByAnnotation = () => {
               browseResourcesByAspects({
                 id_token,
                 annotationName: item.title,
-                subAnnotationName: field.name,
+                subAnnotationName: field?.name,
                 signal, // Pass signal for cancellation
               })
             ).unwrap();
@@ -410,14 +465,14 @@ const BrowseByAnnotation = () => {
               })
             );
 
-            return { field: field.name, count, success: true, cached: false };
+            return { field: field?.name, count, success: true, cached: false };
           } catch (error: any) {
             // Don't update state if request was aborted
             if (error.name === 'AbortError' || error.name === 'CanceledError' || signal.aborted || error?.aborted) {
-              return { field: field.name, count: 0, success: false, aborted: true };
+              return { field: field?.name, count: 0, success: false, aborted: true };
             }
 
-            console.error(`Failed to fetch count for ${field.name}:`, error);
+            console.error(`Failed to fetch count for ${field?.name}:`, error);
 
             // Update with error state (show 0)
             setDynamicAnnotationsData((prevData: any) =>
@@ -432,7 +487,7 @@ const BrowseByAnnotation = () => {
               })
             );
 
-            return { field: field.name, count: 0, success: false };
+            return { field: field?.name, count: 0, success: false };
           }
         });
 
@@ -475,7 +530,12 @@ const BrowseByAnnotation = () => {
       }
     };
 
-    if (selectedItem && !selectedSubItem) {
+    // Gate on selectedItem only — fetchSubItemCounts' own countsFetched guard
+    // (above) is what prevents redundant fetches. Gating this on !selectedSubItem
+    // too broke on refresh: when a sub-item was already selected, persisted state
+    // hydrates selectedSubItem to non-null on the very first render, before this
+    // effect ever sees it as null, so the fetch was skipped permanently.
+    if (selectedItem) {
       fetchSubItemCounts(selectedItem);
     }
 
@@ -488,6 +548,10 @@ const BrowseByAnnotation = () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      // Drop any pending get-projects waiters too — they'd never resolve after
+      // unmount anyway (the effect that flushes them no longer runs), but this
+      // releases their closures immediately rather than leaving them dangling.
+      projectsReadyWaitersRef.current = [];
     };
   }, []); // Empty array = only run on unmount
 
@@ -497,41 +561,40 @@ const BrowseByAnnotation = () => {
       setLoader(false);
       return;
     }
-    // A deep-link login (?continue=/browse-by-annotation...) navigates straight back
-    // here, bypassing Home.tsx — the only place that normally fetches APP_CONFIG into
-    // user.appConfig. Without this, `aspects` stays undefined forever and the loader
-    // above never resolves (mirrors the fix in dataProductsSlice.ts's getDataProductDetails).
-    // Object.keys(...).length === 0 (not just `!aspects`) distinguishes "config never
-    // loaded" from "config loaded but this org has zero aspects configured" — the latter
-    // is a legitimate empty state, not something to refetch.
-    if (!aspects && Object.keys(user?.appConfig || {}).length === 0 && user?.token && !appConfigFetchAttempted.current) {
-      appConfigFetchAttempted.current = true;
-      axios.get(URLS.API_URL + URLS.APP_CONFIG)
-        .then((res) => {
-          // Updates user.appConfig — aspects/browseByAspectTypes will change on the
-          // next render, re-firing this effect via its dependency array below.
-          updateUser(user.token, { ...user, appConfig: res.data });
-        })
-        .catch((err) => {
-          console.error('Failed to fetch APP_CONFIG for deep-linked Browse by Annotation:', err);
-          // Fall through to the existing "No Aspects" empty state rather than spinning
-          // forever. Deliberately not logging the user out here — unlike Home.tsx, this
-          // is a supplementary fetch on a page that isn't the primary auth gate.
-          setDynamicAnnotationsData([]);
-          setLoader(false);
-        });
-      return;
-    }
+    // appConfig (and therefore `aspects`/`browseByAspectTypes`) is fetched globally
+    // by useAppBootstrap (src/hooks/useAppBootstrap.ts), regardless of entry point
+    // (deep link, reload, or normal navigation) — this effect just waits for it to
+    // arrive via the dependency array below and re-fires once it does.
     if(aspects){
-      // Filter aspects by configured project scope when restriction is active
+      // Scope aspects to the admin-configured projects when the restriction is on.
+      //
+      // This matches on project NUMBER against appConfig.configuredProjects, which
+      // the backend resolves directly (a handful of getProject calls). It
+      // deliberately does not touch the /get-projects list: that list is large,
+      // slow, and can arrive partial — and because an unresolved project used to
+      // drop the aspect, any incompleteness silently hid data. Matching against a
+      // small, known-complete set removes that whole failure mode, and means this
+      // page no longer waits on /get-projects at all.
       const appConfig = user?.appConfig;
-      const configuredProjectIds: string[] = appConfig?.configuredProjectIds || [];
-      const scopedAspects = (appConfig?.projectsRestricted && configuredProjectIds.length > 0)
-        ? aspects.filter((a: any) => {
-            const projectNumber = extractProjectNumberFromEntryName(a.dataplexEntry?.name);
-            const project = (projectsList as any[]).find(p => p.name === `projects/${projectNumber}`);
-            return project && configuredProjectIds.includes(project.projectId);
-          })
+      const configuredProjects: Array<{ projectNumber?: string }> = appConfig?.configuredProjects || [];
+      const restrictionActive = !!appConfig?.projectsRestricted;
+
+      // Fail open when the configured set is missing or the backend flagged it
+      // incomplete: showing everything is recoverable, silently hiding aspects
+      // is not. (This scoping is advisory display-scoping, not access control —
+      // the backend never filters the aspect response by it.)
+      const configuredNumbers = new Set(
+        configuredProjects.map((p) => p?.projectNumber).filter(Boolean) as string[]
+      );
+      const canScope =
+        restrictionActive &&
+        appConfig?.configuredProjectsComplete !== false &&
+        configuredNumbers.size > 0;
+
+      const scopedAspects = canScope
+        ? aspects.filter((a: any) =>
+            configuredNumbers.has(extractProjectNumberFromEntryName(a.dataplexEntry?.name))
+          )
         : aspects;
 
       const fullAspectList = scopedAspects || [];
@@ -544,10 +607,6 @@ const BrowseByAnnotation = () => {
       }else{
         fullAspectList.forEach((aspectInfo: any) => {
           const aspectName = aspectInfo?.dataplexEntry?.name;
-          // Resolve project display name from the projects list
-          const projectNumber = extractProjectNumberFromEntryName(aspectName);
-          const project = (projectsList as any[]).find(p => p.name === `projects/${projectNumber}`);
-          const projectLabel = project?.displayName || project?.projectId || '';
           // Get subItems from config if available, otherwise empty array
           const configuredSubItems = aspectList?.[aspectName] || [];
           const subItems = configuredSubItems.map((f: string) => {
@@ -563,7 +622,6 @@ const BrowseByAnnotation = () => {
             location: aspectInfo?.dataplexEntry?.entrySource?.location || '',
             resource: aspectInfo?.dataplexEntry?.entrySource?.resource || '',
             createTime: aspectInfo?.dataplexEntry?.createTime || null,
-            projectLabel,
           });
         });
         setDynamicAnnotationsData(generatedData);
@@ -592,23 +650,17 @@ const BrowseByAnnotation = () => {
       //   console.error('Error saving configuration:', error);
       // });
 
+    } else if (isAppConfigReady) {
+      // appConfig has settled but carries no aspects — the fetch failed for good
+      // (useAppBootstrap has already toasted). Clear the loader so the page shows
+      // its empty state instead of spinning forever.
+      setLoader(false);
     }
+    // No longer depends on the /get-projects list: scoping matches project
+    // numbers from appConfig.configuredProjects, so aspects render as soon as
+    // appConfig arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aspects, browseByAspectTypes]);
-
-  // Patch projectLabel onto existing annotation items whenever projectsList loads/changes.
-  // Handles the race where aspects build before /get-projects resolves.
-  useEffect(() => {
-    if (!projectsList?.length || !dynamicAnnotationsData.length) return;
-    setDynamicAnnotationsData((prev: any[]) =>
-      prev.map((item: any) => {
-        const projectNumber = extractProjectNumberFromEntryName(item.name);
-        const project = (projectsList as any[]).find(p => p.name === `projects/${projectNumber}`);
-        const projectLabel = project?.displayName || project?.projectId || item.projectLabel || '';
-        return { ...item, projectLabel };
-      })
-    );
-  }, [projectsList]);
+  }, [aspects, browseByAspectTypes, isAppConfigReady]);
 
   // Auto-select first aspect on load (skip Browse page) — but not when a deep
   // link (?aspect=) is present; the bootstrap effect below will own selection then.
@@ -695,7 +747,12 @@ const BrowseByAnnotation = () => {
       const decodedSubType = atob(subTypeParam);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const target = selectedItem.subItems?.find((s: any) => s.title === decodedSubType);
-      if (target) handleSubItemClick(target);
+      if (target) {
+        if (selectedItem.title && target.title) {
+          deepLinkBypassCacheKeyRef.current = generateCacheKey(selectedItem.title, target.title);
+        }
+        handleSubItemClick(target);
+      }
     } catch {
       // malformed base64 — ignore
     }
@@ -752,6 +809,8 @@ const BrowseByAnnotation = () => {
           onSidebarToggle={(open: boolean) => dispatch(setSideNavOpen(open))}
           isSmallScreen={isSmallScreen}
           accessDeniedItemId={accessDeniedItemId}
+          deepLinkBypassCacheKey={deepLinkBypassCacheKeyRef.current}
+          onDeepLinkCacheBypassed={() => { deepLinkBypassCacheKeyRef.current = null; }}
         />
         </Box>
       </Box>

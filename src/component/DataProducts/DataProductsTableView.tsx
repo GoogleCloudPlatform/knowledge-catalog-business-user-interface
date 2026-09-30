@@ -4,7 +4,7 @@ import { LocationOnOutlined } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import ResizeHandle from '../Schema/ResizeHandle';
-import { getMimeType } from '../../utils/resourceUtils';
+import { getMimeType, toJsDate } from '../../utils/resourceUtils';
 
 interface DataProduct {
   name: string;
@@ -37,38 +37,19 @@ const OverflowTooltip: React.FC<{ text: string; children: React.ReactElement<{ o
   );
 };
 
-const AVATAR_COLORS = [
-  { bg: 'linear-gradient(135deg, #1CB5E0 0%, #000851 100%)' }, 
-  { bg: 'linear-gradient(135deg, #56AB2F 0%, #A8E063 100%)' }, 
-  { bg: 'linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%)' }, 
-  { bg: 'linear-gradient(135deg, #F7971E 0%, #FFD200 100%)' }, 
-];
-
-const getAvatarColor = (email: string, excludeBg?: string): string => {
-  const code = email.charCodeAt(0) || 0;
-  let idx = code % AVATAR_COLORS.length;
-  if (excludeBg && AVATAR_COLORS[idx].bg === excludeBg) {
-    idx = (idx + 1) % AVATAR_COLORS.length;
-  }
-  return AVATAR_COLORS[idx].bg;
-};
-
-
 const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
   dataProducts,
   onRowClick,
 }) => {
   const mode = useSelector((state: any) => state.user.mode) as string;
   const isDark = mode === 'dark';
-  const [sortColumn, setSortColumn] = useState<'name' | 'date' | 'owner' | 'location' | null>(null);
+  const [sortColumn, setSortColumn] = useState<'name' | 'date' | 'location' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const COLUMN_CONFIGS = React.useMemo(() => [
     { key: 'name', initialWidth: 260, minWidth: 150 },
     { key: 'description', initialWidth: 300, minWidth: 150 },
-    { key: 'owner', initialWidth: 240, minWidth: 150 },
     { key: 'location', initialWidth: 130, minWidth: 100 },
-    { key: 'assets', initialWidth: 80, minWidth: 60 },
     { key: 'lastModified', initialWidth: 120, minWidth: 100 },
   ], []);
 
@@ -97,15 +78,6 @@ const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
     if (sortColumn === 'name') {
       const sorted = [...dataProducts].sort((a, b) => {
         return a.displayName.localeCompare(b.displayName, undefined, { sensitivity: 'base' });
-      });
-      return sortOrder === 'asc' ? sorted : sorted.reverse();
-    }
-
-    if (sortColumn === 'owner') {
-      const sorted = [...dataProducts].sort((a, b) => {
-        const ownerA = a.ownerEmails[0] || '';
-        const ownerB = b.ownerEmails[0] || '';
-        return ownerA.localeCompare(ownerB, undefined, { sensitivity: 'base' });
       });
       return sortOrder === 'asc' ? sorted : sorted.reverse();
     }
@@ -152,16 +124,6 @@ const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
     }
   };
 
-  const handleToggleOwnerSort = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (sortColumn === 'owner') {
-      if (sortOrder === 'asc') setSortOrder('desc');
-      else { setSortColumn(null); setSortOrder('asc'); }
-    } else {
-      setSortColumn('owner'); setSortOrder('asc');
-    }
-  };
-
   const handleToggleLocationSort = (event: React.MouseEvent) => {
     event.stopPropagation();
     if (sortColumn === 'location') {
@@ -170,12 +132,6 @@ const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
     } else {
       setSortColumn('location'); setSortOrder('asc');
     }
-  };
-
-  const getOwnerSortTooltip = (): string => {
-    if (sortColumn === 'owner' && sortOrder === 'asc') return 'Sort Z to A';
-    if (sortColumn === 'owner' && sortOrder === 'desc') return '';
-    return 'Sort A to Z';
   };
 
   const getLocationSortTooltip = (): string => {
@@ -197,8 +153,8 @@ const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
   };
 
   const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
+    const date = toJsDate(dateStr);
+    if (!date) return '-';
     return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
   };
 
@@ -210,8 +166,6 @@ const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
         borderRadius: '16px',
         border: isDark ? '1px solid #3c4043' : '1px solid #E8EEF5',
         boxShadow: 'none',
-        maxHeight: 'calc(100vh - 200px)',
-        overflowY: 'auto',
         overflowX: 'auto',
         width: '100%',
         margin: 'auto',
@@ -313,46 +267,6 @@ const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
               />
             </TableCell>
 
-            {/* Owner */}
-            <TableCell
-              sx={{
-                fontFamily: '"Google Sans", sans-serif', fontSize: '14px', fontWeight: 600, lineHeight: '40px', color: isDark ? '#dedfe0' : '#444746', position: 'relative', padding: '0px !important'
-              }}
-            >
-              <Tooltip title={getOwnerSortTooltip()} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
-                <Box
-                  role="button"
-                  onClick={handleToggleOwnerSort}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', height: '100%', width: '100%', borderRadius: '0px', padding: '12px 20px 4px 20px', margin: '0px', transition: 'background-color 0.2s ease',
-                    '&:hover': { backgroundColor: isDark ? '#3c4043' : '#F8F9FA' },
-                  }}
-                >
-                  <span>Owner</span>
-                  <Box
-                    component="span"
-                    className="sort-btn"
-                    sx={{
-                      display: 'flex', alignItems: 'center', flexShrink: 0,
-                      opacity: sortColumn === 'owner' ? 1 : 0,
-                      transform: (sortColumn === 'owner' && sortOrder === 'desc') ? 'rotate(180deg)' : 'none',
-                      transition: 'transform 0.2s ease-in-out, opacity 0.2s ease',
-                    }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect width="24" height="24" rx="12" fill={isDark ? '#004a77' : '#C2E7FF'}/>
-                      <path d="M11.168 15.4818L11.168 5.33594L12.8346 5.33594L12.8346 15.4818L17.5013 10.8151L18.668 12.0026L12.0013 18.6693L5.33464 12.0026L6.5013 10.8151L11.168 15.4818Z" fill={isDark ? '#8ab4f8' : '#004A77'}/>
-                    </svg>
-                  </Box>
-                </Box>
-              </Tooltip>
-              <ResizeHandle
-                onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(2, e); }}
-                isActive={activeIndex === 2}
-                darkMode={isDark}
-              />
-            </TableCell>
-
             {/* Location */}
             <TableCell
               sx={{
@@ -387,16 +301,10 @@ const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
                 </Box>
               </Tooltip>
               <ResizeHandle
-                onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(3, e); }}
-                isActive={activeIndex === 3}
+                onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(2, e); }}
+                isActive={activeIndex === 2}
                 darkMode={isDark}
               />
-            </TableCell>
-              
-            {/* Assets */}
-            <TableCell sx={{ fontFamily: '"Google Sans", sans-serif', fontSize: '14px', fontWeight: 600, lineHeight: '20px', color: isDark ? '#dedfe0' : '#444746', position: 'relative' }}>
-              Assets
-              <ResizeHandle onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(4, e); }} isActive={activeIndex === 4} darkMode={isDark} />
             </TableCell>
 
             {/* Last Modified */}
@@ -525,51 +433,6 @@ const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
                 </Typography>
               </TableCell>
 
-              {/* Owner */}
-              <TableCell sx={{ padding: '10px 20px', overflow: 'hidden' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    {dp.ownerEmails.slice(0, 2).map((email, i) => {
-                      const firstColor = i === 0 ? undefined : getAvatarColor(dp.ownerEmails[0]);
-                      return (
-                        <Box key={email} sx={{
-                          width: '28px', height: '28px', borderRadius: '50%', background: getAvatarColor(email, firstColor),
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', fontSize: '12px',
-                          fontWeight: 500, border: '2px solid #FFFFFF', marginLeft: i > 0 ? '-8px' : 0, zIndex: 2 - i, position: 'relative', flexShrink: 0,
-                        }}>
-                          {email.charAt(0).toUpperCase()}
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', flex: 1 }}>
-                  <Typography sx={{ 
-                    fontFamily: '"Product Sans", "Google Sans Text", sans-serif', 
-                    fontSize: '14px', 
-                    fontWeight: '400', 
-                    color: isDark ? '#dedfe0' : '#575757', 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis', 
-                    whiteSpace: 'nowrap' 
-                  }}>
-                    {dp.ownerEmails[0] || '-'}
-                  </Typography>
-                  
-                  {dp.ownerEmails.length > 1 && (
-                    <Typography sx={{ 
-                      fontFamily: '"Product Sans", "Google Sans Text", sans-serif', 
-                      fontSize: '14px', 
-                      fontWeight: '400', 
-                      color: isDark ? '#dedfe0' : '#575757', 
-                      flexShrink: 0
-                    }}>
-                      +{dp.ownerEmails.length - 1}
-                    </Typography>
-                  )}
-                </Box>
-                </Box>
-              </TableCell>
-
               {/* Location */}
               <TableCell sx={{ padding: '10px 20px', overflow: 'hidden' }}>
                 <Box sx={{ 
@@ -594,11 +457,6 @@ const DataProductsTableView: React.FC<DataProductsTableViewProps> = ({
                   </Typography>
                 </Box>
 </TableCell>
-
-              {/* Assets */}
-              <TableCell sx={{ fontFamily: '"Product Sans", "Google Sans Text", sans-serif', fontSize: '14px', color: isDark ? '#dedfe0' : '#575757', padding: '10px 20px' }}>
-                {dp.assetCount || 0}
-              </TableCell>
 
               {/* Last Modified */}
               <TableCell sx={{ fontFamily: '"Product Sans", "Google Sans Text", sans-serif', fontSize: '14px', fontWeight: '400', color: isDark ? '#dedfe0' : '#575757', padding: '10px 20px', textAlign: 'right' }}>

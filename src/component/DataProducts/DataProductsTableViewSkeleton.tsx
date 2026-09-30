@@ -2,8 +2,8 @@ import React from 'react';
 import { Box, Skeleton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
 import { useSelector } from 'react-redux';
 
-const COLUMN_WIDTHS = ['23.01%', '26.55%', '21.24%', '11.50%', '7.08%', '10.62%'];
-const HEADERS = ['Name', 'Description', 'Owner', 'Location', 'Assets', 'Last modified'];
+const COLUMN_WIDTHS = ['35.00%', '35.00%', '15.00%', '15.00%'];
+const HEADERS = ['Name', 'Description', 'Location', 'Last modified'];
 const SKELETON_ROWS = 6;
 
 const DataProductsTableViewSkeleton: React.FC = () => {
@@ -18,8 +18,6 @@ const DataProductsTableViewSkeleton: React.FC = () => {
         borderRadius: '16px',
         border: isDark ? '1px solid #3c4043' : '1px solid #E8EEF5',
         boxShadow: 'none',
-        maxHeight: 'calc(100vh - 200px)',
-        overflowY: 'auto',
         overflowX: 'auto',
         width: '100%',
         margin: 'auto',
@@ -106,25 +104,12 @@ const DataProductsTableViewSkeleton: React.FC = () => {
                 <Skeleton variant="text" width="80%" height={20} />
               </TableCell>
 
-              {/* 3. Owner */}
-              <TableCell sx={{ padding: '10px 20px' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Skeleton variant="circular" width={28} height={28} sx={{ flexShrink: 0 }} />
-                  <Skeleton variant="text" width="50%" height={20} />
-                </Box>
-              </TableCell>
-
-              {/* 4. Location */}
+              {/* 3. Location */}
               <TableCell sx={{ padding: '10px 20px' }}>
                <Skeleton variant="rounded" width={80} height={24} sx={{ borderRadius: '3.5px' }} />
               </TableCell>
 
-              {/* 5. Assets */}
-              <TableCell sx={{ padding: '10px 20px' }}>
-                 <Skeleton variant="text" width="40%" height={20} />
-              </TableCell>
-
-              {/* 7. Last Modified */}
+              {/* 4. Last Modified */}
               <TableCell sx={{ padding: '10px 20px' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Skeleton variant="text" width="60%" height={20} />

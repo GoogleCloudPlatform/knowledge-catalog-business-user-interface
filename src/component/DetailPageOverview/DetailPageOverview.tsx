@@ -4,7 +4,8 @@ import {
   Grid,
   Tooltip,
   Box,
-  Divider
+  Divider,
+  Skeleton
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useSelector } from 'react-redux';
@@ -19,7 +20,8 @@ import {
   ContentCopy, ListAltOutlined, LocationOnOutlined
 } from '@mui/icons-material';
 import { useNotification } from '../../contexts/NotificationContext';
-import { normalizeSystemName, getName, extractProjectNumberFromEntryName, resolveProjectDisplayName } from '../../utils/resourceUtils';
+import { normalizeSystemName, getName, extractProjectNumberFromEntryName, resolveProjectDisplayNameOrFallback, getFormattedDateTimeParts } from '../../utils/resourceUtils';
+import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import ResizeHandle from '../Schema/ResizeHandle';
 
@@ -211,40 +213,7 @@ const DetailPageOverview: React.FC<DetailPageOverviewProps> = ({ entry, sampleTa
 
   // Helper function to check if accordion has data
 
-const getFormattedDateTimeParts = (timestamp: any) => {
-  if (!timestamp) {
-    return { date: '-', time: '' };
-  }
-  
-  const myDate = new Date(timestamp * 1000);
-
-  const date = new Intl.DateTimeFormat('en-US', { 
-    month: "short", 
-    day: "numeric", 
-    year: "numeric",
-  }).format(myDate);
-
-  const time = new Intl.DateTimeFormat('en-US', { 
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit", 
-    hour12: true 
-  }).format(myDate);
-
-  return { date, time }; 
-};
-
-const { date: updateDate, time: updateTime } = getFormattedDateTimeParts(entry?.updateTime?.seconds);
-
-// Format without seconds for glossary/annotation timestamps accordion
-const formatTimeNoSeconds = (timestamp: number | undefined | null) => {
-  if (!timestamp) return { date: '-', time: '' };
-  const d = new Date(timestamp * 1000);
-  const date = new Intl.DateTimeFormat('en-US', { month: "short", day: "numeric", year: "numeric" }).format(d);
-  const time = new Intl.DateTimeFormat('en-US', { hour: "numeric", minute: "2-digit", hour12: true }).format(d);
-  return { date, time };
-};
-const { date: updateDateShort, time: updateTimeShort } = formatTimeNoSeconds(entry?.updateTime?.seconds);
+const { date: updateDate, time: updateTime } = getFormattedDateTimeParts(entry?.updateTime);
 
 
   const getEntryType = (namePath: string = '' , separator: string = '' ) => {
@@ -280,24 +249,32 @@ const { date: updateDateShort, time: updateTimeShort } = formatTimeNoSeconds(ent
   const isDark = mode === 'dark';
 
   const projectsList = useSelector((state: any) => state.projects?.items || []);
+  // "Settled", not "loaded": state.projects.isloaded stays false forever when
+  // /get-projects fails, which would pin the skeleton on indefinitely.
+  // areProjectsReady is true on success *or* once the bootstrap's retries are
+  // exhausted — and unlike the slice's `failed` status it isn't briefly true
+  // mid-retry, so we never flash the raw number and then swap to the name.
+  const { areProjectsReady } = useAppBootstrapStatus();
 
-  const projectDisplayName = React.useMemo(() => {
+  const { projectDisplayName, isProjectNameLoading } = React.useMemo(() => {
     const fqn = entry?.fullyQualifiedName || '';
     const fromFqn = (fqn.split(':').pop() || '').split('.')[0];
-    if (fromFqn) return fromFqn;
+    if (fromFqn) return { projectDisplayName: fromFqn, isProjectNameLoading: false };
 
     const projectNumber =
       extractProjectNumberFromEntryName(entry?.name) ||
       extractProjectNumberFromEntryName(entry?.parentEntry);
 
-    if (projectNumber) {
-      const resolved = resolveProjectDisplayName(projectNumber, projectsList);
-      if (resolved) return resolved;
-      return projectNumber;
-    }
+    if (!projectNumber) return { projectDisplayName: '-', isProjectNameLoading: false };
 
-    return '-';
-  }, [entry?.fullyQualifiedName, entry?.name, entry?.parentEntry, projectsList]);
+    // Empty means unresolved: still loading if /get-projects hasn't landed,
+    // otherwise the helper falls back to the raw project number.
+    const resolved = resolveProjectDisplayNameOrFallback(projectNumber, projectsList, areProjectsReady);
+    return {
+      projectDisplayName: resolved || '-',
+      isProjectNameLoading: !resolved && !areProjectsReady,
+    };
+  }, [entry?.fullyQualifiedName, entry?.name, entry?.parentEntry, projectsList, areProjectsReady]);
 
   const sampleColumnConfigs = React.useMemo(
     () => columnKeys.map((key) => ({ key, initialWidth: 160, minWidth: 100 })),
@@ -831,7 +808,7 @@ const { date: updateDateShort, time: updateTimeShort } = formatTimeNoSeconds(ent
                         <Box sx={{ display: isAnnotation ? "contents" : "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <Typography sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 500, fontSize: "14px", color: "#7D7D7D" }}>Last Modified</Typography>
                             <Typography sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 500, fontSize: "14px", color: "#1F1F1F", justifySelf: isAnnotation ? "end" : undefined }}>
-                                {isAnnotation ? <>{updateDateShort}{updateTimeShort ? ` \u00b7 ${updateTimeShort}` : ''}</> : <>{updateDate}{updateTime ? ` \u00b7 ${updateTime}` : ''}</>}
+                                {updateDate}{updateTime ? ` \u00b7 ${updateTime}` : ''}
                             </Typography>
                         </Box>
                         {/* System */}
@@ -861,11 +838,22 @@ const { date: updateDateShort, time: updateTimeShort } = formatTimeNoSeconds(ent
                         {/* Project */}
                         <Box sx={{ display: isAnnotation ? "contents" : "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
                             <Typography sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 500, fontSize: "14px", color: "#7D7D7D", flexShrink: 0 }}>Project</Typography>
-                            <Tooltip title={projectDisplayName} arrow>
-                                <Typography sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 500, fontSize: "14px", color: "#1F1F1F", textAlign: "right", justifySelf: isAnnotation ? "end" : undefined, ...(isAnnotation ? {} : { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "220px" }) }}>
-                                    {projectDisplayName}
-                                </Typography>
-                            </Tooltip>
+                            {isProjectNameLoading ? (
+                                // justifySelf must mirror the real value below: in annotation
+                                // mode the row is display:contents inside a CSS grid, so without
+                                // it the skeleton lands in the label column.
+                                <Skeleton
+                                    variant="text"
+                                    width={90}
+                                    sx={{ fontSize: "14px", justifySelf: isAnnotation ? "end" : undefined }}
+                                />
+                            ) : (
+                                <Tooltip title={projectDisplayName} arrow>
+                                    <Typography sx={{ fontFamily: '"Google Sans", sans-serif', fontWeight: 500, fontSize: "14px", color: "#1F1F1F", textAlign: "right", justifySelf: isAnnotation ? "end" : undefined, ...(isAnnotation ? {} : { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "220px" }) }}>
+                                        {projectDisplayName}
+                                    </Typography>
+                                </Tooltip>
+                            )}
                         </Box>
                         {/* Identifiers */}
                         <Box sx={{ display: isAnnotation ? "contents" : "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>

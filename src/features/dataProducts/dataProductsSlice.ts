@@ -1,25 +1,40 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios, { AxiosError } from 'axios';
 import { URLS } from '../../constants/urls';
+import type { Project } from '../projects/projectsSlice';
+import { findProjectByNumber, resolveProjectNumber } from '../../utils/resourceUtils';
 
-const getProjectNumber = (projectId: string, appConfig: any) => {
-  let projects:any[] = appConfig?.projects ?? [];
-  let projectName:string = projects.find((p) => p.projectId === projectId)?.name || '';
-  return projectName.split('/').length > 0 ? projectName.split('/')[1] : '';
-}
-
-// Replace the project number segment in a resource path with its project id.
-// appConfig.projects maps each project as { projectId, name: 'projects/{projectNumber}' },
-// so we look up the projectNumber found in the resource and swap it for the projectId.
+// Replace the project number segment in a resource path with its project id,
+// using the /get-projects list (the single source for project identity).
 // e.g. projects/123456789/... -> projects/my-project-id/...
-const replaceProjectNumberWithProjectId = (resource: string, appConfig: any): string => {
+const replaceProjectNumberWithProjectId = (resource: string, projectsList: Project[]): string => {
   if (!resource) return resource;
-  const projects: any[] = appConfig?.projects ?? [];
   const match = resource.match(/projects\/([^/]+)/);
+  console.log("replaceProjectNumberWithProjectId: match:", match);
   if (!match) return resource;
   const projectNumber = match[1];
-  const projectId = projects.find((p) => p.name === `projects/${projectNumber}`)?.projectId;
+  const projectId = findProjectByNumber(projectNumber, projectsList)?.projectId;
   return projectId ? resource.replace(`projects/${projectNumber}`, `projects/${projectId}`) : resource;
+}
+
+// Canonicalize a resource path's project segment to project-number form, so
+// resource names coming from different APIs (the Dataplex data products list,
+// which returns project number, vs. the search index, whose resource we've
+// already rewritten to project id via replaceProjectNumberWithProjectId) can
+// be compared reliably when de-duping. Falls through unchanged when the
+// identifier isn't found in the /get-projects list (already-numeric ids, or
+// the list not loaded yet) rather than throwing off the comparison.
+const canonicalizeResourceProject = (resource: string, projectsList: Project[]): string => {
+  if (!resource) return resource;
+  const projects = projectsList ?? [];
+  const match = resource.match(/^projects\/([^/]+)/);
+  if (!match) return resource;
+  const identifier = match[1];
+  // Already a project number (matches a known project's canonical name) - keep as-is.
+  if (projects.some((p) => p.name === `projects/${identifier}`)) return resource;
+  // Otherwise treat it as a project id and resolve it to its project number.
+  const projectNumber = projects.find((p) => p.projectId === identifier)?.name?.split('/')[1];
+  return projectNumber ? resource.replace(`projects/${identifier}`, `projects/${projectNumber}`) : resource;
 }
 
 // Map a search entry (dataplexEntry) into the same shape as an API data product.
@@ -43,6 +58,10 @@ const mapSearchEntryToDataProduct = (searchEntry: any) => {
     accessApprovalConfig: null,
     etag:"",
     label:"",
+    // Found only via the org-wide Search index, not the user's own project's
+    // dataProducts.list API - the user may not actually have access to it.
+    // Drives the "Limited access" badge and the access-denied UX on click.
+    isOutOfScope: true,
   };
 }
 
@@ -58,6 +77,9 @@ export const fetchDataProductsList = createAsyncThunk('dataProducts/fetchDataPro
     // fetching data products from API endpoint
     axios.defaults.headers.common['Authorization'] = requestData.id_token ? `Bearer ${requestData.id_token}` : '';
     const appConfig = (getState() as any).user?.userData?.appConfig;
+    // Project identity mapping comes from /get-projects; appConfig is used only
+    // for scoping (projectsRestricted / configuredProjectIds).
+    const projectsList: Project[] = (getState() as any).projects?.items ?? [];
     const params: Record<string, string> = {};
     if (appConfig?.projectsRestricted && appConfig?.configuredProjectIds?.length > 0) {
       params.projectIds = appConfig.configuredProjectIds.join(',');
@@ -71,13 +93,14 @@ export const fetchDataProductsList = createAsyncThunk('dataProducts/fetchDataPro
       );
 
       if (result.status === 200) {
+        
         const results = result.data.results || [];
         // Normalize each entry's resource path: replace projects/{projectNumber}
-        // with projects/{projectId} using the appConfig.projects mapping.
+        // with projects/{projectId} using the /get-projects mapping.
         return results.map((entry: any) => {
           const resource = entry?.dataplexEntry?.entrySource?.resource;
           if (resource) {
-            entry.dataplexEntry.entrySource.resource = replaceProjectNumberWithProjectId(resource, appConfig);
+            entry.dataplexEntry.entrySource.resource = replaceProjectNumberWithProjectId(resource, projectsList);
           }
           return entry;
         });
@@ -91,15 +114,22 @@ export const fetchDataProductsList = createAsyncThunk('dataProducts/fetchDataPro
       console.log("Search Results:", searchResults);
       // Merge the search results with the API response dataProducts based on resource path.
       const projectDataProducts = response.data.dataProducts || [];
-      // Set of API data product resource names for quick lookup.
-      const projectDataProductNames = new Set(projectDataProducts.map((p: any) => p?.name).filter(Boolean));
+      // Set of API data product resource names for quick lookup, canonicalized
+      // to project-number form so it lines up with the search resource below
+      // regardless of which project-identifier format either API returned.
+      const projectDataProductNames = new Set(
+        projectDataProducts
+          .map((p: any) => canonicalizeResourceProject(p?.name, projectsList))
+          .filter(Boolean)
+      );
 
       // Find search entries that are NOT present in the API data products list,
       // matched by dataplexEntry.entrySource.resource === dataProduct.name.
       const searchOnlyProducts = searchResults
         .filter((searchEntry: any) => {
           const searchResource = searchEntry?.dataplexEntry?.entrySource?.resource;
-          return searchResource && !projectDataProductNames.has(searchResource);
+          const canonicalSearchResource = canonicalizeResourceProject(searchResource, projectsList);
+          return canonicalSearchResource && !projectDataProductNames.has(canonicalSearchResource);
         })
         .map(mapSearchEntryToDataProduct);
       console.log("Search-only Data Products (not in API list):", searchOnlyProducts);
@@ -139,20 +169,13 @@ export const getDataProductDetails = createAsyncThunk('dataProducts/getDataProdu
     
     const project = requestData.dataProductId.split('/')[1];
     const location = requestData.dataProductId.split('/')[3];
-    let appConfig = (getState() as any).user?.userData?.appConfig;
-    // appConfig.projects is only populated when Home.tsx mounts and fetches APP_CONFIG.
-    // On deep-link login that bypasses /home, the projects list is empty and
-    // getProjectNumber returns '' — producing a malformed entry name → PERMISSION_DENIED.
-    // Fetch appConfig inline when it is not yet available.
-    if (!appConfig?.projects?.length) {
-      try {
-        const configRes = await axios.get(URLS.API_URL + URLS.APP_CONFIG);
-        appConfig = configRes.data;
-      } catch {
-        // fall through — getProjectNumber will return '' and the API will 403 with a clear error
-      }
-    }
-    const finalEntryName = `projects/${project}/locations/${location}/entryGroups/@dataplex/entries/projects/${getProjectNumber(project, appConfig)}/locations/${location}/dataProducts/${requestData.dataProductId.split('/')[5]}`;
+    // Project number comes from /get-projects — the single source for project
+    // identity. An unknown project yields '' here, which produces a malformed
+    // entry name and a clear API error rather than a silently wrong lookup.
+    const projectsList: Project[] = (getState() as any).projects?.items ?? [];
+    const projectNumber = resolveProjectNumber(project, projectsList) || project;  // fallback to the original project string if not found
+    const finalEntryName = `projects/${project}/locations/${location}/entryGroups/@dataplex/entries/projects/${projectNumber}/locations/${location}/dataProducts/${requestData.dataProductId.split('/')[5]}`;
+
 
     const response = await axios.get(URLS.API_URL + URLS.DATA_PRODUCT_DETAILS, {
     params: {
@@ -173,11 +196,14 @@ export const getDataProductDetails = createAsyncThunk('dataProducts/getDataProdu
       // Handle 403 Forbidden separately - don't trigger global logout
       console.log("axiosError.response?.status", axiosError.response);
       if (axiosError.response?.status === 403) {
-        return rejectWithValue(JSON.stringify({
+        // Plain object, matching fetchDataProductsList's PERMISSION_DENIED
+        // shape - not JSON.stringify'd, so consumers can branch on `.type`
+        // instead of having to parse it back out of a string.
+        return rejectWithValue({
           type: "PERMISSION_DENIED",
           message: "You don't have access to this resource",
           itemId: requestData.dataProductId,
-        }));
+        });
       }
       return rejectWithValue(axiosError.response?.data || axiosError.message);
     }
@@ -185,7 +211,7 @@ export const getDataProductDetails = createAsyncThunk('dataProducts/getDataProdu
   }
 });
 
-export const fetchDataProductsAssetsList = createAsyncThunk('dataProducts/fetchDataProductsAssetsList', async (requestData: any , { rejectWithValue }) => {
+export const fetchDataProductsAssetsList = createAsyncThunk('dataProducts/fetchDataProductsAssetsList', async (requestData: any , { rejectWithValue, getState }) => {
   // If the requestData is empty, we are returning an empty list.
   if (!requestData) {
     return [];
@@ -194,9 +220,21 @@ export const fetchDataProductsAssetsList = createAsyncThunk('dataProducts/fetchD
   try {
     // fetching data products from API endpoint 
     axios.defaults.headers.common['Authorization'] = requestData.id_token ? `Bearer ${requestData.id_token}` : '';
-    const project = requestData.dataProductId.split('/')[1];
+    let projectid = requestData.dataProductId.split('/')[1];
+
+    // Resolve projectid against appConfig.projects: if it is not a known projectId
+    // it may actually be a project number, so look it up by name
+    // (projects/{projectNumber}) and swap in the matching projectId.
+     const projects: Project[] = (getState() as any).projects?.items ?? [];
+    if (!projects.some((p) => p.projectId === projectid)) {
+      const matchedProject = projects.find((p) => p.name === `projects/${projectid}`);
+      if (matchedProject?.projectId) {
+        projectid = matchedProject.projectId;
+      }
+    }
+
     const location = requestData.dataProductId.split('/')[3];
-    const finalEntryName = `projects/${project}/locations/${location}/dataProducts/${requestData.dataProductId.split('/').pop()}`;
+    const finalEntryName = `projects/${projectid}/locations/${location}/dataProducts/${requestData.dataProductId.split('/').pop()}`;
 
     const response = await axios.get(URLS.API_URL + URLS.DATA_PRODUCT_ASSETS, {
         params: { dataProduct: finalEntryName }

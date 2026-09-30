@@ -9,6 +9,7 @@ const { ProjectsClient } = require('@google-cloud/resource-manager');
 const { DataCatalogClient } = require('@google-cloud/datacatalog');
 const path = require('path');
 const cors = require('cors');
+const compression = require('compression');
 const { querySampleFromBigQuery } = require('./utility');
 const { sendAccessRequestEmail, sendFeedbackEmail, sendDataplexAccessRequest } = require('./services/emailService');
 const { BigQuery } = require('@google-cloud/bigquery');
@@ -145,6 +146,11 @@ app.use((req, res, next) => {
 
 
 
+
+// gzip responses. Mounted before the routes so it covers every API payload.
+// /get-projects in particular can be ~4.5 MB uncompressed for a 40k-project org,
+// which compresses to roughly a tenth of that given how repetitive the shape is.
+app.use(compression());
 
 // Middleware to parse JSON request bodies
 app.use(express.json());
@@ -1690,6 +1696,42 @@ app.get('/api/v1/app-configs', async (req, res) => {
       console.error('Error listing projects for app config:', err);
     }
 
+    // Resolve the admin-configured project IDs to their project numbers.
+    // The UI scopes aspects by matching `projects/{number}`, and deriving those
+    // numbers from the full project list is fragile: that list can be truncated
+    // or partially fetched, and an unresolved project silently HIDES aspects.
+    // This set is admin-sized (a handful), so resolve it directly — it is then
+    // always complete, or explicitly flagged as not.
+    const configuredProjectIds = configData.projects || [];
+    const configuredProjects = [];
+    let configuredProjectsComplete = true;
+
+    if (configuredProjectIds.length > 0) {
+      const resolved = await Promise.allSettled(
+        configuredProjectIds.map((id) =>
+          resourceManagerClientv1.getProject({ name: `projects/${id}` })
+        )
+      );
+      resolved.forEach((result, i) => {
+        const project = result.status === 'fulfilled' ? result.value?.[0] : null;
+        const projectNumber = (project?.name || '').split('/')[1] || '';
+        if (projectNumber) {
+          configuredProjects.push({
+            projectId: project.projectId || configuredProjectIds[i],
+            projectNumber,
+          });
+        } else {
+          // Flag rather than silently returning a short list: the client must
+          // know not to filter on an incomplete set.
+          configuredProjectsComplete = false;
+          console.error(
+            `Could not resolve configured project ${configuredProjectIds[i]}:`,
+            result.reason?.message || result.reason
+          );
+        }
+      });
+    }
+
     const reduceAspect = ({ name, fullyQualifiedName, entrySource, entryType }) => ({ name, fullyQualifiedName, entrySource, entryType });
 
     const configs = {
@@ -1697,6 +1739,8 @@ app.get('/api/v1/app-configs', async (req, res) => {
         projects: projects.map(({ projectId, name, displayName }) => ({ projectId, name, displayName })),
         projectsRestricted: !!(configData.projects && configData.projects.length > 0),
         configuredProjectIds: configData.projects || [],
+        configuredProjects,
+        configuredProjectsComplete,
         defaultSearchProduct: configData.products || 'All',
         defaultSearchAssets: configData.assets || '',
         browseByAspectTypes: configData.aspectType || []
@@ -1830,13 +1874,25 @@ app.get('/api/v1/get-projects', async (req, res) => {
         return res.status(500).json({ message: 'Server Configuration Error: GOOGLE_CLOUD_PROJECT_ID and GCP_LOCATION must be set in the .env file.' });
     }
     
-    let projects = [];
-    try{
-      const [ projectList ] = await resourceManagerClientv1.searchProjects();
-      projects = projectList || [];
-    } catch(err){
-      console.error('Error listing projects for app config:', err);
-    }
+    // The configured project is fetched explicitly and pinned first, mirroring
+    // /app-configs: searchProjects does not always surface it, and this list is
+    // the single source the UI uses to map project numbers to project ids.
+    //
+    // pageSize is set explicitly (auto-pagination stays ON, so the list is still
+    // complete) purely to cut round trips: the server default is ~300/page, so a
+    // 40k-project org needs 130+ dependent calls instead of ~40.
+    //
+    // Deliberately NOT wrapped in a swallow-and-continue try/catch: returning
+    // HTTP 200 with a partial or empty array is indistinguishable from "this org
+    // has no projects", and the client uses this list to decide what to show.
+    // A failure must surface as a failure.
+    const [ projectList, currentProject ] = await Promise.all([
+      resourceManagerClientv1.searchProjects({ pageSize: 1000 }),
+      resourceManagerClientv1.getProject({ name: `projects/${projectId}` }),
+    ]);
+    const rest = projectList[0] ? projectList[0].filter(pr => pr.projectId !== projectId) : [];
+    const projects = currentProject && currentProject[0] ? [ currentProject[0], ...rest ] : rest;
+
     res.json(projects.map(({ projectId, name, displayName }) => ({ projectId, name, displayName })));
 
   } catch (error) {

@@ -38,10 +38,10 @@ import axios from 'axios';
 import { URLS } from '../../constants/urls';
 import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch } from '../../app/store';
-import { getProjects } from '../../features/projects/projectsSlice';
 import { getAssetIcon } from '../../utils/resourceUtils';
 import DatabaseSchemaBlueIcon from '../../assets/svg/database_schema_icon_blue.svg';
 import { isGlossaryAssetType, getGlossaryMuiIcon, assetNameToGlossaryType } from '../../constants/glossaryIcons';
+import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
 
 /**
  * @file FilterDropdown.tsx
@@ -337,6 +337,7 @@ const FilterDropdown: React.FC<FilterProps> = ({ filters , onFilterChange, isGlo
   const mode = useSelector((state: any) => state.user.mode) as string;
   const searchTerm = useSelector((state: any) => state.search.searchTerm);
   const searchSubmitted = useSelector((state: any) => state.search.searchSubmitted);
+  const { isBootstrapping } = useAppBootstrapStatus();
   const projectsLoaded = useSelector((state: any) => state.projects.isloaded);
   const projectsList = useSelector((state: any) => state.projects.items);
   const [loading, setLoading] = useState(false);
@@ -372,8 +373,10 @@ const FilterDropdown: React.FC<FilterProps> = ({ filters , onFilterChange, isGlo
       ? list.filter((p: any) => user.appConfig.configuredProjectIds.includes(p.projectId))
       : list;
 
-  if(projects && user?.appConfig && user?.appConfig.projects && Array.isArray(user?.appConfig.projects)){
-    let plist:any = effectiveProjects(projectsLoaded ? projectsList : user?.appConfig.projects);
+  // The project list comes from /get-projects only; appConfig is used just for
+  // the restricted-project scoping applied by effectiveProjects above.
+  if(projects && Array.isArray(projectsList) && projectsList.length > 0){
+    let plist:any = effectiveProjects(projectsList);
     let p:any = plist.map((project:any) => ({
       name: project.projectId,
       type: "project",
@@ -411,12 +414,6 @@ const FilterDropdown: React.FC<FilterProps> = ({ filters , onFilterChange, isGlo
   selectedFiltersRef.current = selectedFilters;
 
   useEffect(() => {
-    if(!projectsLoaded) {
-      dispatch(getProjects({ id_token: user?.token }));
-    }
-  }, []);
-
-  useEffect(() => {
     if(projectsLoaded){
       let plist:any = effectiveProjects(projectsList);
       let p:any = plist.map((project:any) => ({
@@ -440,6 +437,9 @@ const FilterDropdown: React.FC<FilterProps> = ({ filters , onFilterChange, isGlo
   // Auto-select/clear filters when search is explicitly submitted (Enter or autocomplete select)
   useEffect(() => {
     if (!searchSubmitted) return;
+    // Wait for bootstrap, matching SearchPage's own gate on this flag, so this
+    // effect doesn't clear searchSubmitted before SearchPage gets to consume it.
+    if (isBootstrapping) return;
     if (isGlossary) return;
 
     const currentFilters = selectedFiltersRef.current;
@@ -453,6 +453,7 @@ const FilterDropdown: React.FC<FilterProps> = ({ filters , onFilterChange, isGlo
       // Check for matching product (system), including aliases for renamed products
       const PRODUCT_SEARCH_ALIASES: Record<string, string> = {
         "dataplex universal catalog": "Knowledge Catalog",
+        "dataplex": "Knowledge Catalog",
       };
       const matchingProduct = products.items.find((product: any) =>
         product.name.toLowerCase() === searchTerm.toLowerCase()
@@ -492,13 +493,13 @@ const FilterDropdown: React.FC<FilterProps> = ({ filters , onFilterChange, isGlo
     }
 
     dispatch({ type: 'search/setSearchSubmitted', payload: false });
-  }, [searchSubmitted]);
+  }, [searchSubmitted, isBootstrapping]);
 
 
 
   useEffect(() => {
-    // Re-construct projects list
-    let plist:any = effectiveProjects(projectsLoaded ? projectsList : (user?.appConfig?.projects || []));
+    // Re-construct projects list from /get-projects
+    let plist:any = effectiveProjects(projectsLoaded ? projectsList : []);
     let pItems = plist.map((project:any) => ({
       name: project.projectId,
       type: "project",
