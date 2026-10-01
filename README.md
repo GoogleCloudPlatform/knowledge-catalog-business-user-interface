@@ -408,11 +408,15 @@ Feature Enhancements:
   - The Project name shown on an entry's Info card now displays a loading placeholder while it resolves, instead of appearing blank.
   - Data Product cards now show a tooltip with the full name when it's too long to fit and gets truncated.
   - The Glossaries sidebar now auto-collapses sibling categories when you expand another one under the same parent, for cleaner accordion-style navigation.
-
+  - Looker entries now include a "Glossary Terms" tab (alongside Overview, Entry List, Aspects, and Lineage), showing glossary terms linked to the Looker asset.
+  - The Schema tab now shows a "Semantic" column (e.g. `DIMENSION_TYPE`, `MEASURE_TYPE`) for resources whose fields define it, such as Looker dimensions and measures. The column is hidden for resources like BigQuery tables that don't populate it.
 
 Bug Fixes:
 
   - Fixed Data Quality scores for custom (aspect-based) entries being double-scaled and showing malformed percentages (e.g. `9372%`, `10000%`) instead of the correct value (e.g. `93.72%`, `100%`).
+  - Created At / Modified At timestamps across Data Products, Lineage, Entry List, Search Entries cards, and Resource Preview are now converted and displayed in the user's local time zone, fixing cases where dates were shown in raw/incorrect format or missing entirely.
+  - Search Entries cards and other resource views now prefer the underlying resource's actual last-modified time (`entrySource.updateTime`) over the catalog/aspect metadata's update time, fixing "last modified" dates that could drift after a re-scan touched an aspect without the resource itself changing.
+  - Glossary Categories and Terms now correctly show their parent glossary/category name instead of leaving it blank.
   - Fixed a jarring experience when opening a Data Product found only via search outside the user's current project: it previously hit a permission error, showed a raw JSON toast, and force-redirected back to the list after 2 seconds. The detail page now stays open with a clear "Access Denied" state (showing the product's cached name, description, and icon) and a Request Access option.
   - Fixed dates not displaying on the Data Product detail view page and the Data Profile configuration panel.
   - Fixed incorrect date parsing for zero-value and millisecond-based timestamps in the shared date-formatting utility.

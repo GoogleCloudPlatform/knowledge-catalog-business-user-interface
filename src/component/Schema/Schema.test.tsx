@@ -21,7 +21,8 @@ const createSchemaField = (
   metadataType: string,
   mode: string,
   defaultValue?: string | null,
-  description?: string | null
+  description?: string | null,
+  semantic?: string | null
 ) => ({
   structValue: {
     fields: {
@@ -34,6 +35,9 @@ const createSchemaField = (
       }),
       ...(description !== undefined && {
         description: description === null ? null : { stringValue: description },
+      }),
+      ...(semantic !== undefined && {
+        semantic: semantic === null ? null : { stringValue: semantic },
       }),
     },
   },
@@ -593,6 +597,50 @@ describe("Schema", () => {
       expect(screen.getByText("id")).toBeInTheDocument();
       const handles = screen.getAllByTestId("resize-handle");
       expect(handles).toHaveLength(4);
+    });
+  });
+
+  describe("Semantic Column", () => {
+    it("does not render the Semantic column when no field has semantic data", () => {
+      const entry = createMockEntry("123", [
+        createSchemaField("id", "INT64", "PRIMITIVE", "REQUIRED"),
+        createSchemaField("name", "STRING", "STRING", "NULLABLE"),
+      ]);
+
+      render(<Schema entry={entry} />);
+
+      expect(screen.queryByText("Semantic")).not.toBeInTheDocument();
+      const handles = screen.getAllByTestId("resize-handle");
+      expect(handles).toHaveLength(4);
+    });
+
+    it("renders the Semantic column and chip when at least one field has semantic data", () => {
+      const entry = createMockEntry("123", [
+        createSchemaField("customer_id", "INT64", "PRIMITIVE", "REQUIRED", undefined, undefined, "DIMENSION_TYPE"),
+        createSchemaField("revenue", "FLOAT", "NUMBER", "NULLABLE", undefined, undefined, "MEASURE_TYPE"),
+      ]);
+
+      render(<Schema entry={entry} />);
+
+      expect(screen.getByText("Semantic")).toBeInTheDocument();
+      expect(screen.getByText("DIMENSION_TYPE")).toBeInTheDocument();
+      expect(screen.getByText("MEASURE_TYPE")).toBeInTheDocument();
+      const handles = screen.getAllByTestId("resize-handle");
+      expect(handles).toHaveLength(5);
+    });
+
+    it("falls back to '-' for a field missing semantic data when the column is shown", () => {
+      const entry = createMockEntry("123", [
+        createSchemaField("customer_id", "INT64", "PRIMITIVE", "REQUIRED", undefined, undefined, "DIMENSION_TYPE"),
+        createSchemaField("misc_field", "STRING", "STRING", "NULLABLE"),
+      ]);
+
+      render(<Schema entry={entry} />);
+
+      expect(screen.getByText("Semantic")).toBeInTheDocument();
+      expect(screen.getByText("DIMENSION_TYPE")).toBeInTheDocument();
+      const dashes = screen.getAllByText("-");
+      expect(dashes.length).toBeGreaterThan(0);
     });
   });
 });

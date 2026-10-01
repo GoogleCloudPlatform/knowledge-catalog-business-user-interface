@@ -700,7 +700,7 @@ describe('ViewDetails', () => {
   });
 
   describe('Looker Entry Type', () => {
-    it('renders Entry List and Lineage tabs for Looker entries, without Glossary Terms', async () => {
+    it('renders Entry List, Lineage and Glossary Terms tabs for Looker entries', async () => {
       renderViewDetails(mockLookerEntry);
 
       await waitFor(() => {
@@ -708,9 +708,9 @@ describe('ViewDetails', () => {
         expect(screen.getByText('Entry List')).toBeInTheDocument();
         expect(screen.getByText('Aspects')).toBeInTheDocument();
         expect(screen.getByText('Lineage')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Glossary Terms' })).toBeInTheDocument();
       });
 
-      expect(screen.queryByRole('tab', { name: 'Glossary Terms' })).not.toBeInTheDocument();
       expect(screen.queryByRole('tab', { name: 'Data Profile' })).not.toBeInTheDocument();
       expect(screen.queryByRole('tab', { name: 'Data Quality' })).not.toBeInTheDocument();
     });
