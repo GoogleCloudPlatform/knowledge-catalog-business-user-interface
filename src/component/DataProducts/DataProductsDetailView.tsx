@@ -170,8 +170,14 @@ const DataProductsDetailView: React.FC<DataProductsDetailViewProps> = ({ onReque
   }, []);
 
 
-  let selectedDataProduct = localStorage.getItem('selectedDataProduct') ? 
-  JSON.parse(localStorage.getItem('selectedDataProduct') || '{}') : {};
+  // Guard against a stale cache: selectedDataProduct is only trustworthy when it was
+  // cached for the data product currently being viewed (set on card click in
+  // DataProducts.tsx). Otherwise (e.g. a leftover value from a previously viewed
+  // product), fall back to {} so RequestAccessButton/SubmitAccess don't submit
+  // against the wrong entry.
+  const cachedDataProduct = localStorage.getItem('selectedDataProduct') ?
+    JSON.parse(localStorage.getItem('selectedDataProduct') || '{}') : {};
+  let selectedDataProduct = cachedDataProduct?.name === dataProductIdFromUrl ? cachedDataProduct : {};
 
   let accessGroups = selectedDataProduct ? (selectedDataProduct?.accessGroups || {}): {};
     const handleResourceClick = (id: string) => {

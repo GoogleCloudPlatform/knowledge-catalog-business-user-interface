@@ -11,9 +11,14 @@ export type Project = {
   displayName?: string;
 };
 
-export const getProjects = createAsyncThunk('projects/getProjects', async (requestData: any , { rejectWithValue, getState }) => {
-  // Bumped by resetProjects (on logout) so a response arriving after the session
-  // ended can be discarded instead of repopulating a cleared store.
+export const getProjects = createAsyncThunk<
+  any,
+  any,
+  { rejectedMeta: { epoch: number }; fulfilledMeta: { epoch: number } }
+>('projects/getProjects', async (requestData: any, { rejectWithValue, fulfillWithValue, getState }) => {
+  // Bumped by resetProjects (on logout) and carried through as action.meta so the
+  // reducers can discard a response that arrives after the session ended, instead
+  // of repopulating/erroring a cleared store.
   const epochAtStart = (getState() as any).projects?.epoch ?? 0;
 
   try {
@@ -24,15 +29,7 @@ export const getProjects = createAsyncThunk('projects/getProjects', async (reque
 
     const data = await response.data;
 
-    // The session can end while this request is in flight. Without this check a
-    // late fulfillment would repopulate `items` and flip `isloaded` back to true
-    // on a logged-out store, so the next user to log in would skip the refetch
-    // and see the previous user's projects.
-    if (((getState() as any).projects?.epoch ?? 0) !== epochAtStart) {
-      return rejectWithValue('Aborted: session reset while request was in flight');
-    }
-
-    return data;
+    return fulfillWithValue(data, { epoch: epochAtStart });
     //return mockSearchData; // For testing, we return mock data
 
   } catch (error) {
@@ -41,11 +38,11 @@ export const getProjects = createAsyncThunk('projects/getProjects', async (reque
       // request" and skip retrying — a retry would just wait the full timeout
       // again while re-running a query that walks every page of projects.
       if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-        return rejectWithValue({ type: 'TIMEOUT', message: error.message });
+        return rejectWithValue({ type: 'TIMEOUT', message: error.message }, { epoch: epochAtStart });
       }
-      return rejectWithValue(error.response?.data || error.message);
+      return rejectWithValue(error.response?.data || error.message, { epoch: epochAtStart });
     }
-    return rejectWithValue('An unknown error occurred');
+    return rejectWithValue('An unknown error occurred', { epoch: epochAtStart });
   }
 });
 
@@ -90,11 +87,13 @@ export const projectsSlice = createSlice({
         state.isloaded = false;
       })
       .addCase(getProjects.fulfilled, (state, action) => {
+        if (action.meta.epoch !== state.epoch) return; // stale response from a reset session
         state.status = 'succeeded';
         state.isloaded = true;
         state.items = action.payload; // Replace the list with search results
       })
       .addCase(getProjects.rejected, (state, action) => {
+        if (action.meta.epoch !== state.epoch) return; // stale rejection from a reset session
         state.status = 'failed';
         state.isloaded = false;
         state.error = action.payload; // Use payload from rejectWithValue

@@ -347,9 +347,11 @@ const renderWithProviders = (
 ) => {
   const store = createMockStore(storeState);
 
-  // Mock localStorage
+  // Mock localStorage. `name: null` matches dataProductIdFromUrl in tests, which is
+  // always null since no test sets a dataProductId search param - keeps the cached
+  // value "valid" per DataProductsDetailView's stale-cache guard.
   const localStorageMock = {
-    getItem: vi.fn(() => JSON.stringify({ icon: 'iVBORw0KGgo' })),
+    getItem: vi.fn(() => JSON.stringify({ icon: 'iVBORw0KGgo', name: null })),
     setItem: vi.fn(),
     removeItem: vi.fn(),
     clear: vi.fn()
