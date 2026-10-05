@@ -1,7 +1,8 @@
 import { configureStore } from '@reduxjs/toolkit';
+import axios from 'axios';
 import { apiSlice } from './api/apiSlice';
 import { useDispatch, useSelector, type TypedUseSelectorHook } from 'react-redux';
-import userReducer, { setCredentials } from '../features/user/userSlice';
+import userReducer, { setCredentials, setMode } from '../features/user/userSlice';
 import searchReducer from '../features/search/searchSlice';
 import resourcesReducer from '../features/resources/resourcesSlice';
 import entryReducer from '../features/entry/entrySlice';
@@ -53,6 +54,15 @@ export const hydrateUserState = async () => {
       token: persisted.token,
       user: persisted.userData,
     }));
+    if (persisted.mode) {
+      store.dispatch(setMode(persisted.mode));
+    }
+    // axios.defaults.headers is in-memory only and does not survive a reload,
+    // so requests fired before any thunk sets it themselves (e.g. useAppBootstrap's
+    // fetchAppConfig) would otherwise go out with no Authorization header and 401.
+    if (persisted.token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${persisted.token}`;
+    }
   }
 };
 
