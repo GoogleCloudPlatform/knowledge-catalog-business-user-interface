@@ -9,6 +9,7 @@ import { resetBrowseUIState } from '../../features/resources/resourcesSlice';
 import { useDispatch } from 'react-redux';
 import { type AppDispatch } from '../../app/store';
 import { useAuth } from '../../auth/AuthProvider';
+import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
 import { SIDEBAR_ICONS } from '../../constants/icons';
 import { version } from '../../../package.json';
 
@@ -18,6 +19,10 @@ const GlobalSidebar: React.FC = () => {
   const { isAccessPanelOpen } = useAccessRequest();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useAuth();
+  // These eager refresh-on-navigate fetches read appConfig (project scoping) at
+  // dispatch time. During the bootstrap they'd run unscoped, so skip them and
+  // let the destination page's own gated mount effect do the fetch instead.
+  const { isAppConfigReady } = useAppBootstrapStatus();
 
   const isSearchActive = location.pathname === '/home'
                       || location.pathname === '/search'
@@ -32,7 +37,9 @@ const GlobalSidebar: React.FC = () => {
 
   const handleGlossariesClick = () => {
     dispatch(resetGlossaryUIState());
-    dispatch(fetchGlossaries({ id_token: user?.token }));
+    if (isAppConfigReady) {
+      dispatch(fetchGlossaries({ id_token: user?.token }));
+    }
     navigate('/glossaries');
   };
 
@@ -43,7 +50,9 @@ const GlobalSidebar: React.FC = () => {
 
   const handleDataProducts = () => {
     dispatch(resetDataProductsUIState());
-    dispatch(fetchDataProductsList({ id_token: user?.token }));
+    if (isAppConfigReady) {
+      dispatch(fetchDataProductsList({ id_token: user?.token }));
+    }
     navigate('/data-products');
   };
 

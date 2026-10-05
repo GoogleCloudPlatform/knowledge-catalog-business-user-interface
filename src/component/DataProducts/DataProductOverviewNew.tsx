@@ -14,7 +14,7 @@ import type { GridColDef, GridRowsProp } from '@mui/x-data-grid';
 import TableView from '../Table/TableView';
 import { SchemaOutlined as SchemaIcon, Check as CheckIcon, ContentCopy, ListAltOutlined, LocationOnOutlined, LabelOutlined as LabelIcon } from '@mui/icons-material';
 import { useNotification } from '../../contexts/NotificationContext';
-import { normalizeSystemName } from '../../utils/resourceUtils';
+import { normalizeSystemName, toJsDate } from '../../utils/resourceUtils';
 
 const StringRenderer = ({ value }:any) => {
   const isHtml = /<\/?[a-z][\s\S]*>/i.test(value);
@@ -99,6 +99,13 @@ interface DataProductOverviewNewProps {
   sampleTableData?: any;
   css: React.CSSProperties;
   labels?: Record<string, string>;
+  // Authoritative Data Product resource createTime/updateTime (e.g. from the
+  // Data Products list API), which is more accurate than entry.createTime/
+  // entry.updateTime - those come from the Dataplex Catalog Entry wrapping
+  // this resource, which only reflects when the entry's aspects were last
+  // re-synced, not when the resource itself was actually last modified.
+  createTime?: any;
+  updateTime?: any;
 }
 
 const OverflowTooltip: React.FC<{ text: string; children: React.ReactElement<{ onMouseEnter?: React.MouseEventHandler<HTMLElement>; onMouseLeave?: React.MouseEventHandler<HTMLElement> }> }> = ({ text, children }) => {
@@ -117,7 +124,7 @@ const OverflowTooltip: React.FC<{ text: string; children: React.ReactElement<{ o
   );
 };
 
-const DataProductOverviewNew: React.FC<DataProductOverviewNewProps> = ({ entry, entryType, sampleTableData, css, labels: passedLabels }) => {
+const DataProductOverviewNew: React.FC<DataProductOverviewNewProps> = ({ entry, entryType, sampleTableData, css, labels: passedLabels, createTime: passedCreateTime, updateTime: passedUpdateTime }) => {
   const [sampleDataEnabled, setSampleDataEnabled] = React.useState(false);
   const [filteredSchemaEntry, setFilteredSchemaEntry] = useState<any>(null);
   const [sampleFilterText, setSampleFilterText] = useState('');
@@ -144,31 +151,19 @@ const DataProductOverviewNew: React.FC<DataProductOverviewNewProps> = ({ entry, 
   }, [sampleTableData, resolveValue]);
 
 
-const getFormattedDateTimeParts = (timestamp: any) => {
-  if (!timestamp) {
-    return { date: '-', time: '' };
-  }
-
-  const myDate = new Date(timestamp * 1000);
-
-  const date = new Intl.DateTimeFormat('en-US', {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(myDate);
-
-  const time = new Intl.DateTimeFormat('en-US', {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true
-  }).format(myDate);
-
+// This panel intentionally shows the raw UTC value (no local-timezone
+// conversion) so it matches what the Google Cloud Dataplex console displays
+// for the same entry - unlike the rest of the app, which converts to the
+// viewer's local timezone.
+const getUtcDateTimeParts = (dateTime: any) => {
+  const myDate = toJsDate(dateTime);
+  if (!myDate) return { date: '-', time: '' };
+  const date = new Intl.DateTimeFormat('en-US', { month: "short", day: "numeric", year: "numeric", timeZone: 'UTC' }).format(myDate);
+  const time = new Intl.DateTimeFormat('en-US', { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true, timeZone: 'UTC' }).format(myDate);
   return { date, time };
 };
-
-const { date: createDate, time: createTime } = (entryType && entryType=='data-product') ? {date : entry?.createTime.split('T')[0], time:entry?.createTime.split('T')[1]?.slice(0, 8)} : getFormattedDateTimeParts(entry?.createTime?.seconds);
-const { date: updateDate, time: updateTime } = (entryType && entryType=='data-product') ? {date : entry?.updateTime.split('T')[0], time:entry?.updateTime.split('T')[1]?.slice(0, 8)} : getFormattedDateTimeParts(entry?.updateTime?.seconds);
+const { date: createDate, time: createTime } = getUtcDateTimeParts(passedCreateTime ?? entry?.createTime);
+const { date: updateDate, time: updateTime } = getUtcDateTimeParts(passedUpdateTime ?? entry?.updateTime);
 
 
   const getEntryType = (namePath: string = '' , separator: string = '' ) => {

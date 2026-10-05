@@ -30,6 +30,7 @@ interface SchemaRow {
   type: string;
   metaDataType: string;
   mode: string;
+  semantic: string;
   description: string;
 }
 
@@ -38,6 +39,14 @@ const COLUMN_CONFIGS = [
   { key: 'type', initialWidth: 160, minWidth: 80 },
   { key: 'metadataType', initialWidth: 200, minWidth: 100 },
   { key: 'mode', initialWidth: 140, minWidth: 80 },
+];
+
+// Dataplex's generic Schema aspect type defines a `semantic` field (e.g.
+// DIMENSION_TYPE/MEASURE_TYPE) that BigQuery columns never populate but
+// Looker dimensions/measures do — shown only when at least one field has it.
+const COLUMN_CONFIGS_WITH_SEMANTIC = [
+  ...COLUMN_CONFIGS,
+  { key: 'semantic', initialWidth: 160, minWidth: 80 },
 ];
 
 const PREVIEW_COLUMN_CONFIGS = [
@@ -95,10 +104,14 @@ const Schema: React.FC<SchemaProps> = ({ entry, isPreview = false, sx }) => {
   const mode = useSelector((state: any) => state.user.mode) as string;
   const isDark = mode === 'dark';
   const containerRef = useRef<HTMLDivElement>(null);
-  const [sortColumn, setSortColumn] = useState<'name' | 'type' | 'metaDataType' | 'mode' | 'mode' | null>(null);
+  const [sortColumn, setSortColumn] = useState<'name' | 'type' | 'metaDataType' | 'mode' | 'semantic' | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const number = entry.entryType.split('/')[1];
+  const schema = entry.aspects?.[`${number}.global.schema`]?.data?.fields?.fields?.listValue?.values || [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hasSemanticData = schema.some((field: any) => !!field.structValue?.fields?.semantic?.stringValue);
   const { columnWidths, activeIndex, handleMouseDown, setColumnWidths } = useColumnResize({
-    columns: isPreview ? PREVIEW_COLUMN_CONFIGS : COLUMN_CONFIGS,
+    columns: isPreview ? PREVIEW_COLUMN_CONFIGS : (hasSemanticData ? COLUMN_CONFIGS_WITH_SEMANTIC : COLUMN_CONFIGS),
     mode: isPreview ? 'coupled' : 'flex',
   });
 
@@ -115,7 +128,7 @@ const Schema: React.FC<SchemaProps> = ({ entry, isPreview = false, sx }) => {
     ? { width: `${PREVIEW_WIDTH_RATIOS[index] * 100}%`, flexShrink: 1, minWidth: 0, overflow: 'hidden' }
     : { width: `${columnWidths[index]}px`, flexShrink: 0 };
 
-  const handleToggleSort = (column: 'name' | 'type' | 'metaDataType' | 'mode') => {
+  const handleToggleSort = (column: 'name' | 'type' | 'metaDataType' | 'mode' | 'semantic') => {
     if (sortColumn === column) {
       if (sortOrder === 'asc') {
         setSortOrder('desc');
@@ -129,20 +142,19 @@ const Schema: React.FC<SchemaProps> = ({ entry, isPreview = false, sx }) => {
     }
   };
 
-  const getSortTooltip = (column: 'name' | 'type' | 'metaDataType' | 'mode'): string => {
+  const getSortTooltip = (column: 'name' | 'type' | 'metaDataType' | 'mode' | 'semantic'): string => {
     if (sortColumn === column && sortOrder === 'asc') return 'Sort Z to A';
     if (sortColumn === column && sortOrder === 'desc') return '';
     return 'Sort A to Z';
   };
 
-  const number = entry.entryType.split('/')[1];
-  const schema = entry.aspects?.[`${number}.global.schema`]?.data?.fields?.fields?.listValue?.values || [];
   const rows: SchemaRow[] = schema.map((field: any, index: number) => ({
     id: index + 1,
     name: field.structValue.fields.name.stringValue,
     type: field.structValue.fields.dataType.stringValue,
     metaDataType: field.structValue.fields.metadataType.stringValue,
     mode: field.structValue.fields.mode.stringValue,
+    semantic: field.structValue.fields.semantic?.stringValue || '-',
     description: (field.structValue.fields.description && field.structValue.fields.description != null) ? field.structValue.fields.description.stringValue : '-',
   }));
 
@@ -154,7 +166,7 @@ const Schema: React.FC<SchemaProps> = ({ entry, isPreview = false, sx }) => {
     return sortOrder === 'asc' ? sorted : sorted.reverse();
   }, [rows, sortColumn, sortOrder]);
 
-  const sortIcon = (column: 'name' | 'type' | 'metaDataType' | 'mode') => (
+  const sortIcon = (column: 'name' | 'type' | 'metaDataType' | 'mode' | 'semantic') => (
     <Box
       component="span"
       sx={{
@@ -293,6 +305,36 @@ const Schema: React.FC<SchemaProps> = ({ entry, isPreview = false, sx }) => {
                 />
               </div>
             )}
+            {!isPreview && hasSemanticData && (
+              <div style={{ ...headerCellStyle, width: `${columnWidths[4]}px`, flexShrink: 0, paddingLeft: '20px' }}>
+                <Tooltip title={getSortTooltip('semantic')} sx={{ flex: 1 }} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -14] } }] } }}>
+                  <Box
+                    role="button"
+                    onClick={() => handleToggleSort('semantic')}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                      padding: '8px 8px',
+                      margin: '-8px -8px',
+                      flex: 1,
+                      transition: 'background-color 0.2s ease',
+                      '&:hover': { backgroundColor: isDark ? '#3c4043' : '#F8F9FA' },
+                    }}
+                  >
+                    <span>Semantic</span>
+                    {sortIcon('semantic')}
+                  </Box>
+                </Tooltip>
+                <ResizeHandle
+                  onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(4, e); }}
+                  isActive={activeIndex === 4}
+                  darkMode={isDark}
+                />
+              </div>
+            )}
             {!isPreview && (
               <div style={{ ...headerCellStyle, flex: 1, minWidth: 0, paddingLeft: '20px' }}>Description</div>
             )}
@@ -380,6 +422,13 @@ const Schema: React.FC<SchemaProps> = ({ entry, isPreview = false, sx }) => {
                     }}>
                       {row.mode}
                     </Typography>
+                  </div>
+                )}
+
+                {/* Semantic */}
+                {!isPreview && hasSemanticData && (
+                  <div style={{ ...bodyCellStyle, width: `${columnWidths[4]}px`, flexShrink: 0, padding: '10px 20px', minWidth: 0 }}>
+                    <span style={tagChipStyle}>{row.semantic}</span>
                   </div>
                 )}
 

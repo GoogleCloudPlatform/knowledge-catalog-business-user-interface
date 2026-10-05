@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import type { AppDispatch, RootState } from '../../app/store';
 import { browseResourcesByAspects, setItems, setItemsStatus } from '../../features/resources/resourcesSlice';
 import { useDispatch, useSelector } from 'react-redux';
+import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
 import ResourcePreview from '../Common/ResourcePreview';
 import DetailPageOverview from '../DetailPageOverview/DetailPageOverview';
 import AnnotationPageSkeleton from './AnnotationPageSkeleton';
@@ -58,6 +59,13 @@ interface MainComponentProps {
   onSidebarToggle?: (open: boolean) => void;
   isSmallScreen?: boolean;
   accessDeniedItemId?: string | null;
+  // Cache key (aspectTitle__subTypeTitle) that should bypass aspectBrowseCache on
+  // its next fetch — set when this sub-item was just selected via the ?subType=
+  // URL bootstrap (copy-link/reload landing), so a stale background-prefetched
+  // cache entry doesn't silently stand in for a fresh call. Cleared via
+  // onDeepLinkCacheBypassed once consumed.
+  deepLinkBypassCacheKey?: string | null;
+  onDeepLinkCacheBypassed?: () => void;
 }
 
 const MainComponent: React.FC<MainComponentProps> = ({
@@ -78,11 +86,18 @@ const MainComponent: React.FC<MainComponentProps> = ({
   onSidebarToggle,
   isSmallScreen = false,
   accessDeniedItemId = null,
+  deepLinkBypassCacheKey = null,
+  onDeepLinkCacheBypassed,
 }) => {
 
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const id_token = useSelector((state:any) => state.user.token);
+  // browseResourcesByAspects always resolves the aspect's project number -> project
+  // id via get-projects (see getAspectName in resourcesSlice.ts); without it the
+  // query silently falls back to an invalid aspect path instead of erroring, so
+  // this must wait rather than fire early.
+  const { areProjectsReady } = useAppBootstrapStatus();
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [copyLinkSuccess, setCopyLinkSuccess] = useState(false);
 
@@ -131,6 +146,10 @@ const MainComponent: React.FC<MainComponentProps> = ({
       // Check if data is already cached
       const cacheKey = generateCacheKey(selectedCard.title, selectedSubItem.title);
       const cachedData = aspectBrowseCache[cacheKey];
+      // A copy-link/reload landing on this exact sub-item should always hit the
+      // API once, even if it was already cached by another aspect's background
+      // prefetch — otherwise the deep link silently serves stale data.
+      const bypassCache = deepLinkBypassCacheKey === cacheKey;
 
       if (accessDeniedItemId === cacheKey) {
         // Already known to be forbidden — skip re-fetching, just surface as failed
@@ -139,11 +158,17 @@ const MainComponent: React.FC<MainComponentProps> = ({
         return;
       }
 
-      if (cachedData && subTypesWithCache[cacheKey]) {
+      if (cachedData && subTypesWithCache[cacheKey] && !bypassCache) {
         // Use cached data - set directly without API call
         dispatch(setItems(cachedData.data));
         dispatch(setItemsStatus('succeeded'));
         // Don't clear preview when using cache for better UX
+      } else if (!areProjectsReady) {
+        // Wait for get-projects before firing browseResourcesByAspects — without
+        // it the aspect path resolves incorrectly instead of erroring, so this
+        // must hold rather than fire early. Keep the loading state so the Linked
+        // Assets view shows its skeleton instead of an empty state meanwhile.
+        dispatch(setItemsStatus('loading'));
       } else {
         // Fetch fresh data
         dispatch({ type: 'resources/setItemsPreviousPageRequest', payload: null });
@@ -151,9 +176,12 @@ const MainComponent: React.FC<MainComponentProps> = ({
         dispatch({ type: 'resources/setItemsStoreData', payload: [] });
         dispatch(browseResourcesByAspects({term : '', id_token: id_token, annotationName : selectedCard.title, subAnnotationName: selectedSubItem.title || null}));
         setIsPreviewOpen(false);
+        if (bypassCache) {
+          onDeepLinkCacheBypassed?.();
+        }
       }
     }
-  }, [selectedCard, selectedSubItem, dispatch, id_token, aspectBrowseCache, subTypesWithCache, accessDeniedItemId]);
+  }, [selectedCard, selectedSubItem, dispatch, id_token, aspectBrowseCache, subTypesWithCache, accessDeniedItemId, deepLinkBypassCacheKey, onDeepLinkCacheBypassed, areProjectsReady]);
 
   // Reset description expanded state when selected card changes
   useEffect(() => {

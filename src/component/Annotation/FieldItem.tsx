@@ -9,7 +9,85 @@ import { getAspectL2Icon } from '../../constants/aspectIcons';
 const isUrl = (val: string): boolean =>
   val.startsWith('http://') || val.startsWith('https://');
 
+// Cheap pre-check before paying for a DOMParser call. Aspect stringValues are
+// only ever expected to carry h1/h2/h3/pre markup (per data contract) — no
+// other tags, no attributes.
+const ALLOWED_TAGS = ['h1', 'h2', 'h3', 'pre'] as const;
+type AllowedTag = typeof ALLOWED_TAGS[number];
+
+const looksLikeAllowedHtml = (val: string): boolean =>
+  ALLOWED_TAGS.some((tag) => new RegExp(`<${tag}[\\s>]`, 'i').test(val));
+
+/**
+ * Recursively renders a DOM node without ever using dangerouslySetInnerHTML.
+ * - An allowlisted element (h1/h2/h3/pre) is rebuilt as that React element
+ *   using ONLY its textContent — never innerHTML/attributes — so any markup
+ *   nested inside it (however it got there) is flattened to inert text.
+ * - Any other element (e.g. a wrapping <p>/<div>, however deeply nested) is
+ *   NOT rendered as its own tag — we recurse into its children instead, so
+ *   an allowlisted tag nested inside a non-allowlisted wrapper (e.g. a
+ *   <pre> inside a <p>, or several levels of <div>) still gets found and
+ *   rendered properly, while the wrapper itself contributes no markup.
+ * - A text node renders as plain text.
+ */
+const renderNode = (node: ChildNode, key: string): React.ReactNode => {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent ?? '';
+    return text.trim() ? <React.Fragment key={key}>{text}</React.Fragment> : null;
+  }
+
+  if (node.nodeType !== Node.ELEMENT_NODE) return null;
+
+  const tag = node.nodeName.toLowerCase();
+  const text = node.textContent ?? '';
+  if (!text.trim()) return null;
+
+  if (ALLOWED_TAGS.includes(tag as AllowedTag)) {
+    const Tag = tag as AllowedTag;
+    const tagStyle: React.CSSProperties =
+      Tag === 'pre'
+        ? { whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowX: 'auto', margin: 0, fontFamily: 'monospace' }
+        : { margin: 0 };
+    return (
+      <Tag key={key} style={tagStyle}>
+        {text}
+      </Tag>
+    );
+  }
+
+  const children = Array.from(node.childNodes)
+    .map((child, i) => renderNode(child, `${key}.${i}`))
+    .filter((child) => child !== null);
+  return children.length > 0 ? <React.Fragment key={key}>{children}</React.Fragment> : null;
+};
+
+/**
+ * Renders a stringValue that may contain h1/h2/h3/pre markup (at any nesting
+ * depth), without ever using dangerouslySetInnerHTML. See renderNode above.
+ */
+const renderAllowedHtml = (val: string, style?: React.CSSProperties): React.ReactNode => {
+  const doc = new DOMParser().parseFromString(val, 'text/html');
+  const rendered = Array.from(doc.body.childNodes)
+    .map((node, index) => renderNode(node, String(index)))
+    .filter((node) => node !== null);
+
+  if (rendered.length === 0) return null;
+
+  const baseStyle: React.CSSProperties = {
+    fontFamily: 'Google Sans Text, sans-serif',
+    fontSize: '12px',
+    color: '#1F1F1F',
+    wordBreak: 'break-word',
+    ...style,
+  };
+
+  return <div style={baseStyle}>{rendered}</div>;
+};
+
 const renderStringValue = (val: string, style?: React.CSSProperties): React.ReactNode => {
+  if (looksLikeAllowedHtml(val)) {
+    return renderAllowedHtml(val, style);
+  }
   if (isUrl(val)) {
     return (
       <a

@@ -11,7 +11,7 @@ import type { AppDispatch } from '../../app/store';
 import { fetchEntry, clearHistory } from '../../features/entry/entrySlice';
 import SubmitAccess from '../SearchPage/SubmitAccess';
 import NotificationBar from '../SearchPage/NotificationBar';
-import { getName } from '../../utils/resourceUtils';
+import { getName, toJsDate } from '../../utils/resourceUtils';
 import { FEATURE_FLAGS } from '../../utils/featureFlags';
 import FilterChipCarousel from './FilterChipCarousel';
 import { useNoAccess } from '../../contexts/NoAccessContext';
@@ -323,13 +323,8 @@ const ResourceViewer: React.FC<ResourceViewerProps> = ({
 
   // Utility functions
   const getFormatedDate = (date: any) => {
-    if (!date) return '-';
-    
-    const myDate = new Date(date);
-
-    if (isNaN(myDate.getTime())) {
-      return '-';
-    }
+    const myDate = toJsDate(date);
+    if (!myDate) return '-';
 
     const formatedDate = new Intl.DateTimeFormat('en-US', { month: "long", day: "numeric", year: "numeric" }).format(myDate);
     return (formatedDate);

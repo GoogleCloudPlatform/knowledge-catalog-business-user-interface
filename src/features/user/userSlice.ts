@@ -20,9 +20,12 @@ export const userSlice = createSlice({
     changeMode: (state) => {
       state.mode = state.mode === 'light' ? 'dark' : 'light';
     },
+    setMode: (state, action) => {
+      state.mode = action.payload;
+    },
   },
 });
 
-export const { setCredentials, setToken, changeMode } = userSlice.actions;
+export const { setCredentials, setToken, changeMode, setMode } = userSlice.actions;
 
 export default userSlice.reducer;

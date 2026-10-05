@@ -61,7 +61,7 @@ const ConfigurationsPanel: React.FC<ConfigurationsPanelProps> = ({ onClose, data
   //   { key: 'Last Run Status', value: 'PASSED', hasIcon: true },
   //   { key: 'Last Run Time', value: 'May 13, 2025 5:45 PM' }
   // ];
-  const { date: updateDate, time: updateTime } = getFormattedDateTimeParts(dataQualtyScan.jobs[0]?.startTime?.seconds);
+  const { date: updateDate, time: updateTime } = getFormattedDateTimeParts(dataQualtyScan.jobs[0]?.startTime);
 
   return (
     <Box

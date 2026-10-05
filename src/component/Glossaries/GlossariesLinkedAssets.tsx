@@ -97,11 +97,13 @@ const GlossariesLinkedAssets: React.FC<GlossariesLinkedAssetsProps> = ({
         if (systemFilters.length > 0) {
           const system =
             asset.dataplexEntry?.entrySource?.system?.toLowerCase() || "";
-          const PRODUCT_API_NAMES: Record<string, string> = { "Knowledge Catalog": "Dataplex Universal Catalog" };
+          // "Dataplex" and "Dataplex Universal Catalog" are both surfaced by the API
+          // as the "Knowledge Catalog" product (matches resourcesSlice.ts's query-side mapping).
+          const PRODUCT_API_NAMES: Record<string, string[]> = { "Knowledge Catalog": ["Dataplex Universal Catalog", "Dataplex"] };
           const match = systemFilters.some((filter: any) => {
             if (filter.name === "Others") return true;
-            const apiName = PRODUCT_API_NAMES[filter.name] || filter.name;
-            return system === apiName.toLowerCase();
+            const apiNames = PRODUCT_API_NAMES[filter.name] || [filter.name];
+            return apiNames.some((apiName) => system === apiName.toLowerCase());
           });
           if (!match) return false;
         }

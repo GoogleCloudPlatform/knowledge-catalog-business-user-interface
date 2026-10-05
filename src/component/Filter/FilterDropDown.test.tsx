@@ -5,6 +5,17 @@ import { vi, beforeEach, beforeAll, it, describe, expect } from 'vitest';
 import FilterDropdown from './FilterDropDown';
 import axios from 'axios';
 
+// Projects come from /get-projects (state.projects.items). Enough entries to
+// also trigger the "See X more" button for the Projects section.
+const mockProjectsList = [
+  { projectId: 'project-1', name: 'projects/100000001' },
+  { projectId: 'project-2', name: 'projects/100000002' },
+  ...Array.from({ length: 13 }, (_, i) => ({
+    projectId: `project-${i + 3}`,
+    name: `projects/10000000${i + 3}`,
+  })),
+];
+
 // Mock auth context - with 15 aspects to trigger "See X more" button
 const mockAuthContext = {
   user: {
@@ -47,12 +58,6 @@ const mockAuthContext = {
           }
         }))
       ],
-      projects: [
-        { projectId: 'project-1' },
-        { projectId: 'project-2' },
-        // Additional projects to also trigger "See X more" for Projects section
-        ...Array.from({ length: 13 }, (_, i) => ({ projectId: `project-${i + 3}` }))
-      ],
       defaultSearchProduct: {},
       defaultSearchAssets: {},
       browseByAspectTypes: {},
@@ -75,9 +80,11 @@ const createMockStore = (initialState: { search?: Record<string, unknown>; proje
       searchType: 'All',
       ...(initialState.search || {})
     },
+    // The Projects filter list is sourced from /get-projects (state.projects),
+    // not appConfig, so the default store models a completed bootstrap.
     projects: {
-      isloaded: false,
-      items: [],
+      isloaded: true,
+      items: mockProjectsList,
       ...(initialState.projects || {})
     },
     user: {
@@ -162,6 +169,16 @@ vi.mock('../../assets/svg/CloudStorage.svg', () => ({ default: 'cloud-storage-ic
 vi.mock('../../assets/svg/Dataplex.svg', () => ({ default: 'dataplex-icon' }));
 vi.mock('../../assets/svg/Dataproc.svg', () => ({ default: 'dataproc-icon' }));
 vi.mock('../../assets/svg/vertex.svg', () => ({ default: 'vertex-icon' }));
+
+// Bootstrap is complete by default so the searchSubmitted auto-select effect
+// (gated on isBootstrapping, matching SearchPage's own gate) runs in tests.
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: vi.fn(() => ({
+    isAppConfigReady: true,
+    areProjectsReady: true,
+    isBootstrapping: false
+  }))
+}));
 
 // Mock getProjects action
 vi.mock('../../features/projects/projectsSlice', () => ({
@@ -862,13 +879,16 @@ describe('FilterDropdown', () => {
   });
 
   describe('Projects loading', () => {
-    it('dispatches getProjects on mount when not loaded', () => {
+    // getProjects is now dispatched once globally by useAppBootstrap (see
+    // src/hooks/useAppBootstrap.test.ts), not by FilterDropDown itself, so
+    // FilterDropDown no longer dispatches it on mount.
+    it('does NOT dispatch getProjects on mount (handled globally by useAppBootstrap)', () => {
       renderFilterDropdown();
 
-      expect(mockDispatch).toHaveBeenCalledWith({
-        type: 'projects/getProjects',
-        payload: { id_token: 'test-token' }
-      });
+      const projectsCall = mockDispatch.mock.calls.find(
+        (call: unknown[]) => (call[0] as { type?: string })?.type === 'projects/getProjects'
+      );
+      expect(projectsCall).toBeUndefined();
     });
 
     it('uses Redux projects when already loaded', () => {
@@ -879,9 +899,7 @@ describe('FilterDropdown', () => {
         }
       });
 
-      // Component will check if projects are loaded from Redux state
-      // The useEffect at mount will still dispatch once, but subsequent renders won't
-      expect(mockDispatch).toHaveBeenCalled();
+      expect(screen.getByText('Projects')).toBeInTheDocument();
     });
 
     it('updates projects list when Redux projects are loaded', async () => {

@@ -16,6 +16,20 @@ vi.mock('../../auth/AuthProvider', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+// Mock useAppBootstrapStatus — default to "bootstrap complete" so existing
+// tests (written before browseResourcesByAspects started waiting on
+// get-projects) keep exercising the fetch path unless a test overrides this.
+const { mockUseAppBootstrapStatus } = vi.hoisted(() => ({
+  mockUseAppBootstrapStatus: vi.fn(() => ({
+    isAppConfigReady: true,
+    areProjectsReady: true,
+    isBootstrapping: false,
+  })),
+}));
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: () => mockUseAppBootstrapStatus(),
+}));
+
 // Mock react-redux
 vi.mock('react-redux', () => ({
   useDispatch: () => mockDispatch,
@@ -335,6 +349,13 @@ describe('MainComponent', () => {
     // Setup default useAuth mock
     mockUseAuth.mockReturnValue({
       user: { token: 'test-token-123' },
+    });
+
+    // Setup default useAppBootstrapStatus mock (bootstrap complete)
+    mockUseAppBootstrapStatus.mockReturnValue({
+      isAppConfigReady: true,
+      areProjectsReady: true,
+      isBootstrapping: false,
     });
 
     // Setup default useSelector mock

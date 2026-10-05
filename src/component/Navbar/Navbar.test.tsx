@@ -190,10 +190,13 @@ describe('Navbar', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/home');
     });
 
-    it('calls updateUser when logo is clicked with a logged-in user', () => {
+    it('navigates home without clearing appConfig', () => {
+      // Previously the logo click wiped appConfig via updateUser, which forced a
+      // full re-bootstrap (and a loading spinner) on every click.
       renderNavbar();
       fireEvent.click(screen.getByAltText('Knowledge Catalog'));
-      expect(mockAuthContextValue.updateUser).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/home');
+      expect(mockAuthContextValue.updateUser).not.toHaveBeenCalled();
     });
   });
 

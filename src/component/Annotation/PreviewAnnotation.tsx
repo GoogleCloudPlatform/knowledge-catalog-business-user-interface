@@ -365,7 +365,7 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
 
   return (
     <>
-      <div style={{ fontSize: "0.75rem", display: "flex", flexDirection: "column", flex: "1 1 auto", overflow: "hidden", borderRadius: '12px', ...css }}>
+      <div style={{ fontSize: "0.75rem", display: "flex", flexDirection: "column", flex: "1 1 auto", overflow: "visible", borderRadius: '12px', ...css }}>
         {keys.map((key) => {
           const isSchema = key === `${number}.global.schema`;
           const isOverview = key.endsWith('.global.overview');
@@ -496,7 +496,6 @@ const PreviewAnnotation: React.FC<PreviewAnnotationProps> = ({
                   ...(isLastAspect && {
                     borderBottomLeftRadius: '12px',
                     borderBottomRightRadius: '12px',
-                    overflow: 'hidden',
                   }),
                 }}>
                   {renderAnnotation(hasFields ? rawData.fields : rawData, key)}

@@ -1,14 +1,15 @@
 import { configureStore, type AnyAction, type ThunkDispatch } from '@reduxjs/toolkit';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import axios, { AxiosError, AxiosHeaders } from 'axios';
-import projectsReducer, { getProjects, setIsLoaded, projectsSlice } from './projectsSlice';
+import projectsReducer, { getProjects, setIsLoaded, resetProjects, projectsSlice } from './projectsSlice';
 
 // Define the state type
 type ProjectsState = {
-  items: unknown;
+  items: any[];
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | undefined | unknown | null;
   isloaded: boolean;
+  epoch: number;
 };
 
 // Define store type
@@ -38,6 +39,7 @@ vi.mock('../../constants/urls', () => ({
     API_URL: 'http://localhost:3000/api/v1',
     GET_PROJECTS: '/get-projects',
   },
+  GET_PROJECTS_REQUEST_TIMEOUT_MS: 90000,
 }));
 
 // Create a typed mock for axios.get
@@ -132,6 +134,7 @@ describe('projectsSlice', () => {
           status: 'succeeded',
           error: null,
           isloaded: true,
+          epoch: 0,
         };
 
         const state = projectsReducer(initialStateWithLoaded, setIsLoaded({ isloaded: false }));
@@ -145,6 +148,7 @@ describe('projectsSlice', () => {
           status: 'succeeded',
           error: null,
           isloaded: false,
+          epoch: 0,
         };
 
         const state = projectsReducer(initialStateWithData, setIsLoaded({ isloaded: true }));
@@ -173,6 +177,7 @@ describe('projectsSlice', () => {
           status: 'succeeded',
           error: null,
           isloaded: true,
+          epoch: 0,
         };
         const action = { type: getProjects.pending.type };
         const state = projectsReducer(initialStateWithItems, action);
@@ -188,6 +193,7 @@ describe('projectsSlice', () => {
           status: 'idle',
           error: null,
           isloaded: true,
+          epoch: 0,
         };
         const action = { type: getProjects.pending.type };
         const state = projectsReducer(initialStateWithLoaded, action);
@@ -201,6 +207,7 @@ describe('projectsSlice', () => {
         const action = {
           type: getProjects.fulfilled.type,
           payload: mockProjectsResponse,
+          meta: { epoch: 0 },
         };
         const state = projectsReducer(undefined, action);
 
@@ -215,10 +222,12 @@ describe('projectsSlice', () => {
           status: 'loading',
           error: null,
           isloaded: false,
+          epoch: 0,
         };
         const action = {
           type: getProjects.fulfilled.type,
           payload: mockProjectsResponse,
+          meta: { epoch: 0 },
         };
         const state = projectsReducer(initialStateWithItems, action);
 
@@ -230,6 +239,7 @@ describe('projectsSlice', () => {
         const action = {
           type: getProjects.fulfilled.type,
           payload: [],
+          meta: { epoch: 0 },
         };
         const state = projectsReducer(undefined, action);
 
@@ -242,6 +252,7 @@ describe('projectsSlice', () => {
         const action = {
           type: getProjects.fulfilled.type,
           payload: null,
+          meta: { epoch: 0 },
         };
         const state = projectsReducer(undefined, action);
 
@@ -257,6 +268,7 @@ describe('projectsSlice', () => {
         const action = {
           type: getProjects.rejected.type,
           payload: errorMessage,
+          meta: { epoch: 0 },
         };
         const state = projectsReducer(undefined, action);
 
@@ -270,6 +282,7 @@ describe('projectsSlice', () => {
         const action = {
           type: getProjects.rejected.type,
           payload: errorPayload,
+          meta: { epoch: 0 },
         };
         const state = projectsReducer(undefined, action);
 
@@ -284,10 +297,12 @@ describe('projectsSlice', () => {
           status: 'loading',
           error: null,
           isloaded: false,
+          epoch: 0,
         };
         const action = {
           type: getProjects.rejected.type,
           payload: 'Error occurred',
+          meta: { epoch: 0 },
         };
         const state = projectsReducer(initialStateWithItems, action);
 
@@ -302,10 +317,12 @@ describe('projectsSlice', () => {
           status: 'loading',
           error: null,
           isloaded: true,
+          epoch: 0,
         };
         const action = {
           type: getProjects.rejected.type,
           payload: 'Error',
+          meta: { epoch: 0 },
         };
         const state = projectsReducer(initialStateWithLoaded, action);
 
@@ -321,8 +338,11 @@ describe('projectsSlice', () => {
           getProjects(mockRequestData)
         );
 
+        // Bounded so a hung request can't leave the bootstrap loading forever,
+        // but generous: this endpoint legitimately takes ~31s at 40k projects.
         expect(mockedAxiosGet).toHaveBeenCalledWith(
-          'http://localhost:3000/api/v1/get-projects'
+          'http://localhost:3000/api/v1/get-projects',
+          { timeout: 90000 }
         );
       });
 
@@ -756,7 +776,120 @@ describe('projectsSlice', () => {
 
       const state = store.getState().projects;
       expect(state.status).toBe('failed');
-      expect(state.error).toBe('timeout exceeded');
+      // Timeouts are tagged rather than reduced to a message, so the bootstrap
+      // can tell "slow endpoint" from "flaky request" and skip retrying.
+      expect(state.error).toEqual({ type: 'TIMEOUT', message: 'timeout exceeded' });
+    });
+  });
+
+  describe('timeout handling', () => {
+    it('tags a timeout so the bootstrap can skip retrying a slow endpoint', async () => {
+      const timeoutError = new AxiosError('timeout of 90000ms exceeded', 'ECONNABORTED');
+
+      mockedAxiosGet.mockRejectedValueOnce(timeoutError);
+
+      await (store.dispatch as ThunkDispatch<RootState, unknown, AnyAction>)(
+        getProjects(mockRequestData)
+      );
+
+      const state = store.getState().projects;
+      expect(state.status).toBe('failed');
+      // The shape matters: useAppBootstrap reads error.type to decide not to
+      // retry. A plain message string would be retried like any other failure.
+      expect(state.error).toEqual({
+        type: 'TIMEOUT',
+        message: 'timeout of 90000ms exceeded',
+      });
+    });
+
+    it('does not tag non-timeout failures', async () => {
+      const serverError = new AxiosError('Request failed with status code 500');
+      serverError.response = { data: { message: 'Server error' } } as any;
+
+      mockedAxiosGet.mockRejectedValueOnce(serverError);
+
+      await (store.dispatch as ThunkDispatch<RootState, unknown, AnyAction>)(
+        getProjects(mockRequestData)
+      );
+
+      expect(store.getState().projects.error).toEqual({ message: 'Server error' });
+    });
+  });
+
+  describe('resetProjects (logout)', () => {
+    it('clears items, not just the isloaded flag', async () => {
+      mockedAxiosGet.mockResolvedValueOnce({ data: [{ projectId: 'user-a-project', name: 'projects/111' }] });
+      await (store.dispatch as ThunkDispatch<RootState, unknown, AnyAction>)(
+        getProjects(mockRequestData)
+      );
+      expect(store.getState().projects.items).toHaveLength(1);
+
+      store.dispatch(resetProjects());
+
+      const state = store.getState().projects;
+      expect(state.items).toEqual([]);
+      expect(state.isloaded).toBe(false);
+      expect(state.status).toBe('idle');
+    });
+
+    it('discards a response that resolves after a reset, so the next user never sees the previous list', async () => {
+      // Simulates: user A's /get-projects is still in flight when they log out.
+      let resolveRequest: (value: unknown) => void = () => {};
+      mockedAxiosGet.mockReturnValueOnce(
+        new Promise((resolve) => { resolveRequest = resolve; })
+      );
+
+      const pending = (store.dispatch as ThunkDispatch<RootState, unknown, AnyAction>)(
+        getProjects(mockRequestData)
+      );
+
+      // Logout happens while the request is in flight.
+      store.dispatch(resetProjects());
+
+      // User A's response lands afterwards.
+      resolveRequest({ data: [{ projectId: 'user-a-project', name: 'projects/111' }] });
+      await pending;
+
+      const state = store.getState().projects;
+      // Without the epoch guard this would repopulate items and set
+      // isloaded=true, so the next user's bootstrap would skip the refetch.
+      expect(state.items).toEqual([]);
+      expect(state.isloaded).toBe(false);
+      // The thunk converts this stale success into a rejectWithValue, so without
+      // an epoch check in the `rejected` reducer too, this would clobber the
+      // freshly-reset state's status to 'failed' with a bogus "Aborted" error.
+      expect(state.status).toBe('idle');
+      expect(state.error).toBe(null);
+    });
+
+    it('discards a genuine request failure that resolves after a reset, so it does not mark the new session failed', async () => {
+      // Simulates: user A's /get-projects errors out (e.g. real server error)
+      // after they've already logged out.
+      let rejectRequest: (reason: unknown) => void = () => {};
+      mockedAxiosGet.mockReturnValueOnce(
+        new Promise((_resolve, reject) => { rejectRequest = reject; })
+      );
+
+      const pending = (store.dispatch as ThunkDispatch<RootState, unknown, AnyAction>)(
+        getProjects(mockRequestData)
+      );
+
+      // Logout happens while the request is in flight.
+      store.dispatch(resetProjects());
+
+      // User A's error lands afterwards - unlike the success case, this path
+      // isn't guarded by an epoch re-check inside the thunk, so it relies
+      // entirely on the `rejected` reducer's epoch check.
+      const serverError = new AxiosError('Request failed with status code 500');
+      serverError.response = { data: { message: 'Server error' } } as any;
+      rejectRequest(serverError);
+      await pending;
+
+      const state = store.getState().projects;
+      expect(state.items).toEqual([]);
+      expect(state.isloaded).toBe(false);
+      expect(state.status).toBe('idle');
+      expect(state.error).toBe(null);
     });
   });
 });

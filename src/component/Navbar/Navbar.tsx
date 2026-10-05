@@ -29,7 +29,7 @@ interface NavBarProps {
 }
 
 const Navbar: React.FC<NavBarProps> = ({ searchBar = false, searchNavigate = true }) => {
-  const { user, updateUser } = useAuth();
+  const { user } = useAuth();
   const dispatch = useDispatch<AppDispatch>();
   const searchFilters = useSelector((state: any) => state.search.searchFilters);
   const semanticSearch = useSelector((state: any) => state.search.semanticSearch);
@@ -58,26 +58,14 @@ const Navbar: React.FC<NavBarProps> = ({ searchBar = false, searchNavigate = tru
   const [anchorElNav, setAnchorElNav] = React.useState<null | HTMLElement>(null);
   const [anchorElUser, setAnchorElUser] = React.useState<null | HTMLElement>(null);
   const [openFeedback, setOpenFeedback] = React.useState<boolean>(false);
+  const [isAccountTooltipOpen, setIsAccountTooltipOpen] = React.useState<boolean>(false);
   const [isNotificationVisible, setIsNotificationVisible] = React.useState<boolean>(false);
   const [notificationMessage, setNotificationMessage] = React.useState<string>('');
 
+  // Navigating home must not clear appConfig — doing so forced a full
+  // re-bootstrap (and a loading spinner) on every logo click. appConfig is
+  // fetched once by useAppBootstrap and stays valid for the session.
   const handleLogoClick = () => {
-    if (user) {
-      const userData = {
-        name: user.name,
-        email: user.email,
-        picture: user.picture,
-        token: user.token,
-        tokenExpiry: user.tokenExpiry,
-        tokenIssuedAt: user.tokenIssuedAt,
-        hasRole: user.hasRole,
-        roles: user.roles,
-        permissions: user.permissions,
-        iamDisplayRole: user.iamDisplayRole,
-        appConfig: {}
-      };
-      updateUser(user.token, userData);
-    }
     navigate('/home');
   };
 
@@ -290,6 +278,10 @@ const Navbar: React.FC<NavBarProps> = ({ searchBar = false, searchNavigate = tru
 
             {/* Avatar */}
             <Tooltip
+              disableFocusListener
+              disableTouchListener
+              onOpen={() => setIsAccountTooltipOpen(true)}
+              onClose={() => setIsAccountTooltipOpen(false)}
               slotProps={{
                 tooltip: {
                   sx: {
@@ -320,6 +312,7 @@ const Navbar: React.FC<NavBarProps> = ({ searchBar = false, searchNavigate = tru
                   padding: '4px 8px 4px 4px',
                   borderRadius: '100px',
                   transition: 'background-color 0.2s',
+                  backgroundColor: isAccountTooltipOpen ? (mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : '#e1e1e1') : undefined,
                   '&:hover': { backgroundColor: mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : '#e1e1e1' },
                   position: 'relative',
                   zIndex: anchorElUser ? 1400 : 'auto',

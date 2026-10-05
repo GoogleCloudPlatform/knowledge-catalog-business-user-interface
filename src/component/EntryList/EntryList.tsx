@@ -22,6 +22,7 @@ import type { ActiveFilter, PropertyConfig } from '../Common/FilterBar';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import ResizeHandle from '../Schema/ResizeHandle';
 import OverflowTooltip from '../Common/OverflowTooltip';
+import { toJsDate } from '../../utils/resourceUtils';
 
 interface EntryItem {
   id: string;
@@ -53,7 +54,8 @@ const EntryList: React.FC<EntryListProps> = ({ entry }) => {
   const error = useSelector((state: any) => state.resources.entryListError);
 
   const getFormatedDate = (date: any) => {
-    const myDate = new Date(date * 1000);
+    const myDate = toJsDate(date);
+    if (!myDate) return '-';
     const formatedDate = new Intl.DateTimeFormat('en-US', { month: "short", day: "numeric", year: "numeric" }).format(myDate);
     return formatedDate;
   };
@@ -128,7 +130,7 @@ const EntryList: React.FC<EntryListProps> = ({ entry }) => {
           name: res.dataplexEntry.name.split('/').pop() ?? '',
           full_name: res.dataplexEntry.name,
           description: res.dataplexEntry.entrySource.description,
-          lastModified: getFormatedDate(res.dataplexEntry.updateTime.seconds)
+          lastModified: getFormatedDate(res.dataplexEntry.updateTime)
         });
       });
       setEntryData(d);

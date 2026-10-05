@@ -90,6 +90,27 @@ vi.mock("../../utils/resourceUtils", () => ({
   hasValidAnnotationData: (data: any) => {
     return data && Object.keys(data).length > 0;
   },
+  getFormattedDateTimeParts: (timestamp: any) => {
+    const hasSeconds =
+      timestamp && typeof timestamp === "object" && "seconds" in timestamp;
+    const seconds = hasSeconds ? Number(timestamp.seconds) : timestamp;
+    if (!seconds || typeof seconds !== "number" || isNaN(seconds)) {
+      return { date: "-", time: "" };
+    }
+    const myDate = new Date(seconds * 1000);
+    const date = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(myDate);
+    const time = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }).format(myDate);
+    return { date, time };
+  },
 }));
 
 // ============================================================================

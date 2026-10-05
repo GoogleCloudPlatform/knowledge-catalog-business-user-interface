@@ -63,6 +63,17 @@ vi.mock("../../auth/AuthProvider", () => ({
   }),
 }));
 
+// Searches are gated on the bootstrap, since searchResourcesByTerm reads
+// appConfig (project scoping) at dispatch time. These tests cover the normal,
+// already-bootstrapped case.
+vi.mock("../../hooks/useAppBootstrap", () => ({
+  useAppBootstrapStatus: () => ({
+    isAppConfigReady: true,
+    areProjectsReady: true,
+    isBootstrapping: false,
+  }),
+}));
+
 // Mock searchResourcesByTerm thunk
 vi.mock("../../features/resources/resourcesSlice", () => ({
   searchResourcesByTerm: vi.fn((params) => ({

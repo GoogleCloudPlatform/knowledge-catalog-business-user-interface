@@ -374,19 +374,19 @@ const ViewDetails = () => {
   const bigQueryLink = generateBigQueryLink(displayEntry);
   const lookerLink = generateLookerStudioLink(displayEntry);
 
-  const headerDescription = displayEntry?.entrySource?.description || '';
+  const headerDescription = (displayEntry?.entrySource?.description || '').trim();
 
 let annotationTab = (
-  <Box sx={{ 
-    flex: 1, 
-    overflowY: "auto", 
+  <Box sx={{
+    flex: 1,
+    overflowY: "auto",
     minHeight: 0,
     border: '1px solid #DADCE0',
     borderRadius: '12px',
     backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
+    overflowX: 'hidden',
     marginRight: '8px',
-    marginTop: '12px' 
+    marginTop: '12px'
   }}>
     <PreviewAnnotation
       entry={filteredEntry || displayEntry}
@@ -647,7 +647,7 @@ useEffect(() => {
       return map[tabName] ?? 0;
     }
     if (isLooker) {
-      const map: Record<string, number> = { overview: 0, entryList: 1, aspects: 2, lineage: 3 };
+      const map: Record<string, number> = { overview: 0, entryList: 1, aspects: 2, lineage: 3, terms: 4 };
       return map[tabName] ?? 0;
     }
     if (gType === 'glossary' || gType === 'category') {
@@ -837,6 +837,7 @@ const ctaButtons = (
     <Tab key="entryList" icon={<Inventory2Outlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Entry List" {...tabProps(1)} />,
     <Tab key="annotations" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>newsmode</span>} iconPosition="start" label="Aspects" {...tabProps(2)} />,
     <Tab key="lineage" icon={<TimelineOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Lineage" {...tabProps(3)} />,
+    <Tab key="terms" icon={<ArticleOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Glossary Terms" {...tabProps(4)} />,
   ] : glossaryType === 'glossary' || glossaryType === 'category' ? [
     <Tab key="overview" icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />,
     <Tab key="categories" icon={<CategoryOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Categories" {...tabProps(1)} />,
@@ -1349,6 +1350,9 @@ const ctaButtons = (
                         </CustomTabPanel>
                         <CustomTabPanel value={tabValue} index={3}>
                             {lineageTab}
+                        </CustomTabPanel>
+                        <CustomTabPanel value={tabValue} index={4}>
+                            {linkedTermsTab}
                         </CustomTabPanel>
                       </>
                     ) : glossaryType === 'glossary' || glossaryType === 'category' ? (

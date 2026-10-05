@@ -451,7 +451,7 @@ const Assets: React.FC<AssetsProps> = ({ entry, css, onAssetPreviewChange  }) =>
                     )
                 }
                 {(dataProductAssetsStatus === 'succeeded' || dataProductAssetsStatus === 'failed') && dataProductAssets.length === 0 && assetListLoader && (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '85px', width: '100%' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px', width: '100%', marginTop: '-55px' }}>
                         <Typography variant="body1" sx={{ color: '#0C1226CC' }}>No Data Product Assets found.</Typography>
                     </Box>
                 )}

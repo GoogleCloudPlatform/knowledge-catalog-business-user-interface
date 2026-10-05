@@ -48,6 +48,17 @@ vi.mock('../../auth/AuthProvider', () => ({
   useAuth: () => ({ user: mockUser }),
 }));
 
+// The sidebar's eager refresh-on-navigate fetches are gated on the bootstrap
+// (they read appConfig for project scoping at dispatch time). These tests cover
+// the normal, already-bootstrapped case.
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: () => ({
+    isAppConfigReady: true,
+    areProjectsReady: true,
+    isBootstrapping: false,
+  }),
+}));
+
 vi.mock('../../features/dataProducts/dataProductsSlice', async (importOriginal) => {
   const actual = await importOriginal() as object;
   return {

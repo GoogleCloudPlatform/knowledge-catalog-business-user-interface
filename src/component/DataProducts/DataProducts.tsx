@@ -17,12 +17,14 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { type AppDispatch } from '../../app/store';
 import { useAuth } from '../../auth/AuthProvider';
+import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
 import { fetchDataProductsList, getDataProductDetails, setDataProductsViewMode, setDataProductsDetailTabValue } from '../../features/dataProducts/dataProductsSlice';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { getMimeType } from '../../utils/resourceUtils';
+import { getMimeType, toJsDate } from '../../utils/resourceUtils';
 import DataProductsTableView from './DataProductsTableView';
 import DataProductsTableViewSkeleton from './DataProductsTableViewSkeleton';
+import ConditionalTooltip from '../Common/ConditionalTooltip';
 import './DataProducts.css'
 
 // Types
@@ -35,6 +37,9 @@ interface DataProduct {
   assetCount?: number;
   icon?: string;
   accessGroups?: Record<string, { id: string; displayName: string; principal?: any }>;
+  // Found only via the org-wide Search index, not the user's own project's
+  // dataProducts.list API - the user may not actually have access to it.
+  isOutOfScope?: boolean;
 }
 
 type SortBy = 'name' | 'lastModified';
@@ -141,26 +146,10 @@ const CARD_INNER_SX = {
   gap: '12px',
 };
 
-// Deterministic color palette for owner avatars
-const AVATAR_COLORS = [
-  { bg: 'linear-gradient(135deg, #1CB5E0 0%, #000851 100%)' }, // Blue hue
-  { bg: 'linear-gradient(135deg, #56AB2F 0%, #A8E063 100%)' }, // Green hue
-  { bg: 'linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%)' }, // Red hue
-  { bg: 'linear-gradient(135deg, #F7971E 0%, #FFD200 100%)' }, // Amber hue
-];
-
 const formatDate = (iso: string): string => {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
-const getAvatarColor = (email: string, excludeBg?: string): string => {
-  const code = email.charCodeAt(0) || 0;
-  let idx = code % AVATAR_COLORS.length;
-  if (excludeBg && AVATAR_COLORS[idx].bg === excludeBg) {
-    idx = (idx + 1) % AVATAR_COLORS.length;
-  }
-  return AVATAR_COLORS[idx].bg;
+  const date = toJsDate(iso);
+  if (!date) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 // Memoized DataProduct Card Component
@@ -173,14 +162,12 @@ const DataProductCard = React.memo(({
 }) => {
   const location = dataProduct.name.split('/')[3] || '';
   const dateStr = formatDate(dataProduct.updateTime);
-  const visibleOwners = dataProduct.ownerEmails.slice(0, 2);
-  const extraOwners = dataProduct.ownerEmails.length - 2;
 
   return (
     <Box sx={CARD_WRAPPER_SX} onClick={onClick} className='parent-container'>
       <Box sx={CARD_INNER_SX}>
         {/* Head */}
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Box sx={{
             width: '48px',
             height: '48px',
@@ -224,38 +211,20 @@ const DataProductCard = React.memo(({
             )}
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
-            <Typography sx={{
-              fontFamily: '"Google Sans", sans-serif',
-              fontSize: '18px',
-              fontWeight: 700,
-              color: 'rgba(12, 18, 38, 0.8)',
-              lineHeight: 1.3,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              {dataProduct.displayName}
-            </Typography>
-            <Box data-testid="tag" sx={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              background: 'rgba(7, 106, 255, 0.1)',
-              border: '1px solid rgba(7, 106, 255, 0.2)',
-              borderRadius: '12px',
-              padding: '4px 12px',
-              alignSelf: 'flex-start',
-            }}>
+            <ConditionalTooltip text={dataProduct.displayName}>
               <Typography sx={{
                 fontFamily: '"Google Sans", sans-serif',
-                fontSize: '13px',
-                fontWeight: 600,
-                color: '#076AFF',
-                letterSpacing: '0.2px',
-                lineHeight: 1,
+                fontSize: '18px',
+                fontWeight: 700,
+                color: 'rgba(12, 18, 38, 0.8)',
+                lineHeight: 1.3,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}>
-                {dataProduct.assetCount || 0} Assets
+                {dataProduct.displayName}
               </Typography>
-            </Box>
+            </ConditionalTooltip>
           </Box>
         </Box>
 
@@ -278,8 +247,8 @@ const DataProductCard = React.memo(({
 
         {/* Footer */}
         <Box sx={{ marginTop: 'auto' }}>
-          <Box sx={{ height: '1px', background: '#EFF3F5', mb: '12px' }} />
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box sx={{ height: '1px', background: '#FFFFFF', mb: '12px' }} />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center' }}>
             {/* Left: location pill + date */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Box sx={{
@@ -326,71 +295,6 @@ const DataProductCard = React.memo(({
               </Box>
               </Tooltip>
             </Box>
-
-          {/* Right: owner avatars */}
-          <Tooltip title={`Owner: ${dataProduct.ownerEmails.join(', ') || 'Unknown'}`} arrow placement='top'>
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                width: '51.1px',
-                height: '28px',
-                flex: 'none',
-                order: 2,
-                flexGrow: 0
-              }}>
-              {visibleOwners.map((email, i) => {
-                const firstColor = i === 0 ? undefined : getAvatarColor(visibleOwners[0]);
-                return (
-                  <Box key={email} sx={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    background: getAvatarColor(email, firstColor),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#FFFFFF',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    fontFamily: 'Roboto, sans-serif',
-                    letterSpacing: '0.08px',
-                    lineHeight: '19.2px',
-                    border: '2px solid #FFFFFF',
-                    marginLeft: i > 0 ? '-8px' : 0,
-                    zIndex: visibleOwners.length - i,
-                    position: 'relative',
-                    flexShrink: 0,
-                  }}>
-                    {email.charAt(0).toUpperCase()}
-                  </Box>
-                );
-              })}
-              {extraOwners > 0 && (
-                <Box sx={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  background: '#E0E0E0',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#5F6368',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  fontFamily: 'Roboto, sans-serif',
-                  letterSpacing: '0.08px',
-                  lineHeight: '19.2px',
-                  border: '2px solid #FFFFFF',
-                  marginLeft: '-8px',
-                  position: 'relative',
-                  flexShrink: 0,
-                }}>
-                  +{extraOwners}
-                </Box>
-              )}
-            </Box>
-          </Tooltip>
         </Box>
       </Box>
       </Box>
@@ -404,6 +308,7 @@ const DataProducts = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isBootstrapping } = useAppBootstrapStatus();
 
   const { dataProductsItems, status, error } = useSelector((state: any) => state.dataProducts);
 
@@ -426,7 +331,11 @@ const DataProducts = () => {
 
 
   useEffect(() => {
-    if (dataProductsItems.length === 0 && status === 'idle' && user?.token) {
+    // Wait for appConfig (projectsRestricted/configuredProjectIds) to be
+    // bootstrapped before fetching, since fetchDataProductsList reads it at
+    // dispatch time — firing early would silently skip the restricted-project
+    // filter on a cold deep-link/reload.
+    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && !isBootstrapping) {
        dispatch(fetchDataProductsList({ id_token: user?.token }));
     }
     if(status=== 'succeeded'){
@@ -434,7 +343,7 @@ const DataProducts = () => {
         const sortedData = sortDataProducts(dataProductsItems, 'lastModified', 'desc');
         setDataProductsList(sortedData);
     }
-  }, [dispatch, dataProductsItems, status, user?.token]);
+  }, [dispatch, dataProductsItems, status, user?.token, isBootstrapping]);
 
   //sorting handlers
   const handleSortMenuClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
@@ -471,7 +380,7 @@ const DataProducts = () => {
 
   // Memoize the display state for better performance
   const showNoAccess = useMemo(() => status === 'failed' && error?.type === 'PERMISSION_DENIED', [status, error]);
-  const showLoading = useMemo(() => status === 'loading' || searchLoader, [status, searchLoader]);
+  const showLoading = useMemo(() => status === 'loading' || searchLoader || isBootstrapping, [status, searchLoader, isBootstrapping]);
   const showEmptyState = useMemo(() =>
     status === 'succeeded' &&
     !searchLoader &&
@@ -545,7 +454,7 @@ const DataProducts = () => {
       pb: { xs: 1, sm: 2 },
       pt: 0,
       backgroundColor: '#F8FAFC',
-      height: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 72px)' },
+      height: '100%',
       width: '100%',
       overflow: 'hidden'
     }}>
@@ -553,7 +462,7 @@ const DataProducts = () => {
         elevation={0}
         sx={{
           flex: 1,
-          height: { xs: 'calc(100vh - 72px)', sm: 'calc(100vh - 88px)' },
+          height: '100%',
           borderRadius: { xs: '16px', sm: '24px' },
           backgroundColor: '#F8FAFC',
           border: 'transparent',
@@ -800,11 +709,10 @@ const DataProducts = () => {
                                         boxShadow: '0px 0px 16.3px rgba(157, 173, 196, 0.2)',
                                     }}>
                                         {/* Head */}
-                                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                             <Skeleton variant="rectangular" width={48} height={48} sx={{ borderRadius: '8px', flexShrink: 0 }} />
                                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
                                                 <Skeleton variant="text" width="70%" height={20} />
-                                                <Skeleton variant="rectangular" width={80} height={20} sx={{ borderRadius: '4px' }} />
                                             </Box>
                                         </Box>
                                         {/* Description */}
@@ -814,15 +722,11 @@ const DataProducts = () => {
                                         </Box>
                                         {/* Footer */}
                                         <Box>
-                                            <Skeleton variant="rectangular" width="100%" height={1} sx={{ mb: '12px', bgcolor: '#EFF3F5' }} />
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <Skeleton variant="rectangular" width="100%" height={1} sx={{ mb: '12px', bgcolor: '#FFFFFF' }} />
+                                            <Box sx={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center' }}>
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                                     <Skeleton variant="rectangular" width={70} height={22} sx={{ borderRadius: '24px' }} />
                                                     <Skeleton variant="text" width={80} height={16} />
-                                                </Box>
-                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                    <Skeleton variant="circular" width={36} height={36} />
-                                                    <Skeleton variant="circular" width={36} height={36} sx={{ ml: '-8px' }} />
                                                 </Box>
                                             </Box>
                                         </Box>

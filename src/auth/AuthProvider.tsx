@@ -8,8 +8,9 @@ import { useNotification } from '../contexts/NotificationContext';
 import { setGlobalAuthFunctions, setAuthNotificationShown } from '../services/authErrorService';
 import { performSilentAuth } from '../services/silentAuthService';
 import { AUTH_CONFIG } from '../constants/auth';
-import { setIsLoaded } from '../features/projects/projectsSlice';
-import { resetSelectedDataProduct } from '../features/dataProducts/dataProductsSlice';
+import { resetProjects } from '../features/projects/projectsSlice';
+import { resetSelectedDataProduct, resetDataProductsUIState } from '../features/dataProducts/dataProductsSlice';
+import { clearGlossaries } from '../features/glossaries/glossariesSlice';
 import { useAppDispatch, useAppSelector } from '../app/store';
 
 
@@ -85,7 +86,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = useCallback(() => {
     isLoggedOut.current = true;
     dispatch(setCredentials({token: null, user: null}));
-    dispatch(setIsLoaded({ isloaded: false }));
+    // Clear user-scoped slices entirely (not just their loaded flags) so none of
+    // the previous user's data survives into the next session in this tab.
+    dispatch(resetProjects());
+    dispatch(clearGlossaries());
+    dispatch(resetDataProductsUIState());
     dispatch(resetSelectedDataProduct()); // Reset DP detail status so self-hydration fires on next deep-link login
     clearUserState(); // Clear user state from IndexedDB
     clearPersistedState(); // Clear persisted Redux state (search, resources, entry)

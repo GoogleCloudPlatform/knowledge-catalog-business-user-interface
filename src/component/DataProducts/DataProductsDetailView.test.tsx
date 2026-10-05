@@ -347,9 +347,11 @@ const renderWithProviders = (
 ) => {
   const store = createMockStore(storeState);
 
-  // Mock localStorage
+  // Mock localStorage. `name: null` matches dataProductIdFromUrl in tests, which is
+  // always null since no test sets a dataProductId search param - keeps the cached
+  // value "valid" per DataProductsDetailView's stale-cache guard.
   const localStorageMock = {
-    getItem: vi.fn(() => JSON.stringify({ icon: 'iVBORw0KGgo' })),
+    getItem: vi.fn(() => JSON.stringify({ icon: 'iVBORw0KGgo', name: null })),
     setItem: vi.fn(),
     removeItem: vi.fn(),
     clear: vi.fn()
@@ -811,6 +813,41 @@ describe('DataProductsDetailView', () => {
       });
 
       expect(mockNavigate).toHaveBeenCalledWith('/data-products');
+    });
+
+    it('shows an inline access-denied state instead of navigating away on PERMISSION_DENIED', () => {
+      const permissionDeniedState = {
+        ...defaultStoreState,
+        dataProducts: {
+          ...defaultStoreState.dataProducts,
+          selectedDataProductStatus: 'failed',
+          selectedDataProductError: {
+            type: 'PERMISSION_DENIED',
+            message: "You don't have access to this resource",
+            itemId: 'projects/test-project/locations/us/dataProducts/test-product',
+          },
+        },
+      };
+
+      renderWithProviders(<DataProductsDetailView />, permissionDeniedState);
+
+      // No raw-JSON toast, no forced redirect.
+      expect(mockShowError).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(mockNavigate).not.toHaveBeenCalledWith('/data-products');
+
+      // The inline Access Denied card renders instead.
+      expect(screen.getByText('Access Denied')).toBeInTheDocument();
+      // The top-level product card (with the Request Access CTA) still shows,
+      // built from the list-item data cached at click-time.
+      expect(screen.getByText('Request Access')).toBeInTheDocument();
+      // The tab bar still renders for a consistent look, even though every
+      // tab's content is unavailable without access.
+      expect(screen.getByText('Overview')).toBeInTheDocument();
+      expect(screen.getByText('Assets')).toBeInTheDocument();
     });
   });
 

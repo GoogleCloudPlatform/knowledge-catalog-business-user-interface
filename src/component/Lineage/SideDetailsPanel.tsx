@@ -15,7 +15,7 @@ import PreviewAnnotation from '../Annotation/PreviewAnnotation';
 import Schema from '../Schema/Schema';
 import SchemaFilter from '../Schema/SchemaFilter';
 import AnnotationFilter from '../Annotation/AnnotationFilter';
-import { getName, hasValidAnnotationData } from '../../utils/resourceUtils';
+import { getName, hasValidAnnotationData, getFormattedDateTimeParts } from '../../utils/resourceUtils';
 import { useNotification } from '../../contexts/NotificationContext';
 
 /**
@@ -110,31 +110,8 @@ const SideDetailsPanel: React.FC<SideDetailsPanelProps> = ({ sidePanelData, side
     setActiveTab(newValue);
   };
 
-  const getFormattedDateTimeParts = (timestamp: any) => {
-  if (!timestamp) {
-    return { date: '-', time: '' };
-  }
-  
-  const myDate = new Date(timestamp * 1000);
-
-  const date = new Intl.DateTimeFormat('en-US', { 
-    month: "short", 
-    day: "numeric", 
-    year: "numeric",
-  }).format(myDate);
-
-  const time = new Intl.DateTimeFormat('en-US', { 
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit", 
-    hour12: true 
-  }).format(myDate);
-
-  return { date, time }; 
-};
-
-const { date: createDate, time: createTime } = getFormattedDateTimeParts(entry?.createTime?.seconds);
-const { date: updateDate, time: updateTime } = getFormattedDateTimeParts(entry?.updateTime?.seconds);
+const { date: createDate, time: createTime } = getFormattedDateTimeParts(entry?.createTime);
+const { date: updateDate, time: updateTime } = getFormattedDateTimeParts(entry?.updateTime);
 useEffect(() => {
   setActiveTab(openSchemaInSidePanel == true ? 2 : 0);
 }, [openSchemaInSidePanel]);

@@ -1,15 +1,23 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { URLS } from '../../constants/urls';
 import axios, { AxiosError } from 'axios';
+import type { Project } from '../projects/projectsSlice';
+import { findProjectByNumber } from '../../utils/resourceUtils';
 //import mockSearchData from '../../mocks/mockSearchData';
 
-const getAspectName = (name: string, appConfig: any) => {
-  let resource:string[] = appConfig?.aspects?.find((a:any) => a.dataplexEntry?.entrySource?.displayName === name)?.dataplexEntry?.entrySource?.resource.split('/') ?? [];
-  let projects:any[] = appConfig?.projects ?? [];
-  let projectId:string = resource.length == 6
-  ? projects.find((p) => p.name === `${resource[0]}/${resource[1]}`)?.projectId
-  : '';
-  return (projectId.length > 1 && resource.length == 6) ? `${projectId}.${resource[3]}.${resource[5]}` : resource.toString();
+// Builds the `projectId.location.aspectType` form of an aspect name.
+// The aspect itself comes from appConfig; the project number -> id mapping
+// comes from /get-projects (the single source for project identity).
+const getAspectName = (name: string, appConfig: any, projectsList: Project[]) => {
+  const resource: string[] = appConfig?.aspects
+    ?.find((a: any) => a.dataplexEntry?.entrySource?.displayName === name)
+    ?.dataplexEntry?.entrySource?.resource?.split('/') ?? [];
+  // resource is `projects/{projectNumber}/locations/{location}/.../{aspectType}`
+  if (resource.length !== 6) return resource.toString();
+  // Previously this did `projectId.length` on an unmatched lookup, throwing a
+  // TypeError inside the thunk whenever the project wasn't in the list.
+  const projectId = findProjectByNumber(resource[1], projectsList)?.projectId ?? '';
+  return projectId.length > 1 ? `${projectId}.${resource[3]}.${resource[5]}` : resource.toString();
 }
 // Thunk for searching resources based on a search term
 export const searchResourcesByTerm = createAsyncThunk('resources/searchResourcesByTerm', async (requestData: any , { rejectWithValue, getState, signal }) => {
@@ -21,6 +29,7 @@ export const searchResourcesByTerm = createAsyncThunk('resources/searchResources
   // If the term is not empty, we will perform a search.
   try {
     const appConfig = (getState() as any).user?.userData?.appConfig;
+    const projectsList: Project[] = (getState() as any).projects?.items ?? [];
     let requestResourceData = {};
     axios.defaults.headers.common['Authorization'] = requestData.id_token ? `Bearer ${requestData.id_token}` : '';
     if(requestData.requestResourceData) {
@@ -48,7 +57,7 @@ export const searchResourcesByTerm = createAsyncThunk('resources/searchResources
         requestData.filters.forEach((filter: any) => {
           if(filter.type === 'aspectType') {
             //let aspect = filter.name.replace(' ', '-');
-            const name = getAspectName(filter.name, appConfig);
+            const name = getAspectName(filter.name, appConfig, projectsList);
             if(filter.subAnnotationData && filter.subAnnotationData.length > 0) {
               filter.subAnnotationData.forEach((subAspect:any) => {
                 let subAspectName = `${name}.${subAspect.fieldName}`;
@@ -72,9 +81,13 @@ export const searchResourcesByTerm = createAsyncThunk('resources/searchResources
             // }
           }
           if(filter.type === 'system') {
-            const PRODUCT_API_NAMES: Record<string, string> = { "Knowledge Catalog": "Dataplex Universal Catalog" };
-            const apiName = PRODUCT_API_NAMES[filter.name] || filter.name;
-            system += (system != '' ? '|' : '') + `${apiName.replaceAll(' ', '_').replace('/','').toUpperCase()}`;
+            const PRODUCT_API_NAMES: Record<string, string[]> = {
+              "Knowledge Catalog": ["Dataplex Universal Catalog", "Dataplex"],
+            };
+            const apiNames = PRODUCT_API_NAMES[filter.name] || [filter.name];
+            apiNames.forEach((apiName) => {
+              system += (system != '' ? '|' : '') + `${apiName.split(' ').join('_').replace('/','').toUpperCase()}`;
+            });
           }
           if(filter.type === 'typeAliases') {
             const filterName = filter.name.toLowerCase();
@@ -183,9 +196,10 @@ export const browseResourcesByAspects = createAsyncThunk('resources/browseResour
     // search from your API endpoint
     axios.defaults.headers.common['Authorization'] = requestData.id_token ? `Bearer ${requestData.id_token}` : '';
     const appConfig = (getState() as any).user?.userData?.appConfig;
+    const projectsList: Project[] = (getState() as any).projects?.items ?? [];
     let searchString = '';
     if(requestData.annotationName && requestData.annotationName != '') {
-      let aspectType = getAspectName(requestData.annotationName, appConfig);
+      let aspectType = getAspectName(requestData.annotationName, appConfig, projectsList);
 
       // let subAspect = '';
       // if(requestData.subAnnotationName && requestData.subAnnotationName != '') {

@@ -6,15 +6,24 @@ import '@testing-library/jest-dom';
 import { configureStore } from '@reduxjs/toolkit';
 import { Provider } from 'react-redux';
 
-const createMockStore = () =>
+// The component takes the "projects settled" signal from the bootstrap hook, not
+// from state.projects.isloaded (which stays false forever when /get-projects
+// fails). Mutable so each test can model loading / loaded / terminal failure.
+const mockBootstrapState = { isAppConfigReady: true, areProjectsReady: false, isBootstrapping: false };
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: () => mockBootstrapState,
+}));
+
+const createMockStore = (projects: any = { items: [], isloaded: false }) =>
   configureStore({
     reducer: {
       user: (state = { mode: 'light' }) => state,
+      projects: (state = projects) => state,
     },
   });
 
 const render = (ui: React.ReactElement, options?: any) => {
-  const store = createMockStore();
+  const store = createMockStore(options?.projects);
   const Wrapper = ({ children }: { children: React.ReactNode }) => (
     <Provider store={store}>{children}</Provider>
   );
@@ -730,5 +739,67 @@ describe('DetailPageOverview', () => {
       // SchemaFilter should be rendered when schema data exists
       expect(screen.getByTestId('schema-filter')).toBeInTheDocument();
     }
+  });
+
+  describe('Project row loading state', () => {
+    // No fullyQualifiedName, so the project must be resolved from the entry name
+    // against the /get-projects list.
+    const entryNeedingLookup = {
+      ...mockEntry,
+      fullyQualifiedName: '',
+      name: 'projects/123456789/locations/us/entryGroups/@dataplex/entries/my-entry',
+    };
+
+    beforeEach(() => {
+      mockBootstrapState.areProjectsReady = false;
+    });
+
+    it('shows a skeleton while the project list is still loading', () => {
+      mockBootstrapState.areProjectsReady = false;
+      const { container } = render(
+        <DetailPageOverview {...defaultProps} entry={entryNeedingLookup} />,
+        { projects: { items: [], isloaded: false } }
+      );
+
+      expect(container.querySelector('.MuiSkeleton-root')).toBeInTheDocument();
+      // The raw project number must never be shown as if it were the name.
+      expect(screen.queryByText('123456789')).not.toBeInTheDocument();
+    });
+
+    it('shows the resolved project id once the list has loaded', () => {
+      mockBootstrapState.areProjectsReady = true;
+      const { container } = render(
+        <DetailPageOverview {...defaultProps} entry={entryNeedingLookup} />,
+        { projects: { items: [{ projectId: 'my-project-id', name: 'projects/123456789' }], isloaded: true } }
+      );
+
+      expect(screen.getByText('my-project-id')).toBeInTheDocument();
+      expect(container.querySelector('.MuiSkeleton-root')).not.toBeInTheDocument();
+    });
+
+    it('falls back to the project number once loaded with no match, without a skeleton', () => {
+      mockBootstrapState.areProjectsReady = true;
+      const { container } = render(
+        <DetailPageOverview {...defaultProps} entry={entryNeedingLookup} />,
+        { projects: { items: [{ projectId: 'other', name: 'projects/999' }], isloaded: true } }
+      );
+
+      expect(screen.getByText('123456789')).toBeInTheDocument();
+      expect(container.querySelector('.MuiSkeleton-root')).not.toBeInTheDocument();
+    });
+
+    it('stops the skeleton and shows the project number when /get-projects fails outright', () => {
+      // The reported bug: isloaded stays false forever on failure, so keying the
+      // skeleton off it span indefinitely. areProjectsReady goes true once the
+      // bootstrap exhausts its retries, even though the list is still empty.
+      mockBootstrapState.areProjectsReady = true;
+      const { container } = render(
+        <DetailPageOverview {...defaultProps} entry={entryNeedingLookup} />,
+        { projects: { items: [], isloaded: false } }
+      );
+
+      expect(container.querySelector('.MuiSkeleton-root')).not.toBeInTheDocument();
+      expect(screen.getByText('123456789')).toBeInTheDocument();
+    });
   });
 });
