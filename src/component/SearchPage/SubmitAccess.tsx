@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
 import { URLS } from '../../constants/urls';
+import { useNotification } from '../../contexts/NotificationContext';
 import { getFormattedDateTimePartsByDateTime } from '../../utils/resourceUtils';
 
 /**
@@ -68,6 +69,7 @@ const SubmitAccess: React.FC<SubmitAccessProps> = ({ isOpen, onClose, assetName,
   const [error, setError] = useState<string | null>(null);
   const [contactEmails, setContactEmails] = useState<string[]>([]);
   const [success, setSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [localEntry, setLocalEntry] = useState<any>(null);
   const [isLoadingEntry, setIsLoadingEntry] = useState(false);
@@ -76,6 +78,7 @@ const SubmitAccess: React.FC<SubmitAccessProps> = ({ isOpen, onClose, assetName,
   const [accessGroup, setAccessGroup] = useState<string>('');
   const { user } = useAuth();
   const userState = useSelector((state: any) => state.user);
+  const { showError } = useNotification();
 
   // Use locally fetched entry if available, otherwise fall back to prop
   const effectiveEntry = localEntry ?? entry;
@@ -170,6 +173,7 @@ const SubmitAccess: React.FC<SubmitAccessProps> = ({ isOpen, onClose, assetName,
       return;
     }
 
+    setIsSubmitting(true);
     try {
       console.log('Extracted contact emails:', contactEmails);
       if(contactEmails.length > 0 || isCalledFromDataProducts){
@@ -233,7 +237,7 @@ const SubmitAccess: React.FC<SubmitAccessProps> = ({ isOpen, onClose, assetName,
         
       }catch(error){
         console.log(error);
-        throw new Error('Failed to submit access request');
+        throw error;
       }
 
       }else{
@@ -250,7 +254,26 @@ const SubmitAccess: React.FC<SubmitAccessProps> = ({ isOpen, onClose, assetName,
       }
     } catch (error) {
       console.error('Error submitting access request:', error);
-      setError(error instanceof Error ? error.message : 'An unexpected error occurred');
+
+      const responseData = axios.isAxiosError(error) ? error.response?.data : undefined;
+      const details = responseData?.details;
+      const nestedMessage =
+        (typeof details === 'object' && details?.error?.message) ||
+        responseData?.error ||
+        (error instanceof Error ? error.message : null) ||
+        'An unexpected error occurred';
+
+      if (isCalledFromDataProducts) {
+        showError(nestedMessage);
+        setMessage('');
+        setIsRequiredError(false);
+        setIsMessageEmptyError(false);
+        onClose();
+      } else {
+        setError(nestedMessage);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -653,11 +676,13 @@ return (previewData != null) ?(
         >
           Cancel
         </Button>
-        <Tooltip title={extractContacts(effectiveEntry).length > 0 || isCalledFromDataProducts ? "Click here to send an access request" : "No contact information available to request access"} arrow>
+        <Tooltip title={isSubmitting ? "Submitting access request..." : (extractContacts(effectiveEntry).length > 0 || isCalledFromDataProducts ? "Click here to send an access request" : "No contact information available to request access")} arrow>
+        <span>
         <Button
           onClick={() => {
-            if(extractContacts(effectiveEntry).length > 0 || isCalledFromDataProducts) handleSubmit();
+            if((extractContacts(effectiveEntry).length > 0 || isCalledFromDataProducts) && !isSubmitting) handleSubmit();
           }}
+          disabled={isSubmitting}
           variant="contained"
           sx={{
             fontSize: '14px',
@@ -667,15 +692,21 @@ return (previewData != null) ?(
             textTransform: 'none',
             borderRadius: '100px',
             padding: '8px 16px',
-            opacity: (extractContacts(effectiveEntry).length > 0 || isCalledFromDataProducts) ? 1 : 0.6,
+            opacity: isSubmitting ? 0.6 : ((extractContacts(effectiveEntry).length > 0 || isCalledFromDataProducts) ? 1 : 0.6),
             '&:hover': {
               backgroundColor: (extractContacts(effectiveEntry).length > 0 || isCalledFromDataProducts) ? '#0B3DA8' : '#909090'
             },
-            cursor: (extractContacts(effectiveEntry).length > 0 || isCalledFromDataProducts) ? 'pointer' : 'not-allowed',
+            '&.Mui-disabled': {
+              backgroundColor: '#A0A0A0',
+              color: '#FFFFFF',
+              opacity: 0.6,
+            },
+            cursor: isSubmitting ? 'not-allowed' : ((extractContacts(effectiveEntry).length > 0 || isCalledFromDataProducts) ? 'pointer' : 'not-allowed'),
           }}
         >
           Submit
         </Button>
+        </span>
         </Tooltip>
       </Box>
     </Box>
