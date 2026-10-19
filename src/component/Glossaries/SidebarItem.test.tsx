@@ -3,6 +3,16 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import SidebarItem from "./SidebarItem";
 import { type GlossaryItem, type ItemType } from "./GlossaryDataType";
 
+// Stubbed the same way Glossaries.test.tsx stubs it, so the assertion is on
+// "a skeleton was rendered" rather than on the shimmer's internal markup.
+vi.mock("../Shimmer/ShimmerLoader", () => ({
+  default: ({ count, type }: { count?: number; type?: string }) => (
+    <div data-testid={`shimmer-${type}`} data-count={count}>
+      Loading...
+    </div>
+  ),
+}));
+
 // Mock getIcon from glossaryUIHelpers
 vi.mock("./glossaryUIHelpers", () => ({
   getIcon: vi.fn((type: ItemType, size: string) => (
@@ -38,6 +48,58 @@ describe("SidebarItem", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe("Children loading skeleton", () => {
+    it("shows a skeleton while an expanded node's children are being fetched", () => {
+      // Children load on expand. Without a placeholder the Collapse isn't
+      // rendered at all until they arrive, so the subtree appears from nothing.
+      const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
+        children: [],
+      });
+      render(
+        <SidebarItem
+          {...defaultProps}
+          item={item}
+          expandedIds={new Set(["glossary-1"])}
+          loadingChildrenIds={new Set(["glossary-1"])}
+        />
+      );
+      expect(screen.getByTestId("shimmer-simple-list")).toBeInTheDocument();
+    });
+
+    it("does not shimmer for an expanded glossary that is simply empty", () => {
+      // The distinction that makes the skeleton safe: not fetching means the
+      // glossary genuinely has no children, so it must not shimmer forever.
+      const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
+        children: [],
+      });
+      render(
+        <SidebarItem
+          {...defaultProps}
+          item={item}
+          expandedIds={new Set(["glossary-1"])}
+          loadingChildrenIds={new Set()}
+        />
+      );
+      expect(screen.queryByTestId("shimmer-simple-list")).not.toBeInTheDocument();
+    });
+
+    it("renders children rather than the skeleton once they have arrived", () => {
+      const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
+        children: [createMockItem("term-1", "term", "Test Term")],
+      });
+      render(
+        <SidebarItem
+          {...defaultProps}
+          item={item}
+          expandedIds={new Set(["glossary-1"])}
+          loadingChildrenIds={new Set()}
+        />
+      );
+      expect(screen.getByText("Test Term")).toBeInTheDocument();
+      expect(screen.queryByTestId("shimmer-simple-list")).not.toBeInTheDocument();
+    });
   });
 
   describe("Basic Rendering", () => {
@@ -121,7 +183,10 @@ describe("SidebarItem", () => {
       expect(listItemButton).not.toHaveClass("Mui-selected");
     });
 
-    it("does not apply selected styling when item is inaccessible even if selectedId matches", () => {
+    it("still applies selected styling for an isInaccessible item - rows never visually lock", () => {
+      // There's no pre-check for Dataplex glossary access, so isInaccessible is
+      // never used to style a row - access is only ever revealed via the
+      // content pane's "no access" banner once the user actually clicks in.
       const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
         isInaccessible: true,
       });
@@ -135,7 +200,7 @@ describe("SidebarItem", () => {
       );
 
       const listItemButton = screen.getByRole("button");
-      expect(listItemButton).not.toHaveClass("Mui-selected");
+      expect(listItemButton).toHaveClass("Mui-selected");
     });
   });
 
@@ -178,7 +243,7 @@ describe("SidebarItem", () => {
       expect(mockOnToggle).not.toHaveBeenCalled();
     });
 
-    it("does not call handlers when inaccessible item is clicked", () => {
+    it("still calls handlers when an isInaccessible item is clicked - rows are never disabled", () => {
       const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
         isInaccessible: true,
       });
@@ -187,8 +252,8 @@ describe("SidebarItem", () => {
 
       fireEvent.click(screen.getByRole("button"));
 
-      expect(mockOnSelect).not.toHaveBeenCalled();
-      expect(mockOnToggle).not.toHaveBeenCalled();
+      expect(mockOnSelect).toHaveBeenCalledWith("glossary-1");
+      expect(mockOnToggle).toHaveBeenCalledWith("glossary-1");
     });
   });
 
@@ -234,7 +299,7 @@ describe("SidebarItem", () => {
       expect(mockOnSelect).toHaveBeenCalledWith("glossary-1");
     });
 
-    it("does not call handlers when chevron is clicked on inaccessible item", () => {
+    it("still calls handlers when the chevron is clicked on an isInaccessible item", () => {
       const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
         isInaccessible: true,
       });
@@ -246,8 +311,8 @@ describe("SidebarItem", () => {
 
       fireEvent.click(iconContainer!);
 
-      expect(mockOnToggle).not.toHaveBeenCalled();
-      expect(mockOnSelect).not.toHaveBeenCalled();
+      expect(mockOnToggle).toHaveBeenCalledWith("glossary-1");
+      expect(mockOnSelect).toHaveBeenCalledWith("glossary-1");
     });
 
     it("rotates chevron when item is expanded", () => {
@@ -281,7 +346,12 @@ describe("SidebarItem", () => {
   });
 
   describe("Inaccessible Items", () => {
-    it("disables the button for inaccessible items", () => {
+    // There's no pre-check for Dataplex glossary access, so a row never knows
+    // in advance whether it's denied - isInaccessible is carried on the data
+    // but intentionally never drives any row styling. Access is discovered
+    // (and surfaced, via the content pane's "no access" banner) only once the
+    // user actually clicks in.
+    it("renders an isInaccessible item identically to a normal one - no disabled state, no lock icon, no tooltip wrapper", () => {
       const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
         isInaccessible: true,
       });
@@ -289,44 +359,10 @@ describe("SidebarItem", () => {
       render(<SidebarItem item={item} {...defaultProps} />);
 
       const button = screen.getByRole("button");
-      // MUI ListItemButton uses aria-disabled instead of disabled attribute
-      expect(button).toHaveAttribute("aria-disabled", "true");
-      expect(button).toHaveClass("Mui-disabled");
-    });
-
-    it("shows lock icon instead of type icon for inaccessible items", () => {
-      const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
-        isInaccessible: true,
-      });
-
-      render(<SidebarItem item={item} {...defaultProps} />);
-
-      expect(screen.getByTestId("LockOutlinedIcon")).toBeInTheDocument();
-      expect(screen.queryByTestId("icon-glossary")).not.toBeInTheDocument();
-    });
-
-    it("wraps inaccessible item in tooltip", () => {
-      const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
-        isInaccessible: true,
-      });
-
-      render(<SidebarItem item={item} {...defaultProps} />);
-
-      // Hover to show tooltip
-      const button = screen.getByRole("button");
-      fireEvent.mouseOver(button);
-
-      // Check that the item has a wrapper span (for tooltip)
-      expect(button.parentElement?.tagName).toBe("SPAN");
-    });
-
-    it("does not wrap accessible item in tooltip span", () => {
-      const item = createMockItem("glossary-1", "glossary", "Test Glossary");
-
-      render(<SidebarItem item={item} {...defaultProps} />);
-
-      const button = screen.getByRole("button");
-      // The parent should not be a span wrapper for tooltip
+      expect(button).not.toHaveAttribute("aria-disabled", "true");
+      expect(button).not.toHaveClass("Mui-disabled");
+      expect(screen.queryByTestId("LockOutlinedIcon")).not.toBeInTheDocument();
+      expect(screen.getByTestId("icon-glossary")).toBeInTheDocument();
       expect(button.parentElement?.tagName).not.toBe("SPAN");
     });
   });
@@ -560,7 +596,7 @@ describe("SidebarItem", () => {
       expect(text).toHaveStyle({ fontWeight: 400 });
     });
 
-    it("uses fontWeight 400 when selected but inaccessible", () => {
+    it("still uses fontWeight 500 when selected, even if isInaccessible", () => {
       const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
         isInaccessible: true,
       });
@@ -574,7 +610,7 @@ describe("SidebarItem", () => {
       );
 
       const text = screen.getByText("Test Glossary");
-      expect(text).toHaveStyle({ fontWeight: 400 });
+      expect(text).toHaveStyle({ fontWeight: 500 });
     });
   });
 
@@ -606,7 +642,7 @@ describe("SidebarItem", () => {
       expect(screen.getByText("Level 3 Term")).toBeInTheDocument();
     });
 
-    it("handles mixed accessible and inaccessible children", () => {
+    it("renders mixed isInaccessible and normal children identically - no lock icon on either", () => {
       const accessibleChild = createMockItem("child-1", "term", "Accessible Child");
       const inaccessibleChild = createMockItem("child-2", "term", "Inaccessible Child", {
         isInaccessible: true,
@@ -624,12 +660,9 @@ describe("SidebarItem", () => {
         />
       );
 
-      // Accessible child should have normal icon
       expect(screen.getByText("Accessible Child")).toBeInTheDocument();
-
-      // Inaccessible child should have lock icon
       expect(screen.getByText("Inaccessible Child")).toBeInTheDocument();
-      expect(screen.getByTestId("LockOutlinedIcon")).toBeInTheDocument();
+      expect(screen.queryByTestId("LockOutlinedIcon")).not.toBeInTheDocument();
     });
 
     it("child selection triggers onSelect with child id", () => {
@@ -652,21 +685,6 @@ describe("SidebarItem", () => {
       fireEvent.click(childButton!);
 
       expect(mockOnSelect).toHaveBeenCalledWith("child-1");
-    });
-  });
-
-  describe("isInaccessible Edge Cases", () => {
-    it("handles isInaccessible: false same as undefined", () => {
-      const item = createMockItem("glossary-1", "glossary", "Test Glossary", {
-        isInaccessible: false,
-      });
-
-      render(<SidebarItem item={item} {...defaultProps} />);
-
-      const button = screen.getByRole("button");
-      expect(button).not.toBeDisabled();
-      expect(screen.getByTestId("icon-glossary")).toBeInTheDocument();
-      expect(screen.queryByTestId("LockOutlinedIcon")).not.toBeInTheDocument();
     });
   });
 

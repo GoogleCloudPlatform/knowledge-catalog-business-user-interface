@@ -439,6 +439,15 @@ describe('AuthProvider', () => {
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'glossaries/clearGlossaries' })
       );
+      // BrowseByAnnotation skips rebuilding its list while
+      // browseDynamicAnnotationsData is populated, so leaving the resources slice
+      // alone showed the previous user's aspect list after re-login.
+      expect(mockDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'resources/resetBrowseUIState' })
+      );
+      expect(mockDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'resources/clearAspectBrowseCache' })
+      );
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'dataproducts/resetDataProductsUIState' })
       );

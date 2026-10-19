@@ -271,15 +271,25 @@ const Glossaries = () => {
   const [isAssetPreviewOpen, setIsAssetPreviewOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [sortBy, setSortBy] = useState<"name" | "lastModified">("lastModified");
-  const fetchedParentIds = React.useRef(new Set<string>(
-    glossaryItems
-      .filter((item: GlossaryItem) => item.children && item.children.length > 0)
-      .map((item: GlossaryItem) => item.id)
-  ));
+  // (fetchedParentIds removed: it existed only to de-duplicate the eager
+  // prefetch effect against handleNavigate. handleToggle's own
+  // `children.length === 0` guard is what prevents refetching now.)
   const manualSelectionId = React.useRef<string | null>(null);
   const wasSearching = React.useRef(false);
   const initialFilterExpansionSet = React.useRef(false);
   const [isSidebarLoading, setIsSidebarLoading] = useState(false);
+  // Nodes whose children are being fetched right now. Needed because an expanded
+  // node with no children is ambiguous - it is either still loading or genuinely
+  // empty - and only the first should show a skeleton.
+  const [loadingChildrenIds, setLoadingChildrenIds] = useState<Set<string>>(new Set());
+  const markChildrenLoading = useCallback((id: string, loading: boolean) => {
+    setLoadingChildrenIds((prev) => {
+      if (prev.has(id) === loading) return prev;
+      const next = new Set(prev);
+      if (loading) next.add(id); else next.delete(id);
+      return next;
+    });
+  }, []);
   const [isContentLoading, setIsContentLoading] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -318,6 +328,20 @@ const Glossaries = () => {
       dispatch(fetchGlossaryEntryDetails({ entryName: firstId, id_token: user?.token }))
         .unwrap()
         .finally(() => setIsContentLoading(false));
+      // ...and its children. This glossary is selected without anyone clicking it,
+      // so it never goes through handleToggle - without this its Categories and
+      // Terms tabs render empty on landing. Only this one glossary is warmed; the
+      // rest load on expand.
+      //
+      // Glossaries only: terms and categories have no children to list, and
+      // asking for them would leave the sidebar stuck in its loading state.
+      if (glossaryItems[0].type === "glossary" && !glossaryItems[0].children?.length) {
+        setIsSidebarLoading(true);
+        dispatch(fetchGlossaryChildren({ parentId: firstId, id_token: user?.token }))
+          .unwrap()
+          .catch(() => { /* surfaced by the tree itself; nothing to do here */ })
+          .finally(() => setIsSidebarLoading(false));
+      }
       navigate(`/glossaries?entry=${encodeURIComponent(btoa(firstId))}`, { replace: true });
       // We're establishing the selection ourselves (no incoming deep link to honor),
       // so mark the deep-link bootstrap as handled now. Otherwise the bootstrap effect
@@ -481,12 +505,16 @@ const Glossaries = () => {
 
       // If expanding and no children, fetch them
       if (item && (!item.children || item.children.length === 0)) {
+        markChildrenLoading(id, true);
         dispatch(
           fetchGlossaryChildren({
             parentId: id,
             id_token: user?.token,
           })
-        );
+        )
+          .unwrap()
+          .catch(() => { /* the row simply stays empty; nothing extra to show */ })
+          .finally(() => markChildrenLoading(id, false));
       }
       newExpanded.add(id);
     } else {
@@ -519,11 +547,8 @@ const Glossaries = () => {
 
       if (parentGlossaryId) {
         setIsSidebarLoading(true);
+        markChildrenLoading(parentGlossaryId, true);
         try {
-          // Claim the parent in fetchedParentIds BEFORE the await so the auto-fetch
-          // effect (which triggers after fetchGlossaries.fulfilled) sees it as already
-          // in-flight and skips the redundant second dispatch that causes the race.
-          fetchedParentIds.current.add(parentGlossaryId);
           // Fetch the children of the parent glossary
           await dispatch(
             fetchGlossaryChildren({
@@ -539,6 +564,7 @@ const Glossaries = () => {
           console.error("Failed to load parent glossary children", error);
         } finally {
           setIsSidebarLoading(false);
+          markChildrenLoading(parentGlossaryId, false);
         }
       }
     }
@@ -590,37 +616,15 @@ const Glossaries = () => {
   };
 
 
-  useEffect(() => {
-    if (glossaryItems.length > 0 && user?.token) {
-      glossaryItems.forEach((item: GlossaryItem, index: number) => {
-        // Only target top-level Glossaries
-        if (item.type === "glossary") {
-          // Check if we haven't fetched this one yet
-          if (!fetchedParentIds.current.has(item.id)) {
-            // Mark as fetched immediately to prevent re-entry
-            fetchedParentIds.current.add(item.id);
-
-            // If children are empty, fetch them
-            if (!item.children || item.children.length === 0) {
-              // Only trigger loading state for the first item to control sidebar shimmer
-              if (index === 0) setIsSidebarLoading(true);
-
-              dispatch(
-                fetchGlossaryChildren({
-                  parentId: item.id,
-                  id_token: user?.token,
-                })
-              )
-                .unwrap() // Unwrap allows us to chain .finally/then on the thunk result
-                .finally(() => {
-                  if (index === 0) setIsSidebarLoading(false);
-                });
-            }
-          }
-        }
-      });
-    }
-  }, [glossaryItems, dispatch, user?.token]);
+  // Children are fetched lazily, on expand, by handleToggle. There used to be an
+  // effect here that eagerly fetched children for *every* root glossary on mount -
+  // one /glossary-children request per glossary, each fanning out to two upstream
+  // Dataplex calls. That was already heavy at the old 100-item cap and became far
+  // worse once the root query stopped truncating at 100.
+  //
+  // Nothing needs it: the expand chevron is driven by item.type, not by
+  // children.length (SidebarItem.tsx), and the sidebar does no client-side
+  // filtering over children.
 
   // --- Filter & Sort ---
   const filteredCategories = useMemo(() => {
@@ -720,14 +724,19 @@ const Glossaries = () => {
     }
   }, [selectedId, glossaryItems, activeFilters]);
 
+  // Deliberately does not wait on the first glossary's children. That clause
+  // ("roots are in but the first one's children aren't yet") only made sense while
+  // the eager prefetch above existed to satisfy it; with children fetched on expand
+  // instead, nothing would ever populate them here and the shimmer would never clear.
   const shouldShowSidebarShimmer =
     status === "loading" ||
     isSidebarLoading ||
     filterStatus === "loading" ||
-    (glossaryItems.length > 0 &&
-      glossaryItems[0].type === "glossary" &&
-      (!glossaryItems[0].children || glossaryItems[0].children.length === 0) &&
-      !fetchedParentIds.current.has(glossaryItems[0].id));
+    // Nothing has been requested yet - either still idle, or waiting on appConfig
+    // before the mount effect is allowed to dispatch. Without this the list falls
+    // through to its "No results found" branch for the whole /app-configs round
+    // trip, which claims we looked and found nothing before we have even asked.
+    (status === "idle" && glossaryItems.length === 0);
 
   return (
     <Box
@@ -822,6 +831,7 @@ const Glossaries = () => {
                 <SidebarItem
                   key={item.id}
                   item={item}
+                  loadingChildrenIds={loadingChildrenIds}
                   selectedId={selectedId}
                   expandedIds={expandedIds}
                   onSelect={(id) => {

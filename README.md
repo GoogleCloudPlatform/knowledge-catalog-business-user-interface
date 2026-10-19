@@ -1,4 +1,4 @@
-# Knowledge Catalog Business Interface - 1.4.3
+# Knowledge Catalog Business Interface - 1.4.4
 
 An open-source, web-based application called **`Knowledge Catalog Business Interface`** which aims to help business users of BigQuery customers discover and access data assets in the **Knowledge Catalog** (formerly Dataplex Universal Catalog).
 ## Key objectives of the application include:
@@ -396,43 +396,29 @@ gcloud run deploy [SERVICE_NAME] \
   - [Links here](https://github.com/GoogleCloudPlatform/knowledge-catalog-business-user-interface/tree/main/src/assets/screenshots)
 
 
-## Release Note : 1.4.3
+## Release Note : 1.4.4
 This is a sub-minor release with features, identified bug/fixes.
 Feature Enhancements:
 
-  - Aspect field values containing h1/h2/h3/pre markup are now rendered as rich text (headings/preformatted blocks) instead of raw HTML strings, safely without `dangerouslySetInnerHTML`.
-  - Created/modified timestamps in the Resource Viewer, Data Products, and Data Profile pages now display in the viewer's local time zone instead of UTC.
-  - Glossary Categories and Terms now show their parent Glossary/Category name in the detail overview.
-  - Redesigned Data Product cards and the table view to remove the asset count and owner information, simplifying the layout to name, description, location, and last modified date.
-  - The app now recovers gracefully when a workspace has a very large number of Google Cloud projects (tens of thousands): the project list request is given a realistic time limit instead of failing prematurely, and pages that don't need the full list (e.g. Home, Glossaries, Browse by Aspect) no longer wait on it to render.
-  - The Project name shown on an entry's Info card now displays a loading placeholder while it resolves, instead of appearing blank.
-  - Data Product cards now show a tooltip with the full name when it's too long to fit and gets truncated.
-  - The Glossaries sidebar now auto-collapses sibling categories when you expand another one under the same parent, for cleaner accordion-style navigation.
-  - Looker entries now include a "Glossary Terms" tab (alongside Overview, Entry List, Aspects, and Lineage), showing glossary terms linked to the Looker asset.
-  - The Schema tab now shows a "Semantic" column (e.g. `DIMENSION_TYPE`, `MEASURE_TYPE`) for resources whose fields define it, such as Looker dimensions and measures. The column is hidden for resources like BigQuery tables that don't populate it.
+  - The Glossaries sidebar no longer eagerly fetches every root glossary's categories and terms on page load (which could issue hundreds of requests at once); they now load on demand when you expand a glossary, with a loading indicator on that row while they fetch.
+  - Searching in Glossaries now only ever returns glossaries themselves — categories and terms are no longer shown directly as search results, avoiding confusing, incorrectly-placed entries. Clicking a glossary result you don't have access to shows the same "Access Denied" state as elsewhere in the app, instead of a disabled, locked-looking row.
 
 Bug Fixes:
 
-  - Fixed Data Quality scores for custom (aspect-based) entries being double-scaled and showing malformed percentages (e.g. `9372%`, `10000%`) instead of the correct value (e.g. `93.72%`, `100%`).
-  - Created At / Modified At timestamps across Data Products, Lineage, Entry List, Search Entries cards, and Resource Preview are now converted and displayed in the user's local time zone, fixing cases where dates were shown in raw/incorrect format or missing entirely.
-  - Search Entries cards and other resource views now prefer the underlying resource's actual last-modified time (`entrySource.updateTime`) over the catalog/aspect metadata's update time, fixing "last modified" dates that could drift after a re-scan touched an aspect without the resource itself changing.
-  - Glossary Categories and Terms now correctly show their parent glossary/category name instead of leaving it blank.
-  - Fixed a jarring experience when opening a Data Product found only via search outside the user's current project: it previously hit a permission error, showed a raw JSON toast, and force-redirected back to the list after 2 seconds. The detail page now stays open with a clear "Access Denied" state (showing the product's cached name, description, and icon) and a Request Access option.
-  - Fixed dates not displaying on the Data Product detail view page and the Data Profile configuration panel.
-  - Fixed incorrect date parsing for zero-value and millisecond-based timestamps in the shared date-formatting utility.
-  - Fixed Search Entry cards and Resource Preview showing a stale "last modified"/"created" date from catalog metadata instead of the underlying resource's actual timestamps.
-  - Fixed a stray, mismatched-color divider line and a page-layout sizing issue causing a visible seam at the bottom of the Data Products page; also removed the table view's internal scrollbar to avoid nested/double scrolling.
-  - Fixed opening a shared "Copy Link" for a resource, or reloading certain pages, sometimes leaving the app running with incomplete configuration — causing filters, project-based restrictions, and search scoping to behave inconsistently until the user navigated back to the Home page.
-  - Fixed signing out and back in as a different user sometimes carrying over the previous user's project list, which could briefly show incorrect project names or access restrictions to the new user.
-  - Fixed the "Browse by Aspect" page intermittently showing "No Aspects" for organizations with project-based access restrictions, caused by a timing race between loading aspects and loading the project list.
-  - Fixed sub-type asset counts on the "Browse by Aspect" page getting stuck and never loading after refreshing the page, or after being prompted to sign in again due to session expiry.
-  - Fixed duplicate/racing configuration requests that could occur when loading certain pages, improving load reliability and reducing unnecessary network calls.
-  - Fixed the "Knowledge Catalog" product filter — in Search, Browse by Aspect, Glossaries, and Data Products, and when typing a matching search term — not including assets whose system is reported as the short form "Dataplex"; only the full "Dataplex Universal Catalog" name was recognized, so some Dataplex-sourced assets were silently excluded from results.
-  - Fixed clicking a search-term suggestion chip on the Home page (or otherwise submitting a search with no aspect-type filter) unnecessarily waiting on the full project list to finish loading before running the search. It now runs as soon as app configuration is ready, only waiting on the project list when the search actually needs it (an aspect-type filter is selected), showing a loading state for that narrower wait instead of appearing to return no results.
-  - Fixed opening a shared "Copy Link" to a specific sub-type on the Browse by Aspect page sometimes silently reusing another aspect's already-cached (and possibly stale) data instead of fetching fresh results for the linked sub-type.
-  - Fixed the Browse by Aspect page's sub-type asset counts querying before the project list had loaded, which could return incorrect counts; the wait is now scoped to each sub-type card's own loading indicator instead of blocking the aspect's overview and sub-type list from displaying.
-  - Fixed refreshing the Browse by Aspect page with a sub-type already selected sometimes leaving its asset counts stuck loading forever instead of re-fetching them.
-  - Fixed trailing/leading whitespace in resource and entry descriptions being displayed instead of trimmed.
-  - Fixed a misaligned "No Data Product Assets found" empty-state message on the Data Product Assets tab.
-  - Fixed the Glossaries Aspects tab clipping its content instead of scrolling when it overflowed.
-  - Fixed the account/profile chip in the navbar not keeping its hover background highlighted while its tooltip was open.
+  - Fixed Data Products sometimes listing the same product twice — once from the Dataplex API and once from the organization-wide search — when the two described the product's project differently (project ID vs. project number); matching now recognizes either spelling.
+  - Fixed the Data Products page, its detail view, and the sidebar's "Data Products" shortcut fetching the list before the project list had actually finished loading, which could also produce duplicate entries; the Data Products page now shows a clear "Could not load your project list, so Data Products cannot be shown" message instead of an empty grid if the project list fails to load.
+  - Fixed the backend's Data Products endpoint trusting the browser to report its configured project list, which could silently fall back to a single project if the app's configuration hadn't loaded yet, or fetch (and list) the same project's products twice if it was sent more than once; the server now reads and de-duplicates the configured project list itself.
+  - Fixed the Glossaries sidebar and root glossary list silently showing an incomplete or inconsistent set of glossaries — search results and the root list were previously capped and unordered, so which glossaries appeared could change between loads once a workspace had more than a page's worth.
+  - Fixed a glossary's categories/terms list being truncated when it had more items than a single page from the catalog, so expanding a large glossary could show only part of its contents.
+  - Fixed a glossary discovered via search (before it had been separately loaded) sometimes getting permanently stuck titled "Loading..." instead of showing its real name.
+  - Fixed Glossaries search occasionally showing unrelated results (e.g. BigQuery tables, aspect types) styled and clickable as if they were real glossaries.
+  - Fixed the Glossaries sidebar's root list failing to load entirely when a single returned glossary entry was malformed, instead of loading the rest.
+  - Fixed a Term's Synonyms/Related terms list failing to load entirely when one linked result was malformed, instead of showing the other valid results.
+  - Fixed the `/api/v1/app-configs` bootstrap request (used by Glossaries, Browse by Aspect, and project scoping across the app) failing entirely when a single aspect entry in the response was malformed.
+  - Fixed the "Glossary Terms" tab on a resource's detail page staying empty and never loading, requiring a page refresh, after navigating to a different resource and back to the original one.
+  - Fixed the root Glossaries list occasionally showing a category as if it were its own standalone top-level glossary.
+  - Fixed the Browse by Aspect list being silently truncated (missing aspect types) due to a pagination bug in how the list is fetched.
+  - Fixed signing out leaving the previous user's Browse by Aspect list and Glossaries search/filter state visible after a different user logged back in.
+  - Fixed the Glossaries content pane getting stuck on a loading placeholder indefinitely after searching for content belonging to a resource the user doesn't have access to.
+  - Fixed the Browse by Aspect list inconsistently including or excluding project-restricted aspect types depending on a transient error when resolving the configured project list, which could make the same workspace show a different aspect list across logins.
+  - Fixed clicking to open every Aspect accordion in a resource's Aspects panel one by one (without using the "Open All" button) causing every nested field across every aspect to auto-expand as well; manually opening aspects individually now only opens each aspect's own content, and full nested expansion only happens via "Open All".

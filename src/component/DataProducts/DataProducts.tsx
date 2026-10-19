@@ -308,7 +308,7 @@ const DataProducts = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isBootstrapping } = useAppBootstrapStatus();
+  const { isBootstrapping, areProjectsReady, isProjectMappingReady } = useAppBootstrapStatus();
 
   const { dataProductsItems, status, error } = useSelector((state: any) => state.dataProducts);
 
@@ -331,11 +331,13 @@ const DataProducts = () => {
 
 
   useEffect(() => {
-    // Wait for appConfig (projectsRestricted/configuredProjectIds) to be
-    // bootstrapped before fetching, since fetchDataProductsList reads it at
-    // dispatch time — firing early would silently skip the restricted-project
-    // filter on a cold deep-link/reload.
-    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && !isBootstrapping) {
+    // Waits for the project list to have actually loaded, not merely for the
+    // bootstrap to be over: fetchDataProductsList merges the data-products API
+    // with the org-wide search, and needs the project id <-> number mapping to
+    // tell when both describe the same product. isBootstrapping is satisfied by
+    // a *failed* /get-projects, which would hand the merge an empty mapping and
+    // list the shared product twice.
+    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && isProjectMappingReady) {
        dispatch(fetchDataProductsList({ id_token: user?.token }));
     }
     if(status=== 'succeeded'){
@@ -343,7 +345,7 @@ const DataProducts = () => {
         const sortedData = sortDataProducts(dataProductsItems, 'lastModified', 'desc');
         setDataProductsList(sortedData);
     }
-  }, [dispatch, dataProductsItems, status, user?.token, isBootstrapping]);
+  }, [dispatch, dataProductsItems, status, user?.token, isProjectMappingReady]);
 
   //sorting handlers
   const handleSortMenuClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
@@ -393,6 +395,16 @@ const DataProducts = () => {
       ? 'No data products available'
       : 'No data products found matching your search',
     [dataProductsItems.length]
+  );
+  // /get-projects has finished but produced no usable list. The data products
+  // fetch is deliberately not dispatched in that state - the merge needs the
+  // project id <-> number mapping to recognise a product returned by both the
+  // API and the catalog search, and without it the shared product is listed
+  // twice. Say so, rather than leaving an empty grid with no explanation:
+  // status stays 'idle', so neither the loading nor the empty state applies.
+  const showProjectsUnavailable = useMemo(
+    () => status === 'idle' && areProjectsReady && !isProjectMappingReady,
+    [status, areProjectsReady, isProjectMappingReady]
   );
 
 
@@ -738,7 +750,7 @@ const DataProducts = () => {
                         showLoading && viewMode === 'table' &&
                             <DataProductsTableViewSkeleton />
                     }
-                    { !showLoading && !showEmptyState &&
+                    { !showLoading && !showEmptyState && !showProjectsUnavailable &&
                         ( viewMode === 'list' ?
                         (dataProductsList.map((dataProducts: DataProduct) => (
                             <Grid
@@ -771,6 +783,22 @@ const DataProducts = () => {
                         }}>
                             <Typography variant="body1" color="text.secondary">
                                 {emptyStateMessage}
+                            </Typography>
+                        </Box>
+                    )}
+                    { showProjectsUnavailable && (
+                        <Box sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '100%',
+                            minHeight: { xs: 'calc(100vh - 250px)', sm: 'calc(100vh - 300px)' },
+                            opacity: 1,
+                            gap: 2
+                        }}>
+                            <Typography variant="body1" color="text.secondary">
+                                Could not load your project list, so Data Products cannot be shown.
                             </Typography>
                         </Box>
                     )}

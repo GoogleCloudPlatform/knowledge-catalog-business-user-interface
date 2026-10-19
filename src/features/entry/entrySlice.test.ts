@@ -191,6 +191,25 @@ describe("entrySlice", () => {
         expect(state.items).toEqual({});
         expect(state.status).toBe("succeeded");
       });
+
+      it("clears entryLinks/entryLinksStatus from a previous entry", () => {
+        // setEntry changes the displayed entry outside of fetchEntry, so it must
+        // invalidate the previous entry's linked terms the same way
+        // fetchEntry.pending does - otherwise ViewDetails' idle-status fetch
+        // guard for the Glossary Terms tab stays stuck on a stale value and
+        // either skips refetching or shows the wrong entry's linked terms.
+        const store = createTestStore({
+          entryLinks: [{ id: "x", type: "term", displayName: "Old" } as any],
+          entryLinksStatus: "succeeded",
+          entryLinksError: "some error",
+        });
+        store.dispatch(setEntry(mockEntryData));
+
+        const state = store.getState().entry;
+        expect(state.entryLinks).toEqual([]);
+        expect(state.entryLinksStatus).toBe("idle");
+        expect(state.entryLinksError).toBeNull();
+      });
     });
 
     describe("pushToHistory", () => {
@@ -266,6 +285,42 @@ describe("entrySlice", () => {
 
         const state = store.getState().entry;
         expect(state.status).toBe("succeeded");
+      });
+
+      it("clears entryLinks/entryLinksStatus for the entry being restored", () => {
+        // Back-navigation restores a cached entry without going through
+        // fetchEntry, so the entry it restores may differ from whichever entry
+        // last fetched links. Without this reset, ViewDetails' idle-status fetch
+        // guard can stay stuck on that stale status - either skipping the
+        // refetch for the restored entry or showing the wrong entry's terms.
+        const store = createTestStore({
+          items: mockEntryData,
+          history: [mockHistoryEntry1],
+          entryLinks: [{ id: "x", type: "term", displayName: "Old" } as any],
+          entryLinksStatus: "succeeded",
+          entryLinksError: "some error",
+        });
+        store.dispatch(popFromHistory());
+
+        const state = store.getState().entry;
+        expect(state.items).toEqual(mockHistoryEntry1);
+        expect(state.entryLinks).toEqual([]);
+        expect(state.entryLinksStatus).toBe("idle");
+        expect(state.entryLinksError).toBeNull();
+      });
+
+      it("does not touch entryLinks state when history is empty (no-op)", () => {
+        const store = createTestStore({
+          items: mockEntryData,
+          history: [],
+          entryLinks: [{ id: "x", type: "term", displayName: "Old" } as any],
+          entryLinksStatus: "succeeded",
+        });
+        store.dispatch(popFromHistory());
+
+        const state = store.getState().entry;
+        expect(state.entryLinksStatus).toBe("succeeded");
+        expect(state.entryLinks).toHaveLength(1);
       });
     });
 
@@ -520,6 +575,35 @@ describe("entrySlice", () => {
         expect(state.items).toEqual(mockLineageEntryData);
         expect(state.status).toBe("succeeded");
         expect(state.lineageToEntryCopy).toBe(false);
+      });
+
+      it("clears entryLinks/entryLinksStatus when copying to items via lineageToEntryCopy", async () => {
+        // This path swaps the displayed entry outside of fetchEntry (navigating
+        // via a lineage graph node), so it must invalidate the previous entry's
+        // linked terms the same way fetchEntry.pending does - otherwise
+        // ViewDetails' idle-status fetch guard for Glossary Terms stays stuck on
+        // the old entry's status and never refetches for the new one.
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          data: mockLineageEntryData,
+        });
+
+        const store = createTestStore({
+          lineageToEntryCopy: true,
+          entryLinks: [{ id: "x", type: "term", displayName: "Old" } as any],
+          entryLinksStatus: "succeeded",
+          entryLinksError: "some error",
+        });
+        await store.dispatch(
+          fetchLineageEntry({
+            id_token: "test-token",
+            fqn: "bigquery:project.dataset.table",
+          }) as any
+        );
+
+        const state = store.getState().entry;
+        expect(state.entryLinks).toEqual([]);
+        expect(state.entryLinksStatus).toBe("idle");
+        expect(state.entryLinksError).toBeNull();
       });
 
       it("does not copy to items when lineageToEntryCopy is false", async () => {

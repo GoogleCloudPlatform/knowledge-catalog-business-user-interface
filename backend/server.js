@@ -799,11 +799,32 @@ app.get('/api/v1/lookup-entry-links', async (req, res) => {
 app.get('/api/v1/data-products', async (req, res) => {
   try {
     const accessToken = req.headers.authorization?.split(' ')[1];
-    // Support a comma-separated list of projectIds for multi-project scoping.
-    // Falls back to the legacy single projectId param, then to the env var.
-    const projectIds = req.query.projectIds
-      ? req.query.projectIds.split(',').map(id => id.trim()).filter(Boolean)
-      : [req.query.projectId || process.env.GOOGLE_CLOUD_PROJECT_ID];
+
+    // The configured project list is read here, on the server, rather than being
+    // sent up by the browser as ?projectIds. The client used to derive it from
+    // appConfig, which meant a page whose config had not loaded yet sent nothing
+    // and silently fell back to a single project - a different list for the same
+    // action. The server already owns configData.json, so it is the only source.
+    //
+    // De-duplicated: a project repeated here was previously fetched twice and
+    // both results concatenated, listing its products twice.
+    let projectIds = [];
+    try {
+      const raw = await fs.readFile(dataFilePath, 'utf8');
+      const cfg = raw ? JSON.parse(raw) : {};
+      if (Array.isArray(cfg.projects)) {
+        projectIds = [...new Set(cfg.projects.map(id => String(id).trim()).filter(Boolean))];
+      }
+    } catch (err) {
+      console.error('Could not read configData.json for data-products:', err.message);
+    }
+
+    // No configured projects means "no restriction". Today that still resolves to
+    // the deployment's own project; widening it to every project the caller can
+    // access is a separate decision (it changes the fan-out size materially).
+    if (!projectIds.length) {
+      projectIds = [req.query.projectId || process.env.GOOGLE_CLOUD_PROJECT_ID];
+    }
 
     if (!projectIds.length || !projectIds[0]) {
       return res.status(500).json({ message: 'Server Configuration Error: GOOGLE_CLOUD_PROJECT_ID must be set in the .env file.' });
@@ -922,14 +943,60 @@ app.get('/api/v1/glossary-children', async (req, res) => {
     const bearerToken = await getRequestAccessToken(accessToken);
     const headers = { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' };
 
+    // An explicit 403 is the ONLY thing that means "you cannot read this glossary".
+    // An empty result does not: a glossary with no categories and no terms is a
+    // perfectly normal, readable glossary. Nor does a single failing leg - if terms
+    // are readable but categories are denied, the glossary is still readable.
+    //
+    // This distinction matters because the client marks search matches as locked,
+    // and it previously had to *infer* that from absence - locking items the user
+    // could actually open.
+    //
+    // Each leg also follows nextPageToken to completion. Dataplex's
+    // categories.list/terms.list paginate by default (previously this took
+    // only the first page, so a glossary with more categories or terms than
+    // one page fit in silently lost the rest - with no signal to the client
+    // that anything was missing).
+    const fetchLeg = async (path, key) => {
+      let items = [];
+      let pageToken;
+      do {
+        try {
+          const { data } = await axios.get(
+            `https://dataplex.googleapis.com/v1/${parent}/${path}`,
+            { headers, params: { pageSize: 1000, ...(pageToken ? { pageToken } : {}) } }
+          );
+          items = items.concat(data[key] || []);
+          pageToken = data.nextPageToken;
+        } catch (err) {
+          // A failure on the very first page (nothing fetched yet) is the only
+          // case that can mean "denied" - a later page failing mid-pagination
+          // still means access was already proven, so keep what was fetched
+          // and just stop rather than discarding it.
+          return { forbidden: items.length === 0 && err?.response?.status === 403, data: items };
+        }
+      } while (pageToken);
+      return { forbidden: false, data: items };
+    };
+
     const [categoriesRes, termsRes] = await Promise.all([
-      axios.get(`https://dataplex.googleapis.com/v1/${parent}/categories`, { headers }).catch(() => ({ data: { categories: [] } })),
-      axios.get(`https://dataplex.googleapis.com/v1/${parent}/terms`, { headers }).catch(() => ({ data: { terms: [] } })),
+      fetchLeg('categories', 'categories'),
+      fetchLeg('terms', 'terms'),
     ]);
 
+    // Only when BOTH legs are explicitly denied do we report the glossary itself
+    // as inaccessible. Every other failure still degrades to an empty list, as
+    // before (surfacing those is tracked separately).
+    if (categoriesRes.forbidden && termsRes.forbidden) {
+      return res.status(403).json({
+        error: 'Permission Denied: You do not have access to this glossary.',
+        details: `Listing categories and terms was denied for ${parent}.`,
+      });
+    }
+
     res.json({
-      categories: categoriesRes.data.categories || [],
-      terms: termsRes.data.terms || [],
+      categories: categoriesRes.data,
+      terms: termsRes.data,
     });
   } catch (error) {
     console.error('Error fetching glossary children', error?.response?.data || error);
@@ -1674,8 +1741,9 @@ app.get('/api/v1/app-configs', async (req, res) => {
       // The name of the project and location to search within
       name: parent,
       query: aspectQuery,
-      pageSize:999, // Limit the number of results returned
-      pageToken:'',
+      // Page size only, not a cap: auto-pagination stays ON below so the list is
+      // complete. Set high purely to cut round trips, mirroring /get-projects.
+      pageSize:999,
     };
 
     
@@ -1683,7 +1751,11 @@ app.get('/api/v1/app-configs', async (req, res) => {
     let configData = {};
     try{
       const [aspectsList, projectList, currentProject, defaultConfigData] = await Promise.all([
-          dataplexClientv1.searchEntries(request, { autoPaginate: false}),
+          // Auto-pagination left ON: with it off only the first page was read and
+          // nextPageToken was discarded, so the aspect list was silently truncated
+          // at a server-chosen boundary - and since the query has no orderBy, which
+          // aspects survived differed between calls.
+          dataplexClientv1.searchEntries(request),
           resourceManagerClientv1.searchProjects({pageSize:2000}, { autoPaginate: false}),
           resourceManagerClientv1.getProject({ name: `projects/${projectId}` }),
           fs.readFile(dataFilePath, 'utf8') || {}
@@ -1712,6 +1784,24 @@ app.get('/api/v1/app-configs', async (req, res) => {
           resourceManagerClientv1.getProject({ name: `projects/${id}` })
         )
       );
+
+      // One retry for whichever calls failed - absorbs a transient blip (rate
+      // limit, brief 5xx) instead of permanently flagging
+      // configuredProjectsComplete false for the rest of the session over
+      // something that would have succeeded a moment later. A persistently
+      // failing id still correctly ends up incomplete below.
+      const failedIndexes = resolved
+        .map((r, i) => (r.status === 'rejected' ? i : -1))
+        .filter((i) => i !== -1);
+      if (failedIndexes.length > 0) {
+        const retried = await Promise.allSettled(
+          failedIndexes.map((i) =>
+            resourceManagerClientv1.getProject({ name: `projects/${configuredProjectIds[i]}` })
+          )
+        );
+        failedIndexes.forEach((i, j) => { resolved[i] = retried[j]; });
+      }
+
       resolved.forEach((result, i) => {
         const project = result.status === 'fulfilled' ? result.value?.[0] : null;
         const projectNumber = (project?.name || '').split('/')[1] || '';
@@ -1732,10 +1822,17 @@ app.get('/api/v1/app-configs', async (req, res) => {
       });
     }
 
-    const reduceAspect = ({ name, fullyQualifiedName, entrySource, entryType }) => ({ name, fullyQualifiedName, entrySource, entryType });
+    // Guarded against a malformed entry - without this, one bad aspect in the
+    // response fails the whole /app-configs call (500), which blocks the
+    // entire app's bootstrap (Glossaries, Browse by Aspect, project scoping
+    // all wait on this endpoint).
+    const reduceAspect = (dataplexEntry) => {
+      const e = dataplexEntry || {};
+      return { name: e.name, fullyQualifiedName: e.fullyQualifiedName, entrySource: e.entrySource, entryType: e.entryType };
+    };
 
     const configs = {
-        aspects: aspects.map(({ dataplexEntry }) => ({ dataplexEntry:reduceAspect(dataplexEntry) })),
+        aspects: aspects.map((a) => ({ dataplexEntry: reduceAspect(a?.dataplexEntry) })),
         projects: projects.map(({ projectId, name, displayName }) => ({ projectId, name, displayName })),
         projectsRestricted: !!(configData.projects && configData.projects.length > 0),
         configuredProjectIds: configData.projects || [],
