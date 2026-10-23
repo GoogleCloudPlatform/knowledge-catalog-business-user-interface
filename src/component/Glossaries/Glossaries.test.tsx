@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { configureStore } from '@reduxjs/toolkit';
 import { Provider } from 'react-redux';
@@ -480,6 +480,16 @@ describe('Glossaries', () => {
     it('renders empty state when no glossaries and succeeded', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [] } });
       expect(screen.getByText('No results found')).toBeInTheDocument();
+    });
+
+    it('shows the skeleton, not "No results found", before the first fetch starts', () => {
+      // status stays 'idle' until the mount effect dispatches, and that effect
+      // waits on appConfig - so this is the whole /app-configs round trip, not a
+      // single frame. "No results found" would claim we looked and found nothing
+      // before anything had been requested.
+      renderWithStore({ glossaries: { status: 'idle', glossaryItems: [] } });
+      expect(screen.getByTestId('shimmer-simple-list')).toBeInTheDocument();
+      expect(screen.queryByText('No results found')).not.toBeInTheDocument();
     });
 
     it('renders glossary items in sidebar when available', () => {
@@ -1634,6 +1644,111 @@ describe('Glossaries', () => {
       renderWithStore({ glossaries: { status: 'succeeded', glossaryItems: [] } });
 
       expect(screen.getByAltText('Select an item')).toBeInTheDocument();
+    });
+
+    it('fetches the auto-selected first glossary\'s children when it has none', async () => {
+      // Without this, a glossary selected automatically on mount (never
+      // through handleToggle) renders with empty Categories/Terms tabs,
+      // since those derive from item.children. The spy has to be attached
+      // before render - the mount effect that dispatches this fires
+      // synchronously within render(), so attaching it afterward (as
+      // renderWithStore's own returned store would require) misses the call.
+      const store = createMockStore({
+        glossaries: { status: 'succeeded', glossaryItems: [mockGlossaryNoChildren] },
+      });
+      const dispatchSpy = vi.spyOn(store, 'dispatch');
+      render(
+        <Provider store={store}>
+          <Glossaries />
+        </Provider>
+      );
+
+      await waitFor(() => {
+        expect(
+          dispatchSpy.mock.calls.some(
+            ([action]: any) => action?.type === 'glossaries/fetchGlossaryChildren'
+          )
+        ).toBe(true);
+      });
+    });
+
+    it('does not eagerly prefetch children for every root glossary on mount', async () => {
+      // There used to be an effect here that dispatched fetchGlossaryChildren
+      // once per root glossary on mount - up to N requests, each fanning out
+      // to two upstream calls. Only the auto-selected first glossary should
+      // be warmed; the rest load lazily on expand.
+      const secondGlossary: GlossaryItem = {
+        ...mockGlossaryNoChildren,
+        id: 'glossary-empty-2',
+        displayName: 'Empty Glossary 2',
+      };
+      const store = createMockStore({
+        glossaries: {
+          status: 'succeeded',
+          glossaryItems: [mockGlossaryNoChildren, secondGlossary],
+        },
+      });
+      const dispatchSpy = vi.spyOn(store, 'dispatch');
+      render(
+        <Provider store={store}>
+          <Glossaries />
+        </Provider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`sidebar-item-${mockGlossaryNoChildren.id}`)).toBeInTheDocument();
+      });
+
+      const childrenFetchCalls = dispatchSpy.mock.calls.filter(
+        ([action]: any) => action?.type === 'glossaries/fetchGlossaryChildren'
+      );
+      expect(childrenFetchCalls).toHaveLength(1);
+    });
+  });
+
+  describe('Children loading state (handleToggle)', () => {
+    // An expanded node with no children is ambiguous - still loading, or
+    // genuinely empty - so SidebarItem needs to know which nodes are actively
+    // being fetched in order to show a skeleton only for the former.
+    it('marks a node as loading when its children are fetched on expand, and clears it once the fetch settles', async () => {
+      const SidebarItemMock = SidebarItem as unknown as ReturnType<typeof vi.fn>;
+      renderWithStore({
+        glossaries: { status: 'succeeded', glossaryItems: [mockGlossaryNoChildren] },
+      });
+
+      const lastLoadingIdsFor = (id: string) => {
+        const calls = SidebarItemMock.mock.calls.filter(([props]: any) => props.item.id === id);
+        const lastCall = calls[calls.length - 1];
+        return lastCall?.[0]?.loadingChildrenIds as Set<string> | undefined;
+      };
+
+      await waitFor(() => {
+        expect(screen.getByTestId(`sidebar-item-${mockGlossaryNoChildren.id}`)).toBeInTheDocument();
+      });
+      expect(lastLoadingIdsFor(mockGlossaryNoChildren.id)?.has(mockGlossaryNoChildren.id)).toBeFalsy();
+
+      // The auto-select effect already added this glossary to expandedIds (it's
+      // the selected root glossary), so the first toggle click collapses it -
+      // the second one is the one that re-opens it and hits the no-children fetch
+      // branch. fireEvent + act flush each click's synchronous state update
+      // (markChildrenLoading runs before the fetch's promise chain gets a turn)
+      // without yielding to the microtask queue first, unlike userEvent.click -
+      // so the loading flag is observable here rather than racing the fetch's
+      // near-instant test-env rejection.
+      act(() => {
+        fireEvent.click(screen.getByTestId(`toggle-${mockGlossaryNoChildren.id}`));
+      });
+      act(() => {
+        fireEvent.click(screen.getByTestId(`toggle-${mockGlossaryNoChildren.id}`));
+      });
+      expect(lastLoadingIdsFor(mockGlossaryNoChildren.id)?.has(mockGlossaryNoChildren.id)).toBe(true);
+
+      // fetchGlossaryChildren has no backend to actually succeed against here,
+      // but it still settles (rejects), which is what the `.finally` clearing
+      // the flag depends on.
+      await waitFor(() => {
+        expect(lastLoadingIdsFor(mockGlossaryNoChildren.id)?.has(mockGlossaryNoChildren.id)).toBeFalsy();
+      });
     });
   });
 

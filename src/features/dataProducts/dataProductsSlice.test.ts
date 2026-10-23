@@ -376,6 +376,128 @@ describe("dataProductsSlice", () => {
         expect(primaryItem?.isOutOfScope).toBeFalsy();
         expect(searchOnlyItem?.isOutOfScope).toBe(true);
       });
+
+      it("does not list the same search-only product twice when the index returns it more than once", async () => {
+        // The Search index can return the same resource in more than one result.
+        // Each hit used to be tested only against the API list - never against
+        // the hits already accepted - so every repeat became its own card.
+        const duplicatedSearchEntry = {
+          dataplexEntry: {
+            entrySource: {
+              resource: "projects/123456789/locations/europe-west2/dataProducts/subtitles",
+              displayName: "subtitles",
+            },
+          },
+        };
+
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          status: 200,
+          data: { dataProducts: [] },
+        });
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          status: 200,
+          data: { results: [duplicatedSearchEntry, { ...duplicatedSearchEntry }] },
+        });
+
+        const store = createTestStore(mockSessionData);
+        await store.dispatch(fetchDataProductsList({ id_token: "token" }) as any);
+
+        const items = store.getState().dataproducts.dataProductsItems as any[];
+        expect(items.filter((p) => p.displayName === "subtitles")).toHaveLength(1);
+      });
+
+      it("matches a product across the two sources when one uses the project id and the other the project number", async () => {
+        // dataProducts.list and the Search index do not agree on how the project
+        // segment is spelled. Both spellings must resolve to the same product.
+        const idFormProduct = {
+          name: "projects/test-project/locations/europe-west2/dataProducts/subtitles",
+          displayName: "subtitles",
+        };
+        const numberFormSearchEntry = {
+          dataplexEntry: {
+            entrySource: {
+              resource: "projects/123456789/locations/europe-west2/dataProducts/subtitles",
+              displayName: "subtitles",
+            },
+          },
+        };
+
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          status: 200,
+          data: { dataProducts: [idFormProduct] },
+        });
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          status: 200,
+          data: { results: [numberFormSearchEntry] },
+        });
+
+        const store = createTestStore(mockSessionData);
+        await store.dispatch(fetchDataProductsList({ id_token: "token" }) as any);
+
+        const items = store.getState().dataproducts.dataProductsItems as any[];
+        expect(items).toHaveLength(1);
+        expect(items[0].isOutOfScope).toBeFalsy();
+      });
+
+      it("keeps same-named products in different projects as separate entries", async () => {
+        // Three real `subtitles` products in three projects must stay three rows -
+        // de-duplication must not key on location+id alone.
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          status: 200,
+          data: {
+            dataProducts: [
+              { name: "projects/123456789/locations/europe-west2/dataProducts/subtitles", displayName: "subtitles" },
+              { name: "projects/987654321/locations/europe-west2/dataProducts/subtitles", displayName: "subtitles" },
+            ],
+          },
+        });
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          status: 200,
+          data: { results: [] },
+        });
+
+        const store = createTestStore(mockSessionData);
+        await store.dispatch(fetchDataProductsList({ id_token: "token" }) as any);
+
+        const items = store.getState().dataproducts.dataProductsItems as any[];
+        expect(items).toHaveLength(2);
+      });
+
+      it("cannot match the two spellings without a project list - callers must gate on it", async () => {
+        // Both sources always contribute, so the merge has no way to recover here:
+        // with no project list there is nothing to translate id <-> number with and
+        // the shared product is listed twice. This is exactly the reported bug, and
+        // the reason every dispatch site gates on `isProjectMappingReady`. Pinned so
+        // the gates are not removed casually.
+        const idFormProduct = {
+          name: "projects/test-project/locations/europe-west2/dataProducts/subtitles",
+          displayName: "subtitles",
+        };
+        const numberFormSearchEntry = {
+          dataplexEntry: {
+            entrySource: {
+              resource: "projects/123456789/locations/europe-west2/dataProducts/subtitles",
+              displayName: "subtitles",
+            },
+          },
+        };
+
+        vi.mocked(axios.get).mockResolvedValueOnce({
+          status: 200,
+          data: { dataProducts: [idFormProduct] },
+        });
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          status: 200,
+          data: { results: [numberFormSearchEntry] },
+        });
+
+        // Empty project list - /get-projects has not landed.
+        const store = createTestStore(mockSessionData, []);
+        await store.dispatch(fetchDataProductsList({ id_token: "token" }) as any);
+
+        const items = store.getState().dataproducts.dataProductsItems as any[];
+        expect(items).toHaveLength(2);
+      });
     });
 
     describe("Rejected State", () => {

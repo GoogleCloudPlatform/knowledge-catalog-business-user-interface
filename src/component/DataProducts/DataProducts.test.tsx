@@ -66,13 +66,20 @@ vi.mock('../../auth/AuthProvider', () => ({
 
 // appConfig/get-projects bootstrapping is now handled globally by
 // useAppBootstrap (see src/hooks/useAppBootstrap.test.ts); these tests
-// assume the bootstrap has already completed.
-vi.mock('../../hooks/useAppBootstrap', () => ({
-  useAppBootstrapStatus: () => ({
+// assume the bootstrap has already completed. Mutable so individual tests can
+// describe a degraded bootstrap - reset in beforeEach below.
+const { mockBootstrapStatus, BOOTSTRAPPED } = vi.hoisted(() => {
+  const BOOTSTRAPPED = {
     isAppConfigReady: true,
     areProjectsReady: true,
+    isProjectMappingReady: true,
     isBootstrapping: false,
-  }),
+  };
+  return { mockBootstrapStatus: { ...BOOTSTRAPPED }, BOOTSTRAPPED };
+});
+
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: () => mockBootstrapStatus,
 }));
 
 // Use vi.hoisted to create mocks that can be used inside vi.mock
@@ -261,6 +268,7 @@ import DataProducts from './DataProducts';
 describe('DataProducts Components', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.assign(mockBootstrapStatus, BOOTSTRAPPED);
     localStorageMock.clear();
     localStorageMock._setStore({});
     capturedFilterBarProps = null;
@@ -1926,6 +1934,29 @@ describe('DataProducts Components', () => {
         };
         renderDataProducts();
         expect(localStorageMock.removeItem).toHaveBeenCalledWith('selectedDataProduct');
+      });
+
+      it('does not fetch, and explains why, when the project list is unavailable', () => {
+        // /get-projects finished but gave nothing usable. Fetching anyway would
+        // leave the merge unable to tell that a product returned by both the API
+        // and the catalog search is the same product, and list it twice.
+        mockBootstrapStatus.isProjectMappingReady = false;
+        mockReduxState = {
+          dataProducts: {
+            dataProductsItems: [],
+            status: 'idle',
+            dataProductAssets: [],
+            dataProductAssetsStatus: 'idle'
+          },
+          user: { mode: 'light' }
+        };
+        renderDataProducts();
+
+        expect(mockDispatch).not.toHaveBeenCalled();
+        // Must not render a bare empty grid with no explanation.
+        expect(
+          screen.getByText(/Could not load your project list/i)
+        ).toBeInTheDocument();
       });
     });
 

@@ -277,6 +277,26 @@ describe("glossariesSlice", () => {
         expect(state.glossaryItems).toEqual([]);
         expect(state.status).toBe("idle");
       });
+
+      it("also clears the filter state, which used to survive logout", () => {
+        // Dispatched by logout(). It previously reset only glossaryItems/status,
+        // so activeFilters and filteredTreeItems carried into the next session -
+        // and the page renders filteredTreeItems whenever activeFilters is
+        // non-empty, so the new session opened on the old filtered subset.
+        const store = createTestStore({
+          ...getInitialState(),
+          glossaryItems: [mockGlossaryItem],
+          filteredTreeItems: [mockGlossaryItem],
+          viewDetailsItems: [mockGlossaryItem],
+          activeFilters: [{ id: "f1", field: "name", value: "x", displayLabel: "x" }],
+          totalSize: 42,
+          selectedId: "some-id",
+        });
+
+        store.dispatch(clearGlossaries());
+
+        expect(store.getState().glossaries).toEqual(getInitialState());
+      });
     });
 
     describe("setActiveFilters", () => {
@@ -452,6 +472,137 @@ describe("glossariesSlice", () => {
         expect(state.status).toBe("succeeded");
         expect(state.glossaryItems).toHaveLength(1);
         expect(state.totalSize).toBe(1);
+      });
+
+      it("follows nextPageToken until exhausted, combining every page's results", async () => {
+        // A single capped request silently dropped every glossary beyond the
+        // first page, with no signal to the user that more existed.
+        const pageOneResult = {
+          ...mockGlossarySearchResult,
+          dataplexEntry: {
+            ...mockGlossarySearchResult.dataplexEntry,
+            entrySource: {
+              ...mockGlossarySearchResult.dataplexEntry.entrySource,
+              resource: "projects/test-project/locations/global/glossaries/page-one-glossary",
+            },
+          },
+        };
+        const pageTwoResult = {
+          ...mockGlossarySearchResult,
+          dataplexEntry: {
+            ...mockGlossarySearchResult.dataplexEntry,
+            entrySource: {
+              ...mockGlossarySearchResult.dataplexEntry.entrySource,
+              resource: "projects/test-project/locations/global/glossaries/page-two-glossary",
+            },
+          },
+        };
+
+        vi.mocked(axios.post)
+          .mockResolvedValueOnce({
+            data: { results: [pageOneResult], totalSize: 2, nextPageToken: "token-for-page-2" },
+          })
+          .mockResolvedValueOnce({
+            data: { results: [pageTwoResult], totalSize: 2 },
+          });
+
+        const store = createTestStore();
+        await store.dispatch(fetchGlossaries({ id_token: "test-token" }) as any);
+
+        expect(axios.post).toHaveBeenCalledTimes(2);
+        expect(axios.post).toHaveBeenNthCalledWith(
+          2,
+          expect.any(String),
+          expect.objectContaining({ pageToken: "token-for-page-2" })
+        );
+        const state = store.getState().glossaries;
+        expect(state.glossaryItems).toHaveLength(2);
+        expect(state.totalSize).toBe(2);
+      });
+
+      it("stops after one request when the response carries no nextPageToken", async () => {
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          data: { results: [mockGlossarySearchResult], totalSize: 1 },
+        });
+
+        const store = createTestStore();
+        await store.dispatch(fetchGlossaries({ id_token: "test-token" }) as any);
+
+        expect(axios.post).toHaveBeenCalledTimes(1);
+      });
+
+      it("drops a category/term entry instead of mistyping it as a top-level glossary", async () => {
+        // A query restricted to type=GLOSSARY can still return a nested
+        // category/term (Dataplex/EXP:SEMANTIC does not reliably honor the
+        // type filter). mapEntryToGlossaryItem hardcodes type: "glossary" with
+        // no check of its own, so an entry like this must never reach it -
+        // otherwise it becomes a fake, independent top-level glossary row,
+        // distinct from its real place nested under its actual parent.
+        const categoryResult = {
+          dataplexEntry: {
+            name: "projects/test-project/locations/global/entryGroups/@dataplex/entries/cat-entry",
+            entrySource: {
+              resource: "projects/test-project/locations/global/glossaries/g1/categories/c1",
+              displayName: "Data Residency & Sovereignty",
+              location: "global",
+            },
+            entryType: "projects/655216118709/locations/global/entryTypes/glossary-category",
+          },
+        };
+
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          data: {
+            results: [mockGlossarySearchResult, categoryResult],
+            totalSize: 2,
+          },
+        });
+
+        const store = createTestStore();
+        await store.dispatch(fetchGlossaries({ id_token: "test-token" }) as any);
+
+        const state = store.getState().glossaries;
+        expect(state.glossaryItems).toHaveLength(1);
+        expect(state.glossaryItems[0].id).toBe(
+          mockGlossarySearchResult.dataplexEntry.entrySource.resource
+        );
+      });
+
+      it("drops a malformed result (missing name/entrySource) instead of crashing the reducer", async () => {
+        // This runs directly inside the reducer with no surrounding try/catch
+        // and the app has no error boundary - an unguarded property access
+        // here would crash the whole app, not just this feature. The
+        // entryType must itself look like a real top-level glossary so it
+        // survives the thunk's own isTopLevelGlossaryEntry filter and
+        // actually reaches mapEntryToGlossaryItem - anything lacking
+        // dataplexEntry/entryType entirely is already dropped upstream.
+        const malformedResults = [
+          { dataplexEntry: { entryType: "projects/x/locations/global/entryTypes/glossary" } }, // no entrySource, no name
+          {
+            dataplexEntry: {
+              entryType: "projects/x/locations/global/entryTypes/glossary",
+              entrySource: {},
+            },
+          }, // no name, no resource
+        ];
+
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          data: {
+            results: [mockGlossarySearchResult, ...malformedResults],
+            totalSize: 3,
+          },
+        });
+
+        const store = createTestStore();
+        await expect(
+          store.dispatch(fetchGlossaries({ id_token: "test-token" }) as any)
+        ).resolves.toBeDefined();
+
+        const state = store.getState().glossaries;
+        expect(state.status).toBe("succeeded");
+        expect(state.glossaryItems).toHaveLength(1);
+        expect(state.glossaryItems[0].id).toBe(
+          mockGlossarySearchResult.dataplexEntry.entrySource.resource
+        );
       });
 
       it("sets Authorization header when id_token is provided", async () => {
@@ -897,6 +1048,33 @@ describe("glossariesSlice", () => {
         expect(result.payload.relations).toEqual([]);
       });
 
+      it("drops a malformed synonym/related result instead of failing the whole fetch", async () => {
+        // A malformed result (missing dataplexEntry/name) must not throw inside
+        // mapRelation - the thunk's single try/catch would otherwise discard
+        // every relation AND the linked assets Promise.all already fetched
+        // successfully, over one bad entry.
+        const malformedResult = { dataplexEntry: { entrySource: {} } }; // no name
+        vi.mocked(axios.post)
+          .mockResolvedValueOnce({ data: { results: [mockLinkedAssetResult] } })
+          .mockResolvedValueOnce({ data: { results: [mockSynonymResult, malformedResult] } })
+          .mockResolvedValueOnce({ data: { results: [mockRelatedResult, {}] } });
+
+        const store = createTestStore();
+
+        const result = await store.dispatch(
+          fetchTermRelationships({
+            termId: mockTermItem.id,
+            id_token: "token",
+          }) as any
+        );
+
+        expect(result.payload.relations).toHaveLength(2);
+        expect(result.payload.relations.map((r: any) => r.id)).toEqual([
+          mockSynonymResult.dataplexEntry.name,
+          mockRelatedResult.dataplexEntry.name,
+        ]);
+      });
+
       it("creates new term item if not found in tree", async () => {
         vi.mocked(axios.post)
           .mockResolvedValueOnce({ data: { results: [mockLinkedAssetResult] } })
@@ -961,6 +1139,52 @@ describe("glossariesSlice", () => {
 
         const state = store.getState().glossaries;
         expect(state.glossaryItems).toBeDefined();
+      });
+
+      it("does not clear accessDeniedItemId set for a DIFFERENT, still-pending item", async () => {
+        // Two call sites dispatch this thunk (auto-select-first-item on mount,
+        // and every click) and can be in flight together. An older, slower
+        // fetch for item A succeeding after a newer, faster 403 for item B
+        // must not wipe B's just-set denial - nothing re-fetches B again, so
+        // the tabs shimmer gated on this flag would stay stuck forever.
+        vi.mocked(axios.get).mockResolvedValueOnce({ data: mockEntryDetails });
+
+        const store = createTestStore({
+          ...getInitialState(),
+          glossaryItems: [mockGlossaryItem],
+          accessDeniedItemId: "projects/test/locations/global/glossaries/denied-glossary",
+        });
+
+        // Resolves successfully, but for a DIFFERENT id than the one flagged.
+        await store.dispatch(
+          fetchGlossaryEntryDetails({
+            entryName: mockGlossaryItem.id,
+            id_token: "token",
+          }) as any
+        );
+
+        expect(store.getState().glossaries.accessDeniedItemId).toBe(
+          "projects/test/locations/global/glossaries/denied-glossary"
+        );
+      });
+
+      it("clears accessDeniedItemId when the fulfilled response is for that same item", async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({ data: mockEntryDetails });
+
+        const store = createTestStore({
+          ...getInitialState(),
+          glossaryItems: [mockGlossaryItem],
+          accessDeniedItemId: mockGlossaryItem.id,
+        });
+
+        await store.dispatch(
+          fetchGlossaryEntryDetails({
+            entryName: mockGlossaryItem.id,
+            id_token: "token",
+          }) as any
+        );
+
+        expect(store.getState().glossaries.accessDeniedItemId).toBeNull();
       });
 
       it("creates new item if not found in tree", async () => {
@@ -1275,6 +1499,96 @@ describe("glossariesSlice", () => {
 
         expect(result.payload).toBe("Failed to lookup entry details");
       });
+
+      it("does not clear accessDeniedItemId for a DIFFERENT item on a non-403 failure", async () => {
+        // Same race as the fulfilled case: a non-403 failure for item A must
+        // not wipe a just-set denial for a DIFFERENT item B.
+        vi.mocked(axios.get).mockRejectedValueOnce(new Error("Network error"));
+
+        const store = createTestStore({
+          ...getInitialState(),
+          accessDeniedItemId: "projects/test/locations/global/glossaries/denied-glossary",
+        });
+
+        await store.dispatch(
+          fetchGlossaryEntryDetails({
+            entryName: mockGlossaryItem.id,
+            id_token: "token",
+          }) as any
+        );
+
+        expect(store.getState().glossaries.accessDeniedItemId).toBe(
+          "projects/test/locations/global/glossaries/denied-glossary"
+        );
+      });
+
+      it("clears accessDeniedItemId on a non-403 failure for that same item", async () => {
+        vi.mocked(axios.get).mockRejectedValueOnce(new Error("Network error"));
+
+        const store = createTestStore({
+          ...getInitialState(),
+          accessDeniedItemId: mockGlossaryItem.id,
+        });
+
+        await store.dispatch(
+          fetchGlossaryEntryDetails({
+            entryName: mockGlossaryItem.id,
+            id_token: "token",
+          }) as any
+        );
+
+        expect(store.getState().glossaries.accessDeniedItemId).toBeNull();
+      });
+
+      it("sets accessDeniedItemId on a 403 for the currently selected item", async () => {
+        const axiosError = new AxiosError("Forbidden");
+        (axiosError as any).response = { status: 403, data: "Access denied" };
+        vi.mocked(axios.get).mockRejectedValueOnce(axiosError);
+
+        const store = createTestStore({
+          ...getInitialState(),
+          selectedId: mockGlossaryItem.id,
+          accessDeniedItemId: null,
+        });
+
+        await store.dispatch(
+          fetchGlossaryEntryDetails({
+            entryName: mockGlossaryItem.id,
+            id_token: "token",
+          }) as any
+        );
+
+        expect(store.getState().glossaries.accessDeniedItemId).toBe(mockGlossaryItem.id);
+      });
+
+      it("does not hijack accessDeniedItemId on a 403 for a glossary the user never selected", async () => {
+        // Defensive guard: if anything ever dispatches this thunk for an item
+        // other than the current selection, its 403 must not overwrite the
+        // flag the selected item's own denial already set - nothing
+        // re-fetches the real selection afterward to restore it, so the tabs
+        // shimmer gated on this flag would stay stuck forever.
+        const axiosError = new AxiosError("Forbidden");
+        (axiosError as any).response = { status: 403, data: "Access denied" };
+        vi.mocked(axios.get).mockRejectedValueOnce(axiosError);
+
+        const selectedId = "projects/test/locations/global/glossaries/selected-g";
+        const otherGlossaryId = "projects/test/locations/global/glossaries/other-g";
+
+        const store = createTestStore({
+          ...getInitialState(),
+          selectedId,
+          accessDeniedItemId: selectedId,
+        });
+
+        await store.dispatch(
+          fetchGlossaryEntryDetails({
+            entryName: otherGlossaryId,
+            id_token: "token",
+          }) as any
+        );
+
+        expect(store.getState().glossaries.accessDeniedItemId).toBe(selectedId);
+      });
     });
   });
 
@@ -1520,6 +1834,70 @@ describe("glossariesSlice", () => {
         );
       });
 
+      it("follows nextPageToken until exhausted, combining every page's results", async () => {
+        // A single request capped at pageSize silently dropped every match
+        // beyond the first page, with no signal to the user that more existed.
+        const pageOneResult = {
+          ...mockGlossarySearchResult,
+          dataplexEntry: {
+            ...mockGlossarySearchResult.dataplexEntry,
+            entrySource: {
+              ...mockGlossarySearchResult.dataplexEntry.entrySource,
+              resource: "projects/test-project/locations/global/glossaries/page-one-glossary",
+            },
+          },
+        };
+        const pageTwoResult = {
+          ...mockGlossarySearchResult,
+          dataplexEntry: {
+            ...mockGlossarySearchResult.dataplexEntry,
+            entrySource: {
+              ...mockGlossarySearchResult.dataplexEntry.entrySource,
+              resource: "projects/test-project/locations/global/glossaries/page-two-glossary",
+            },
+          },
+        };
+
+        vi.mocked(axios.post)
+          .mockResolvedValueOnce({
+            data: { results: [pageOneResult], totalSize: 2, nextPageToken: "token-for-page-2" },
+          })
+          .mockResolvedValueOnce({
+            data: { results: [pageTwoResult], totalSize: 2 },
+          });
+
+        const store = createTestStore();
+        await store.dispatch(
+          filterGlossaries({ filters: [mockFilterChip], id_token: "token" }) as any
+        );
+
+        expect(axios.post).toHaveBeenCalledTimes(2);
+        expect(axios.post).toHaveBeenNthCalledWith(
+          2,
+          expect.any(String),
+          expect.objectContaining({ pageToken: "token-for-page-2" })
+        );
+        const state = store.getState().glossaries;
+        expect(state.filteredItems).toHaveLength(2);
+        expect(state.filteredItems.map((i: { id: string }) => i.id)).toEqual([
+          "projects/test-project/locations/global/glossaries/page-one-glossary",
+          "projects/test-project/locations/global/glossaries/page-two-glossary",
+        ]);
+      });
+
+      it("stops after one request when the response carries no nextPageToken", async () => {
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          data: { results: [mockGlossarySearchResult], totalSize: 1 },
+        });
+
+        const store = createTestStore();
+        await store.dispatch(
+          filterGlossaries({ filters: [mockFilterChip], id_token: "token" }) as any
+        );
+
+        expect(axios.post).toHaveBeenCalledTimes(1);
+      });
+
       it("builds filtered tree from results", async () => {
         vi.mocked(axios.post).mockResolvedValueOnce({
           data: {
@@ -1542,6 +1920,78 @@ describe("glossariesSlice", () => {
 
         const state = store.getState().glossaries;
         expect(state.filteredTreeItems).toBeDefined();
+      });
+
+      it("drops a category search result entirely - never nested, never as a parent placeholder, never counted", async () => {
+        // Search should only ever surface glossaries - a category/term match
+        // is dropped upstream by isTopLevelGlossaryEntry, the same predicate
+        // fetchGlossaries uses for the root list.
+        const categoryResult = {
+          dataplexEntry: {
+            name: "projects/test-project/locations/global/entryGroups/@dataplex/entries/cat-entry",
+            entrySource: {
+              resource: "projects/test-project/locations/global/glossaries/g1/categories/c1",
+              displayName: "Orphaned Category",
+              location: "global",
+            },
+            entryType: "projects/655216118709/locations/global/entryTypes/glossary-category",
+          },
+        };
+
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          data: { results: [categoryResult], totalSize: 1 },
+        });
+
+        const store = createTestStore({ ...getInitialState(), glossaryItems: [] });
+
+        await store.dispatch(
+          filterGlossaries({ filters: [mockFilterChip], id_token: "token" }) as any
+        );
+
+        const state = store.getState().glossaries;
+        expect(state.filteredItems).toHaveLength(0);
+        expect(state.totalSize).toBe(0);
+        expect(state.filteredTreeItems).toHaveLength(0);
+        // No branch-fetch should have been dispatched - filterGlossaries never
+        // speculatively fetches branches.
+        expect(axios.get).not.toHaveBeenCalled();
+      });
+
+      it("represents a not-yet-loaded glossary match as a normal unlocked row", async () => {
+        // There's no pre-check for Dataplex glossary access - a glossary match
+        // not already in the loaded tree is shown as a normal row; the user
+        // discovers access the normal way, via handleNavigate's click flow
+        // and the content pane's existing "no access" banner.
+        const glossaryResult = {
+          dataplexEntry: {
+            name: "projects/test-project/locations/global/entryGroups/@dataplex/entries/g1-entry",
+            entrySource: {
+              resource: "projects/test-project/locations/global/glossaries/g1",
+              displayName: "Unloaded Glossary",
+              location: "global",
+            },
+            entryType: "projects/655216118709/locations/global/entryTypes/glossary",
+          },
+        };
+
+        vi.mocked(axios.post).mockResolvedValueOnce({
+          data: { results: [glossaryResult], totalSize: 1 },
+        });
+
+        const store = createTestStore({ ...getInitialState(), glossaryItems: [] });
+
+        await store.dispatch(
+          filterGlossaries({ filters: [mockFilterChip], id_token: "token" }) as any
+        );
+
+        const tree = store.getState().glossaries.filteredTreeItems;
+        expect(tree).toHaveLength(1);
+        expect(tree[0]).toMatchObject({
+          id: "projects/test-project/locations/global/glossaries/g1",
+          type: "glossary",
+          isInaccessible: false,
+        });
+        expect(axios.get).not.toHaveBeenCalled();
       });
     });
 
@@ -1986,6 +2436,26 @@ describe("glossariesSlice", () => {
         expect(state.viewDetailsItems).toBeDefined();
       });
 
+      it("drops a malformed synonym/related result instead of failing the whole fetch", async () => {
+        const malformedResult = { dataplexEntry: { entrySource: {} } }; // no name
+        vi.mocked(axios.post)
+          .mockResolvedValueOnce({ data: { results: [mockLinkedAssetResult] } })
+          .mockResolvedValueOnce({ data: { results: [mockSynonymResult, malformedResult] } })
+          .mockResolvedValueOnce({ data: { results: [{}] } });
+
+        const store = createTestStore();
+
+        const result = await store.dispatch(
+          fetchViewDetailsTermRelationships({
+            termId: mockTermItem.id,
+            id_token: "token",
+          }) as any
+        );
+
+        expect(result.payload.relations).toHaveLength(1);
+        expect(result.payload.relations[0].id).toBe(mockSynonymResult.dataplexEntry.name);
+      });
+
       it("handles rejection", async () => {
         vi.mocked(axios.post).mockRejectedValue(new Error("Error"));
 
@@ -2100,7 +2570,12 @@ describe("glossariesSlice", () => {
       expect(state.glossaryItems).toBeDefined();
     });
 
-    it("mapSearchResultToGlossaryItem handles category type", async () => {
+    it("mapSearchResultToGlossaryItem's category type derivation is unreachable via filterGlossaries - category results are dropped upstream", async () => {
+      // Search should only ever surface glossaries - a category result is
+      // dropped by isTopLevelGlossaryEntry before mapSearchResultToGlossaryItem
+      // is ever called, so its "category" type-derivation branch (still
+      // exercised directly by the "mapSearchResultToGlossaryItem" unit tests
+      // elsewhere in this file) can't be reached through this thunk anymore.
       vi.mocked(axios.post).mockResolvedValueOnce({
         data: {
           results: [
@@ -2127,10 +2602,10 @@ describe("glossariesSlice", () => {
       );
 
       const state = store.getState().glossaries;
-      expect(state.filteredItems[0].type).toBe("category");
+      expect(state.filteredItems).toHaveLength(0);
     });
 
-    it("mapSearchResultToGlossaryItem handles term type", async () => {
+    it("mapSearchResultToGlossaryItem's term type derivation is unreachable via filterGlossaries - term results are dropped upstream", async () => {
       vi.mocked(axios.post).mockResolvedValueOnce({
         data: {
           results: [
@@ -2157,7 +2632,7 @@ describe("glossariesSlice", () => {
       );
 
       const state = store.getState().glossaries;
-      expect(state.filteredItems[0].type).toBe("term");
+      expect(state.filteredItems).toHaveLength(0);
     });
   });
 
@@ -2328,8 +2803,12 @@ describe("glossariesSlice", () => {
       expect(state.filteredTreeItems.length).toBeGreaterThanOrEqual(0);
     });
 
-    it("builds filtered tree with item found in original tree with children", async () => {
-      // Create a glossary with nested children
+    it("builds filtered tree with a glossary match found in the original tree, preserving its children", async () => {
+      // Category/term can no longer reach filterGlossaries at all (dropped by
+      // isTopLevelGlossaryEntry before mapping), so the only way to exercise
+      // "match already present in originalTree, with a subtree to preserve"
+      // is a glossary match - glossaries are always roots, but can still
+      // already have children loaded (e.g. from a prior expand).
       const glossaryWithChildren = {
         ...mockGlossaryItem,
         id: "projects/test/locations/global/glossaries/glossary-with-children",
@@ -2337,28 +2816,21 @@ describe("glossariesSlice", () => {
           {
             ...mockCategoryItem,
             id: "projects/test/locations/global/glossaries/glossary-with-children/categories/cat1",
-            children: [
-              {
-                ...mockTermItem,
-                id: "projects/test/locations/global/glossaries/glossary-with-children/categories/cat1/terms/term1",
-              },
-            ],
           },
         ],
       };
 
-      // Filter returns the nested term
       vi.mocked(axios.post).mockResolvedValueOnce({
         data: {
           results: [
             {
               dataplexEntry: {
-                name: "projects/test/locations/global/entryGroups/@dataplex/entries/term1",
+                name: "projects/test/locations/global/entryGroups/@dataplex/entries/glossary-with-children",
                 entrySource: {
-                  resource: "projects/test/locations/global/glossaries/glossary-with-children/categories/cat1/terms/term1",
-                  displayName: "Nested Term",
+                  resource: "projects/test/locations/global/glossaries/glossary-with-children",
+                  displayName: "Glossary With Children",
                 },
-                entryType: "GLOSSARY_TERM",
+                entryType: "GLOSSARY",
               },
             },
           ],
@@ -2379,50 +2851,43 @@ describe("glossariesSlice", () => {
 
       const state = store.getState().glossaries;
       expect(state.filteredItems).toHaveLength(1);
-      expect(state.filteredItems[0].type).toBe("term");
+      expect(state.filteredItems[0].type).toBe("glossary");
+      expect(state.filteredTreeItems[0]?.children?.length).toBeGreaterThan(0);
     });
 
-    it("builds filtered tree with multiple items from same parent", async () => {
-      // Create a glossary with multiple children at same level
-      const glossaryWithMultipleChildren = {
+    it("builds filtered tree with multiple glossary matches", async () => {
+      const glossaryOne = {
         ...mockGlossaryItem,
-        id: "projects/test/locations/global/glossaries/multi-children",
-        children: [
-          {
-            ...mockTermItem,
-            id: "projects/test/locations/global/glossaries/multi-children/terms/term1",
-            displayName: "Term 1",
-          },
-          {
-            ...mockTermItem,
-            id: "projects/test/locations/global/glossaries/multi-children/terms/term2",
-            displayName: "Term 2",
-          },
-        ],
+        id: "projects/test/locations/global/glossaries/multi-1",
+        displayName: "Glossary 1",
+      };
+      const glossaryTwo = {
+        ...mockGlossaryItem,
+        id: "projects/test/locations/global/glossaries/multi-2",
+        displayName: "Glossary 2",
       };
 
-      // Filter returns both terms
       vi.mocked(axios.post).mockResolvedValueOnce({
         data: {
           results: [
             {
               dataplexEntry: {
-                name: "projects/test/locations/global/entryGroups/@dataplex/entries/term1",
+                name: "projects/test/locations/global/entryGroups/@dataplex/entries/multi-1",
                 entrySource: {
-                  resource: "projects/test/locations/global/glossaries/multi-children/terms/term1",
-                  displayName: "Term 1",
+                  resource: "projects/test/locations/global/glossaries/multi-1",
+                  displayName: "Glossary 1",
                 },
-                entryType: "GLOSSARY_TERM",
+                entryType: "GLOSSARY",
               },
             },
             {
               dataplexEntry: {
-                name: "projects/test/locations/global/entryGroups/@dataplex/entries/term2",
+                name: "projects/test/locations/global/entryGroups/@dataplex/entries/multi-2",
                 entrySource: {
-                  resource: "projects/test/locations/global/glossaries/multi-children/terms/term2",
-                  displayName: "Term 2",
+                  resource: "projects/test/locations/global/glossaries/multi-2",
+                  displayName: "Glossary 2",
                 },
-                entryType: "GLOSSARY_TERM",
+                entryType: "GLOSSARY",
               },
             },
           ],
@@ -2431,7 +2896,7 @@ describe("glossariesSlice", () => {
 
       const store = createTestStore({
         ...getInitialState(),
-        glossaryItems: [glossaryWithMultipleChildren],
+        glossaryItems: [glossaryOne, glossaryTwo],
       });
 
       await store.dispatch(
@@ -2443,131 +2908,6 @@ describe("glossariesSlice", () => {
 
       const state = store.getState().glossaries;
       expect(state.filteredItems).toHaveLength(2);
-    });
-
-    it("builds filtered tree when parent already exists as ancestor", async () => {
-      // Create nested structure
-      const nestedGlossary = {
-        ...mockGlossaryItem,
-        id: "projects/test/locations/global/glossaries/nested",
-        children: [
-          {
-            ...mockCategoryItem,
-            id: "projects/test/locations/global/glossaries/nested/categories/cat1",
-            children: [
-              {
-                ...mockTermItem,
-                id: "projects/test/locations/global/glossaries/nested/categories/cat1/terms/term1",
-              },
-              {
-                ...mockTermItem,
-                id: "projects/test/locations/global/glossaries/nested/categories/cat1/terms/term2",
-              },
-            ],
-          },
-        ],
-      };
-
-      // Filter returns both terms under same category
-      vi.mocked(axios.post).mockResolvedValueOnce({
-        data: {
-          results: [
-            {
-              dataplexEntry: {
-                name: "projects/test/locations/global/entryGroups/@dataplex/entries/term1",
-                entrySource: {
-                  resource: "projects/test/locations/global/glossaries/nested/categories/cat1/terms/term1",
-                  displayName: "Term 1",
-                },
-                entryType: "GLOSSARY_TERM",
-              },
-            },
-            {
-              dataplexEntry: {
-                name: "projects/test/locations/global/entryGroups/@dataplex/entries/term2",
-                entrySource: {
-                  resource: "projects/test/locations/global/glossaries/nested/categories/cat1/terms/term2",
-                  displayName: "Term 2",
-                },
-                entryType: "GLOSSARY_TERM",
-              },
-            },
-          ],
-        },
-      });
-
-      const store = createTestStore({
-        ...getInitialState(),
-        glossaryItems: [nestedGlossary],
-      });
-
-      await store.dispatch(
-        filterGlossaries({
-          filters: [mockFilterChip],
-          id_token: "token",
-        }) as any
-      );
-
-      const state = store.getState().glossaries;
-      // Both terms should be found
-      expect(state.filteredItems).toHaveLength(2);
-      // Filtered tree should have path from root to terms
-      expect(state.filteredTreeItems.length).toBeGreaterThan(0);
-    });
-
-    it("handles filtering when item with children becomes a target", async () => {
-      // Create category with children
-      const glossaryWithCategoryChildren = {
-        ...mockGlossaryItem,
-        id: "projects/test/locations/global/glossaries/cat-target",
-        children: [
-          {
-            ...mockCategoryItem,
-            id: "projects/test/locations/global/glossaries/cat-target/categories/target-cat",
-            displayName: "Target Category",
-            children: [
-              {
-                ...mockTermItem,
-                id: "projects/test/locations/global/glossaries/cat-target/categories/target-cat/terms/child-term",
-              },
-            ],
-          },
-        ],
-      };
-
-      // Filter returns the category (which has children)
-      vi.mocked(axios.post).mockResolvedValueOnce({
-        data: {
-          results: [
-            {
-              dataplexEntry: {
-                name: "projects/test/locations/global/entryGroups/@dataplex/entries/target-cat",
-                entrySource: {
-                  resource: "projects/test/locations/global/glossaries/cat-target/categories/target-cat",
-                  displayName: "Target Category",
-                },
-                entryType: "GLOSSARY_CATEGORY",
-              },
-            },
-          ],
-        },
-      });
-
-      const store = createTestStore({
-        ...getInitialState(),
-        glossaryItems: [glossaryWithCategoryChildren],
-      });
-
-      await store.dispatch(
-        filterGlossaries({
-          filters: [mockFilterChip],
-          id_token: "token",
-        }) as any
-      );
-
-      const state = store.getState().glossaries;
-      expect(state.filteredItems).toHaveLength(1);
-      expect(state.filteredItems[0].type).toBe("category");
     });
 
     it("handles updateDetailsInTree with nested children", async () => {

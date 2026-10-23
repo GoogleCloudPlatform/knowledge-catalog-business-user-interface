@@ -121,7 +121,6 @@ const ViewDetails = () => {
   const initialTabName = (location.state as any)?.tabName as string | undefined;
   const tabNameApplied = React.useRef(false);
   const urlEntryFetchedRef = React.useRef(false);
-  const fetchedLinksEntryId = React.useRef<string | null>(null);
   const [searchParams] = useSearchParams();
   const [copyLinkSuccess, setCopyLinkSuccess] = useState(false);
   const [tabValue, setTabValue] = React.useState(0);
@@ -622,14 +621,14 @@ useEffect(() => {
     if (!entry?.name || !id_token || entryStatus !== 'succeeded') return;
     const gType = getGlossaryType(entry);
     const isGlossaryLike = gType === 'glossary' || gType === 'category' || gType === 'term';
-    // Skip if we've already fetched links for this exact entry (avoids redundant
-    // refetches when the effect re-runs for the same entry).
-    if (!isGlossaryLike && fetchedLinksEntryId.current !== entry.name) {
-      fetchedLinksEntryId.current = entry.name;
+    // entryLinksStatus is reset to 'idle' by fetchEntry.pending for every entry change
+    // (including back-navigation), so gating on it (rather than a local "already
+    // fetched" cache) stays correct across any navigation path.
+    if (!isGlossaryLike && entryLinksStatus === 'idle') {
       dispatch(fetchEntryLinks({ entryName: entry.name, id_token }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry?.name, entryStatus, id_token, isAssetPreviewOpen, dispatch]);
+  }, [entry?.name, entryStatus, entryLinksStatus, id_token, isAssetPreviewOpen, dispatch]);
 
   // Resolve a tab name (e.g. 'aspects', 'lineage') to a numeric index based on entry type
   const resolveTabName = (tabName: string): number => {

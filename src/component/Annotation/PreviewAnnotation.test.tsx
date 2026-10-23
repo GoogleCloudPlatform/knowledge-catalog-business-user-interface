@@ -360,6 +360,79 @@ describe('PreviewAnnotation', () => {
       const accordionSummary = annotationName.closest('[role="button"]') || annotationName.closest('div');
       expect(accordionSummary).toBeInTheDocument();
     });
+
+    it('does not auto-expand nested fields when every aspect is opened one by one manually', () => {
+      const entryWithMultiple = {
+        entryType: 'tables/123',
+        aspects: {
+          '123.custom.first': {
+            aspectType: 'tables/custom/first',
+            data: { fields: { aField: { kind: 'stringValue', stringValue: 'A value' } } }
+          },
+          '123.custom.second': {
+            aspectType: 'tables/custom/second',
+            data: { fields: { xField: { kind: 'stringValue', stringValue: 'X value' } } }
+          }
+        }
+      };
+
+      let expandedSet = new Set<string>();
+      setExpandedItemsMock.mockImplementation((newSet) => {
+        expandedSet = newSet;
+      });
+
+      const { rerender } = renderPreviewAnnotation({ entry: entryWithMultiple }, expandedSet);
+      const doRerender = () =>
+        rerender(
+          <PreviewAnnotation
+            entry={entryWithMultiple}
+            css={{}}
+            expandedItems={expandedSet}
+            setExpandedItems={setExpandedItemsMock}
+          />
+        );
+
+      // Manually open the first aspect
+      fireEvent.click(screen.getByText('First'));
+      doRerender();
+      expect(screen.getByText('aField')).toBeInTheDocument();
+      expect(screen.queryByText('A value')).not.toBeInTheDocument();
+
+      // Manually open the second (and last) aspect — this used to be mistaken for
+      // "Open All" and cascaded into expanding every nested field.
+      fireEvent.click(screen.getByText('Second'));
+      doRerender();
+
+      expect(screen.getByText('xField')).toBeInTheDocument();
+      // Neither aspect's field values should have been auto-expanded just because
+      // the last manual click happened to leave every aspect open.
+      expect(screen.queryByText('A value')).not.toBeInTheDocument();
+      expect(screen.queryByText('X value')).not.toBeInTheDocument();
+    });
+
+    it('still auto-expands nested fields when all aspects are expanded at once via "Open All"', () => {
+      const entryWithMultiple = {
+        entryType: 'tables/123',
+        aspects: {
+          '123.custom.first': {
+            aspectType: 'tables/custom/first',
+            data: { fields: { aField: { kind: 'stringValue', stringValue: 'A value' } } }
+          },
+          '123.custom.second': {
+            aspectType: 'tables/custom/second',
+            data: { fields: { xField: { kind: 'stringValue', stringValue: 'X value' } } }
+          }
+        }
+      };
+
+      // "Open All" sets every key at once in a single update, unlike manual
+      // one-by-one toggles which add exactly one key per click.
+      const expandedSet = new Set(['123.custom.first', '123.custom.second']);
+      renderPreviewAnnotation({ entry: entryWithMultiple }, expandedSet);
+
+      expect(screen.getByText('A value')).toBeInTheDocument();
+      expect(screen.getByText('X value')).toBeInTheDocument();
+    });
   });
 
   // --- FIELD TYPE RENDERING TESTS ---

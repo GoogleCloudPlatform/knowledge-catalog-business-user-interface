@@ -1214,6 +1214,87 @@ describe('ViewDetails', () => {
         expect(screen.getByText('0 terms')).toBeInTheDocument();
       });
     });
+
+    describe('fetchEntryLinks trigger', () => {
+      // Regression coverage for the bug where returning to a previously-viewed
+      // resource (via Back/popFromHistory) left the Glossary Terms tab empty
+      // forever: the fetch must be gated on entryLinksStatus, which is reset to
+      // 'idle' by entry-change reducers, not on a local "already fetched" cache
+      // that doesn't know the displayed entry changed and changed back.
+      it('dispatches fetchEntryLinks for a non-glossary entry when entryLinksStatus is idle', async () => {
+        const store = createMockStore(mockEntry, 'succeeded', mockSampleData, 'succeeded', [], [], 'idle');
+        render(
+          <Provider store={store}>
+            <BrowserRouter>
+              <AuthContext.Provider value={mockAuthContextValue}>
+                <ViewDetails />
+              </AuthContext.Provider>
+            </BrowserRouter>
+          </Provider>
+        );
+
+        await waitFor(() => {
+          expect(mockDispatch).toHaveBeenCalledWith({ type: 'entry/fetchEntryLinks' });
+        });
+      });
+
+      it('does not dispatch fetchEntryLinks when entryLinksStatus is already succeeded', async () => {
+        const store = createMockStore(mockEntry, 'succeeded', mockSampleData, 'succeeded', [], [], 'succeeded');
+        render(
+          <Provider store={store}>
+            <BrowserRouter>
+              <AuthContext.Provider value={mockAuthContextValue}>
+                <ViewDetails />
+              </AuthContext.Provider>
+            </BrowserRouter>
+          </Provider>
+        );
+
+        await waitFor(() => {
+          expect(screen.getByRole('tab', { name: 'Glossary Terms' })).toBeInTheDocument();
+        });
+
+        expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'entry/fetchEntryLinks' });
+      });
+
+      it('does not dispatch fetchEntryLinks when entryLinksStatus is already loading', async () => {
+        const store = createMockStore(mockEntry, 'succeeded', mockSampleData, 'succeeded', [], [], 'loading');
+        render(
+          <Provider store={store}>
+            <BrowserRouter>
+              <AuthContext.Provider value={mockAuthContextValue}>
+                <ViewDetails />
+              </AuthContext.Provider>
+            </BrowserRouter>
+          </Provider>
+        );
+
+        await waitFor(() => {
+          expect(screen.getByRole('tab', { name: 'Glossary Terms' })).toBeInTheDocument();
+        });
+
+        expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'entry/fetchEntryLinks' });
+      });
+
+      it('does not dispatch fetchEntryLinks for a glossary-like entry even when entryLinksStatus is idle', async () => {
+        const store = createMockStore(mockGlossaryEntry, 'succeeded', mockSampleData, 'succeeded', [], [], 'idle');
+        render(
+          <Provider store={store}>
+            <BrowserRouter>
+              <AuthContext.Provider value={mockAuthContextValue}>
+                <ViewDetails />
+              </AuthContext.Provider>
+            </BrowserRouter>
+          </Provider>
+        );
+
+        await waitFor(() => {
+          expect(screen.getByText('Overview')).toBeInTheDocument();
+        });
+
+        expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'entry/fetchEntryLinks' });
+      });
+    });
   });
 
   describe('Asset Preview Panel', () => {

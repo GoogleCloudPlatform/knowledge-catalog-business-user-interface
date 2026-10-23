@@ -22,7 +22,7 @@ const GlobalSidebar: React.FC = () => {
   // These eager refresh-on-navigate fetches read appConfig (project scoping) at
   // dispatch time. During the bootstrap they'd run unscoped, so skip them and
   // let the destination page's own gated mount effect do the fetch instead.
-  const { isAppConfigReady } = useAppBootstrapStatus();
+  const { isAppConfigReady, isProjectMappingReady } = useAppBootstrapStatus();
 
   const isSearchActive = location.pathname === '/home'
                       || location.pathname === '/search'
@@ -50,7 +50,11 @@ const GlobalSidebar: React.FC = () => {
 
   const handleDataProducts = () => {
     dispatch(resetDataProductsUIState());
-    if (isAppConfigReady) {
+    // Also waits on /get-projects: fetchDataProductsList needs that list to tell
+    // whether a product found by the org-wide search is the same one the API
+    // already returned (the two spell the project segment differently). Firing on
+    // isAppConfigReady alone let this run first and list the product twice.
+    if (isAppConfigReady && isProjectMappingReady) {
       dispatch(fetchDataProductsList({ id_token: user?.token }));
     }
     navigate('/data-products');

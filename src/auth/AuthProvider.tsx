@@ -11,6 +11,7 @@ import { AUTH_CONFIG } from '../constants/auth';
 import { resetProjects } from '../features/projects/projectsSlice';
 import { resetSelectedDataProduct, resetDataProductsUIState } from '../features/dataProducts/dataProductsSlice';
 import { clearGlossaries } from '../features/glossaries/glossariesSlice';
+import { resetBrowseUIState, clearAspectBrowseCache } from '../features/resources/resourcesSlice';
 import { useAppDispatch, useAppSelector } from '../app/store';
 
 
@@ -90,6 +91,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // the previous user's data survives into the next session in this tab.
     dispatch(resetProjects());
     dispatch(clearGlossaries());
+    // BrowseByAnnotation skips rebuilding its list whenever
+    // browseDynamicAnnotationsData is already populated, and the resources slice
+    // was never reset here - so the next session rendered the previous session's
+    // aspect list regardless of what /app-configs returned.
+    dispatch(resetBrowseUIState());
+    dispatch(clearAspectBrowseCache());
     dispatch(resetDataProductsUIState());
     dispatch(resetSelectedDataProduct()); // Reset DP detail status so self-hydration fires on next deep-link login
     clearUserState(); // Clear user state from IndexedDB

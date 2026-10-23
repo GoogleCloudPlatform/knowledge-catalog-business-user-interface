@@ -23,6 +23,17 @@ export type AppBootstrapStatus = {
   isAppConfigReady: boolean;
   /** The project list is available (or has definitively failed). */
   areProjectsReady: boolean;
+  /**
+   * The project list actually loaded and has entries — unlike areProjectsReady,
+   * this is false when /get-projects gave up.
+   *
+   * Use this (not areProjectsReady) when the list is needed for *correctness*
+   * rather than for display. The only mapping between a project id and a project
+   * number lives in it, and the Data Products merge needs that mapping to tell
+   * whether a product found by the org-wide search is the same one the API
+   * already returned. Acting on an empty list there silently lists it twice.
+   */
+  isProjectMappingReady: boolean;
   /** Both of the above. Prefer the specific flag your feature actually needs. */
   isBootstrapping: boolean;
 };
@@ -32,6 +43,7 @@ export type AppBootstrapStatus = {
 export const AppBootstrapContext = createContext<AppBootstrapStatus>({
   isAppConfigReady: false,
   areProjectsReady: false,
+  isProjectMappingReady: false,
   isBootstrapping: true,
 });
 
@@ -206,6 +218,7 @@ export const useAppBootstrap = (): AppBootstrapStatus => {
   return {
     isAppConfigReady,
     areProjectsReady,
+    isProjectMappingReady: projectsLoaded && (projectsList as any[]).length > 0,
     isBootstrapping: !isAppConfigReady || !areProjectsReady,
   };
 };

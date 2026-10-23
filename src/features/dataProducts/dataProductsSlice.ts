@@ -10,31 +10,42 @@ import { findProjectByNumber, resolveProjectNumber } from '../../utils/resourceU
 const replaceProjectNumberWithProjectId = (resource: string, projectsList: Project[]): string => {
   if (!resource) return resource;
   const match = resource.match(/projects\/([^/]+)/);
-  console.log("replaceProjectNumberWithProjectId: match:", match);
   if (!match) return resource;
   const projectNumber = match[1];
   const projectId = findProjectByNumber(projectNumber, projectsList)?.projectId;
   return projectId ? resource.replace(`projects/${projectNumber}`, `projects/${projectId}`) : resource;
 }
 
-// Canonicalize a resource path's project segment to project-number form, so
-// resource names coming from different APIs (the Dataplex data products list,
-// which returns project number, vs. the search index, whose resource we've
-// already rewritten to project id via replaceProjectNumberWithProjectId) can
-// be compared reliably when de-duping. Falls through unchanged when the
-// identifier isn't found in the /get-projects list (already-numeric ids, or
-// the list not loaded yet) rather than throwing off the comparison.
-const canonicalizeResourceProject = (resource: string, projectsList: Project[]): string => {
-  if (!resource) return resource;
-  const projects = projectsList ?? [];
-  const match = resource.match(/^projects\/([^/]+)/);
-  if (!match) return resource;
-  const identifier = match[1];
-  // Already a project number (matches a known project's canonical name) - keep as-is.
-  if (projects.some((p) => p.name === `projects/${identifier}`)) return resource;
-  // Otherwise treat it as a project id and resolve it to its project number.
-  const projectNumber = projects.find((p) => p.projectId === identifier)?.name?.split('/')[1];
-  return projectNumber ? resource.replace(`projects/${identifier}`, `projects/${projectNumber}`) : resource;
+// Every way the same product's resource path can be spelled, so the two sources
+// below can be matched against each other.
+//
+// The dataProducts.list API and the Search index do not agree on how to name the
+// project segment - one may use the project id (my-project), the other the project
+// number (123456789). The previous approach canonicalized both to a single form,
+// but that silently produced a *different* key when the project could not be
+// resolved (an empty/partial /get-projects list), so the same product failed to
+// match itself and was listed twice.
+//
+// Emitting every spelling we can derive and matching on ANY overlap removes that
+// failure mode: an unresolvable project degrades to "match only the exact string"
+// instead of "produce a key that matches nothing".
+//
+// The project segment is deliberately kept in the key. Two genuinely different
+// products can share a location and id across projects (e.g. `subtitles` in three
+// different projects), so stripping the project would wrongly collapse them.
+const resourceKeyVariants = (resource: string, projectsList: Project[]): string[] => {
+  if (!resource) return [];
+  const match = resource.match(/^projects\/([^/]+)\/(.*)$/);
+  if (!match) return [resource];
+  const [, identifier, rest] = match;
+  const variants = new Set<string>([`projects/${identifier}/${rest}`]);
+  // identifier is a project number -> add the project id spelling
+  const projectId = findProjectByNumber(identifier, projectsList)?.projectId;
+  if (projectId) variants.add(`projects/${projectId}/${rest}`);
+  // identifier is a project id -> add the project number spelling
+  const projectNumber = resolveProjectNumber(identifier, projectsList);
+  if (projectNumber) variants.add(`projects/${projectNumber}/${rest}`);
+  return [...variants];
 }
 
 // Map a search entry (dataplexEntry) into the same shape as an API data product.
@@ -76,20 +87,25 @@ export const fetchDataProductsList = createAsyncThunk('dataProducts/fetchDataPro
   try {
     // fetching data products from API endpoint
     axios.defaults.headers.common['Authorization'] = requestData.id_token ? `Bearer ${requestData.id_token}` : '';
-    const appConfig = (getState() as any).user?.userData?.appConfig;
-    // Project identity mapping comes from /get-projects; appConfig is used only
-    // for scoping (projectsRestricted / configuredProjectIds).
+    // Project identity mapping comes from /get-projects - the single source for
+    // translating between project id and project number.
+    //
+    // Both sources always contribute to the list; the Search index is expected to
+    // re-send products the API already returned, and those repeats are collapsed
+    // below. Matching them needs this mapping, so callers must not dispatch until
+    // it is loaded - see the `projects.isloaded` gates at the dispatch sites.
     const projectsList: Project[] = (getState() as any).projects?.items ?? [];
-    const params: Record<string, string> = {};
-    if (appConfig?.projectsRestricted && appConfig?.configuredProjectIds?.length > 0) {
-      params.projectIds = appConfig.configuredProjectIds.join(',');
-    }
-    const response = await axios.get(URLS.API_URL + URLS.DATA_PRODUCTS, { params });
+    const appConfig = (getState() as any).user?.userData?.appConfig;
+    const response = await axios.get(URLS.API_URL + URLS.DATA_PRODUCTS);
     console.log("API response", response);
     const searchDataProducts =  async () => {
+      let queryString = '(type=DATA_PRODUCT)';
+      if (appConfig?.projectsRestricted === true && appConfig?.configuredProjectIds?.length > 0) {
+        queryString += ` (projectid=(${appConfig.configuredProjectIds.join('|')}))`;
+      }
       const result = await axios.post(
         URLS.API_URL + URLS.SEARCH_ENTRIES,
-        { project: import.meta.env.VITE_GOOGLE_PROJECT_ID, location: 'global', query: '(type=DATA_PRODUCT)', orderBy: 'relevance', pageSize: 1000 },
+        { project: import.meta.env.VITE_GOOGLE_PROJECT_ID, location: 'global', query: queryString, orderBy: 'relevance', pageSize: 1000 },
       );
 
       if (result.status === 200) {
@@ -114,24 +130,30 @@ export const fetchDataProductsList = createAsyncThunk('dataProducts/fetchDataPro
       console.log("Search Results:", searchResults);
       // Merge the search results with the API response dataProducts based on resource path.
       const projectDataProducts = response.data.dataProducts || [];
-      // Set of API data product resource names for quick lookup, canonicalized
-      // to project-number form so it lines up with the search resource below
-      // regardless of which project-identifier format either API returned.
-      const projectDataProductNames = new Set(
-        projectDataProducts
-          .map((p: any) => canonicalizeResourceProject(p?.name, projectsList))
-          .filter(Boolean)
-      );
 
-      // Find search entries that are NOT present in the API data products list,
-      // matched by dataplexEntry.entrySource.resource === dataProduct.name.
-      const searchOnlyProducts = searchResults
-        .filter((searchEntry: any) => {
-          const searchResource = searchEntry?.dataplexEntry?.entrySource?.resource;
-          const canonicalSearchResource = canonicalizeResourceProject(searchResource, projectsList);
-          return canonicalSearchResource && !projectDataProductNames.has(canonicalSearchResource);
-        })
-        .map(mapSearchEntryToDataProduct);
+      // Every spelling of every product already in the API list. `seen` grows as
+      // search-only products are accepted, so it also stops the Search index from
+      // contributing the same product twice (it is matched against the products
+      // already taken, not just against the API list).
+      const seen = new Set<string>();
+      projectDataProducts.forEach((p: any) => {
+        resourceKeyVariants(p?.name, projectsList).forEach((key) => seen.add(key));
+      });
+
+      // Find search entries that are NOT present in the API data products list.
+      // Out-of-scope products are the point of the org-wide search, so they are
+      // kept (flagged isOutOfScope) - only genuine repeats are dropped.
+      const searchOnlyProducts: ReturnType<typeof mapSearchEntryToDataProduct>[] = [];
+      searchResults.forEach((searchEntry: any) => {
+        const variants = resourceKeyVariants(
+          searchEntry?.dataplexEntry?.entrySource?.resource,
+          projectsList,
+        );
+        if (!variants.length) return;
+        if (variants.some((key) => seen.has(key))) return;
+        variants.forEach((key) => seen.add(key));
+        searchOnlyProducts.push(mapSearchEntryToDataProduct(searchEntry));
+      });
       console.log("Search-only Data Products (not in API list):", searchOnlyProducts);
 
       const mergedDataProducts = [...projectDataProducts, ...searchOnlyProducts];

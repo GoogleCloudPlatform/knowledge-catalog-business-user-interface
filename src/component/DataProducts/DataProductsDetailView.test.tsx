@@ -2,11 +2,13 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import DataProductsDetailView from './DataProductsDetailView';
 import { AuthContext } from '../../auth/AuthProvider';
+import { AppBootstrapContext, type AppBootstrapStatus } from '../../hooks/useAppBootstrap';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { BrowserRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
+import { fetchDataProductsList } from '../../features/dataProducts/dataProductsSlice';
 
 // Mock react-router-dom
 const mockNavigate = vi.fn();
@@ -341,9 +343,17 @@ const defaultStoreState = {
 // TEST HELPER
 // ================================================================================
 
+const defaultBootstrapStatus: AppBootstrapStatus = {
+  isAppConfigReady: true,
+  areProjectsReady: true,
+  isProjectMappingReady: true,
+  isBootstrapping: false,
+};
+
 const renderWithProviders = (
   component: React.ReactElement,
-  storeState: any = defaultStoreState
+  storeState: any = defaultStoreState,
+  bootstrapStatus: AppBootstrapStatus = defaultBootstrapStatus
 ) => {
   const store = createMockStore(storeState);
 
@@ -362,7 +372,9 @@ const renderWithProviders = (
     <Provider store={store}>
       <BrowserRouter>
         <AuthContext.Provider value={mockAuthContext}>
-          {component}
+          <AppBootstrapContext.Provider value={bootstrapStatus}>
+            {component}
+          </AppBootstrapContext.Provider>
         </AuthContext.Provider>
       </BrowserRouter>
     </Provider>
@@ -871,6 +883,47 @@ describe('DataProductsDetailView', () => {
       renderWithProviders(<DataProductsDetailView />);
 
       expect(mockDispatch).toHaveBeenCalled();
+    });
+
+    it('does NOT dispatch fetchDataProductsList while the project mapping is not ready, even if items are empty and status is idle', () => {
+      // Gated on isProjectMappingReady rather than isBootstrapping: a failed
+      // /get-projects satisfies isBootstrapping but leaves the id->number
+      // mapping empty, so the list fetch must wait for the mapping itself.
+      const emptyState = {
+        ...defaultStoreState,
+        dataProducts: {
+          ...defaultStoreState.dataProducts,
+          dataProductsItems: [],
+          status: 'idle'
+        }
+      };
+
+      renderWithProviders(<DataProductsDetailView />, emptyState, {
+        ...defaultBootstrapStatus,
+        isProjectMappingReady: false,
+      });
+
+      expect(fetchDataProductsList).not.toHaveBeenCalled();
+    });
+
+    it('dispatches fetchDataProductsList once the project mapping is ready, items are empty and status is idle', () => {
+      const emptyState = {
+        ...defaultStoreState,
+        dataProducts: {
+          ...defaultStoreState.dataProducts,
+          dataProductsItems: [],
+          status: 'idle'
+        }
+      };
+
+      renderWithProviders(<DataProductsDetailView />, emptyState, {
+        ...defaultBootstrapStatus,
+        isProjectMappingReady: true,
+      });
+
+      expect(fetchDataProductsList).toHaveBeenCalledWith(
+        expect.objectContaining({ id_token: mockAuthContext.user.token })
+      );
     });
   });
 

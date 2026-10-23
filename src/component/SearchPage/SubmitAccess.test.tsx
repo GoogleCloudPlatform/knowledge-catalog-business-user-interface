@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import SubmitAccess from './SubmitAccess';
 import { AuthContext } from '../../auth/AuthProvider';
+import { NotificationProvider } from '../../contexts/NotificationContext';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import axios from 'axios';
@@ -129,9 +130,11 @@ describe('SubmitAccess', () => {
 
   const renderSubmitAccess = (props = {}) => {
     return render(
-      <AuthContext.Provider value={mockAuthContextValue}>
-        <SubmitAccess {...defaultProps} {...props} />
-      </AuthContext.Provider>
+      <NotificationProvider>
+        <AuthContext.Provider value={mockAuthContextValue}>
+          <SubmitAccess {...defaultProps} {...props} />
+        </AuthContext.Provider>
+      </NotificationProvider>
     );
   };
 
@@ -230,9 +233,11 @@ describe('SubmitAccess', () => {
     };
 
     render(
-      <AuthContext.Provider value={authContextWithoutEmail}>
-        <SubmitAccess {...defaultProps} />
-      </AuthContext.Provider>
+      <NotificationProvider>
+        <AuthContext.Provider value={authContextWithoutEmail}>
+          <SubmitAccess {...defaultProps} />
+        </AuthContext.Provider>
+      </NotificationProvider>
     );
 
     const submitButton = screen.getByText('Submit');
@@ -438,9 +443,11 @@ describe('SubmitAccess', () => {
     };
 
     render(
-      <AuthContext.Provider value={authContextWithoutUser}>
-        <SubmitAccess {...defaultProps} />
-      </AuthContext.Provider>
+      <NotificationProvider>
+        <AuthContext.Provider value={authContextWithoutUser}>
+          <SubmitAccess {...defaultProps} />
+        </AuthContext.Provider>
+      </NotificationProvider>
     );
 
     // Should still render without crashing
@@ -450,9 +457,11 @@ describe('SubmitAccess', () => {
   describe('Rendering and Loading States', () => {
     it('shows CircularProgress when previewData is null', () => {
       render(
-        <AuthContext.Provider value={mockAuthContextValue}>
-          <SubmitAccess {...defaultProps} previewData={null} />
-        </AuthContext.Provider>
+        <NotificationProvider>
+          <AuthContext.Provider value={mockAuthContextValue}>
+            <SubmitAccess {...defaultProps} previewData={null} />
+          </AuthContext.Provider>
+        </NotificationProvider>
       );
 
       expect(screen.getByRole('progressbar')).toBeInTheDocument();
@@ -460,9 +469,11 @@ describe('SubmitAccess', () => {
 
     it('shows panel with skeleton contacts when entry is null', () => {
       render(
-        <AuthContext.Provider value={mockAuthContextValue}>
-          <SubmitAccess {...defaultProps} entry={null} />
-        </AuthContext.Provider>
+        <NotificationProvider>
+          <AuthContext.Provider value={mockAuthContextValue}>
+            <SubmitAccess {...defaultProps} entry={null} />
+          </AuthContext.Provider>
+        </NotificationProvider>
       );
 
       expect(screen.getByText(/Request Access for/i)).toBeInTheDocument();
@@ -470,9 +481,11 @@ describe('SubmitAccess', () => {
 
     it('shows CircularProgress when both previewData and entry are undefined', () => {
       render(
-        <AuthContext.Provider value={mockAuthContextValue}>
-          <SubmitAccess {...defaultProps} previewData={undefined} entry={undefined} />
-        </AuthContext.Provider>
+        <NotificationProvider>
+          <AuthContext.Provider value={mockAuthContextValue}>
+            <SubmitAccess {...defaultProps} previewData={undefined} entry={undefined} />
+          </AuthContext.Provider>
+        </NotificationProvider>
       );
 
       expect(screen.getByRole('progressbar')).toBeInTheDocument();
@@ -847,9 +860,11 @@ describe('Error Handling', () => {
   describe('Edge Cases', () => {
     it('handles undefined previewData', () => {
       render(
-        <AuthContext.Provider value={mockAuthContextValue}>
-          <SubmitAccess {...defaultProps} previewData={undefined} />
-        </AuthContext.Provider>
+        <NotificationProvider>
+          <AuthContext.Provider value={mockAuthContextValue}>
+            <SubmitAccess {...defaultProps} previewData={undefined} />
+          </AuthContext.Provider>
+        </NotificationProvider>
       );
 
       expect(screen.getByRole('progressbar')).toBeInTheDocument();
@@ -857,9 +872,11 @@ describe('Error Handling', () => {
 
     it('handles undefined entry', () => {
       render(
-        <AuthContext.Provider value={mockAuthContextValue}>
-          <SubmitAccess {...defaultProps} entry={undefined} />
-        </AuthContext.Provider>
+        <NotificationProvider>
+          <AuthContext.Provider value={mockAuthContextValue}>
+            <SubmitAccess {...defaultProps} entry={undefined} />
+          </AuthContext.Provider>
+        </NotificationProvider>
       );
 
       expect(screen.getByText(/Request Access for/i)).toBeInTheDocument();

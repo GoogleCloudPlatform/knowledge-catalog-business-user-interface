@@ -78,7 +78,7 @@ interface DataProductsDetailViewProps {
 const DataProductsDetailView: React.FC<DataProductsDetailViewProps> = ({ onRequestAccess }) => {
 
   const { user } = useAuth();
-  const { isBootstrapping } = useAppBootstrapStatus();
+  const { isBootstrapping, isProjectMappingReady, isAppConfigReady } = useAppBootstrapStatus();
   const {
         dataProductsItems,
         status, 
@@ -268,13 +268,20 @@ const tabProps = (index: number)  => {
 }
 
   useEffect(() => {
-    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && !isBootstrapping) {
+    // Gated on the project mapping AND appConfig - see the matching effect in
+    // DataProducts.tsx. isProjectMappingReady: a failed /get-projects satisfies
+    // isBootstrapping but leaves the merge unable to recognise a product returned
+    // by both sources. isAppConfigReady: fetchDataProductsList reads appConfig
+    // (projectsRestricted / configuredProjectIds) to scope the request, so gating
+    // on project mapping alone would let it fire unscoped if /get-projects
+    // resolves before /app-configs.
+    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && isProjectMappingReady && isAppConfigReady) {
        dispatch(fetchDataProductsList({ id_token: user?.token }));
     }
     if(status=== 'succeeded'){
         setDataProductsList(dataProductsItems);
     }
-  }, [dispatch, dataProductsItems.length, status, user?.token, isBootstrapping]);
+  }, [dispatch, dataProductsItems.length, status, user?.token, isProjectMappingReady, isAppConfigReady]);
 
     // Wait for the bootstrap before fetching: getDataProductDetails resolves the
     // project number from the /get-projects list at dispatch time to build the

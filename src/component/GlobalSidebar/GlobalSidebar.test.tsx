@@ -55,6 +55,7 @@ vi.mock('../../hooks/useAppBootstrap', () => ({
   useAppBootstrapStatus: () => ({
     isAppConfigReady: true,
     areProjectsReady: true,
+    isProjectMappingReady: true,
     isBootstrapping: false,
   }),
 }));

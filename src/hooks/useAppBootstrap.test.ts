@@ -341,6 +341,60 @@ describe('useAppBootstrap', () => {
       expect(result.current.areProjectsReady).toBe(false);
       expect(result.current.isBootstrapping).toBe(true);
     });
+
+    it('isProjectMappingReady is true once the project list has loaded with entries', () => {
+      mockUser = mockUserWithAppConfig;
+      mockProjectsLoaded = true;
+      mockProjectsList = [{ projectId: 'project1', projectNumber: '123' }];
+
+      const { result } = renderHook(() => useAppBootstrap());
+
+      expect(result.current.isProjectMappingReady).toBe(true);
+      expect(result.current.areProjectsReady).toBe(true);
+    });
+
+    it('isProjectMappingReady is false while the project list has not loaded yet', () => {
+      mockUser = mockUserWithAppConfig;
+      mockProjectsLoaded = false;
+      mockProjectsList = [];
+
+      const { result } = renderHook(() => useAppBootstrap());
+
+      expect(result.current.isProjectMappingReady).toBe(false);
+    });
+
+    it('isProjectMappingReady stays false when /get-projects gives up, even though areProjectsReady opens', () => {
+      // areProjectsReady only means "stop waiting"; isProjectMappingReady means
+      // "the id->number mapping actually exists". A gave-up fetch satisfies the
+      // former but must never satisfy the latter, or the Data Products merge
+      // would treat an empty mapping as trustworthy and double-list a product.
+      vi.useFakeTimers();
+      try {
+        mockUser = mockUserWithAppConfig;
+        mockProjectsStatus = 'failed';
+        mockProjectsError = { type: 'TIMEOUT', message: 'timeout of 90000ms exceeded' };
+        mockProjectsLoaded = false;
+        mockProjectsList = [];
+
+        const { result } = renderHook(() => useAppBootstrap());
+
+        expect(result.current.areProjectsReady).toBe(true);
+        expect(result.current.isProjectMappingReady).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('isProjectMappingReady is false when the project list loaded but came back empty', () => {
+      mockUser = mockUserWithAppConfig;
+      mockProjectsLoaded = true;
+      mockProjectsList = [];
+
+      const { result } = renderHook(() => useAppBootstrap());
+
+      expect(result.current.areProjectsReady).toBe(true);
+      expect(result.current.isProjectMappingReady).toBe(false);
+    });
   });
 
   describe('projectsRestricted access check', () => {

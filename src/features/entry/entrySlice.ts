@@ -191,6 +191,12 @@ export const entrySlice = createSlice({
     setEntry: (state, action) => {
       state.items = action.payload;
       state.status = 'succeeded';
+      // Changing the displayed entry outside of fetchEntry must still invalidate
+      // the previous entry's linked terms, or the Glossary Terms tab's idle-status
+      // fetch guard can stay stuck on a stale 'succeeded'/'failed' value.
+      state.entryLinks = [];
+      state.entryLinksStatus = 'idle';
+      state.entryLinksError = null;
     },
     setLineageToEntryCopy: (state, action) => {
       state.lineageToEntryCopy = action.payload;
@@ -210,6 +216,13 @@ export const entrySlice = createSlice({
         state.status = 'succeeded';
         // Restore the tab that was active for this entry (consumed by ViewDetails).
         state.pendingTabName = state.tabHistory.length > 0 ? (state.tabHistory.pop() ?? null) : null;
+        // The entry being restored may differ from whichever entry last fetched
+        // links, so clear them — otherwise the Glossary Terms tab's idle-status
+        // fetch guard can stay stuck on a stale 'succeeded'/'failed' value and
+        // either skip refetching or show the wrong entry's linked terms.
+        state.entryLinks = [];
+        state.entryLinksStatus = 'idle';
+        state.entryLinksError = null;
       }
     },
     clearHistory: (state) => {
@@ -257,6 +270,13 @@ export const entrySlice = createSlice({
           state.items = action.payload;
           state.status = 'succeeded';
           state.lineageToEntryCopy = false;
+          // This swaps the displayed entry outside of fetchEntry, so invalidate
+          // the previous entry's linked terms the same way fetchEntry.pending
+          // does — otherwise the Glossary Terms tab's idle-status fetch guard
+          // stays stuck on the old entry's status and never refetches.
+          state.entryLinks = [];
+          state.entryLinksStatus = 'idle';
+          state.entryLinksError = null;
         }
       })
       .addCase(fetchLineageEntry.rejected, (state, action) => {

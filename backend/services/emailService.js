@@ -444,7 +444,7 @@ const sendDataplexAccessRequest = async (accessToken, projectNumber, locationId,
 
     // Explicitly add the prefix IAM expects
     const principalPrefix = requesterEmail.includes('.gserviceaccount.com') ? 'serviceAccount:' : 'user:';
-    const formattedPrincipal = `${principalPrefix}${requesterEmail}`;
+    //const formattedPrincipal = `${principalPrefix}${requesterEmail}`;
 
     const requestBody = {
       changeRequest: {
@@ -452,7 +452,7 @@ const sendDataplexAccessRequest = async (accessToken, projectNumber, locationId,
         dataProductAccessRequest: {
           parent: parentResource,
           accessGroupId: accessGroupId,
-          requestedPrincipal: formattedPrincipal // <-- Explicitly added back
+          requestedPrincipal: null //formattedPrincipal // <-- Explicitly added back
         }
       }
     };
