@@ -428,8 +428,15 @@ const Glossaries = () => {
 
   const selectedItem = useMemo(() => {
     if (!selectedId) return null;
-    return findItem(glossaryItems, selectedId);
-  }, [selectedId, glossaryItems]);
+    // Fall back to the filtered tree (displayGlossaries) when the id isn't in
+    // glossaryItems. A search-only match that the user has no access to never
+    // gets pushed into glossaryItems (its details fetch 403s), so without this
+    // fallback selectedItem stays null and the content pane renders the empty
+    // "Select an item" state instead of the Permission Denied card driven by
+    // accessDeniedItemId. (When no filter is active, displayGlossaries ===
+    // glossaryItems, so this is a no-op.)
+    return findItem(glossaryItems, selectedId) || findItem(displayGlossaries, selectedId);
+  }, [selectedId, glossaryItems, displayGlossaries]);
 
   // Reset description expanded state when selected item changes
   useEffect(() => {

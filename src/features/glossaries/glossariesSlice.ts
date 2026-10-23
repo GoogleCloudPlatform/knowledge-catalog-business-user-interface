@@ -1251,6 +1251,13 @@ export const glossariesSlice = createSlice({
             relations: [],
           } as GlossaryItem);
         }
+
+        // Keep the active search/filter tree in sync with lazily-loaded
+        // children. The sidebar renders filteredTreeItems while filters are
+        // active, so without this an expanded match (whose branch wasn't
+        // pre-loaded into glossaryItems) would stay empty. No-ops when no
+        // filter is active or the parent isn't part of the filtered tree.
+        updateChildrenInTree(state.filteredTreeItems, parentId, children);
       })
       .addCase(fetchGlossaryEntryDetails.fulfilled, (state, action) => {
         const { entryName, details } = action.payload;
@@ -1312,6 +1319,12 @@ export const glossariesSlice = createSlice({
             aspects: details.aspects,
           } as GlossaryItem);
         }
+
+        // Mirror the details onto the filtered tree too (see fetchGlossaryChildren
+        // above): a filtered match's node lives in filteredTreeItems, so its
+        // description/aspects must be updated there as well. No-op when it isn't
+        // part of the active filtered tree.
+        updateDetailsInTree(state.filteredTreeItems, entryName, details);
       })
       .addCase(fetchTermRelationships.fulfilled, (state, action) => {
         const updated = updateTermDataInTree(

@@ -308,7 +308,7 @@ const DataProducts = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isBootstrapping, areProjectsReady, isProjectMappingReady } = useAppBootstrapStatus();
+  const { isBootstrapping, areProjectsReady, isProjectMappingReady, isAppConfigReady } = useAppBootstrapStatus();
 
   const { dataProductsItems, status, error } = useSelector((state: any) => state.dataProducts);
 
@@ -331,13 +331,18 @@ const DataProducts = () => {
 
 
   useEffect(() => {
-    // Waits for the project list to have actually loaded, not merely for the
-    // bootstrap to be over: fetchDataProductsList merges the data-products API
-    // with the org-wide search, and needs the project id <-> number mapping to
-    // tell when both describe the same product. isBootstrapping is satisfied by
-    // a *failed* /get-projects, which would hand the merge an empty mapping and
-    // list the shared product twice.
-    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && isProjectMappingReady) {
+    // Two independent bootstrap gates, both required:
+    //  - isProjectMappingReady: the project list actually loaded (not merely that
+    //    bootstrapping is over). fetchDataProductsList merges the data-products
+    //    API with the org-wide search and needs the project id <-> number mapping
+    //    to tell when both describe the same product; a *failed* /get-projects
+    //    would hand the merge an empty mapping and list the shared product twice.
+    //  - isAppConfigReady: fetchDataProductsList reads appConfig
+    //    (projectsRestricted / configuredProjectIds) to scope the request. Gating
+    //    on project mapping alone would let it run the moment /get-projects
+    //    resolves — even if /app-configs hasn't yet — firing an UNSCOPED fetch
+    //    across every project instead of the configured subset.
+    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && isProjectMappingReady && isAppConfigReady) {
        dispatch(fetchDataProductsList({ id_token: user?.token }));
     }
     if(status=== 'succeeded'){
@@ -345,7 +350,7 @@ const DataProducts = () => {
         const sortedData = sortDataProducts(dataProductsItems, 'lastModified', 'desc');
         setDataProductsList(sortedData);
     }
-  }, [dispatch, dataProductsItems, status, user?.token, isProjectMappingReady]);
+  }, [dispatch, dataProductsItems, status, user?.token, isProjectMappingReady, isAppConfigReady]);
 
   //sorting handlers
   const handleSortMenuClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
