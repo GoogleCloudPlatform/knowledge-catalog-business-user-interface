@@ -1,4 +1,4 @@
-# Knowledge Catalog Business Interface - 1.4.4
+# Knowledge Catalog Business Interface - 1.5.0(Preview)
 
 An open-source, web-based application called **`Knowledge Catalog Business Interface`** which aims to help business users of BigQuery customers discover and access data assets in the **Knowledge Catalog** (formerly Dataplex Universal Catalog).
 ## Key objectives of the application include:
@@ -396,31 +396,24 @@ gcloud run deploy [SERVICE_NAME] \
   - [Links here](https://github.com/GoogleCloudPlatform/knowledge-catalog-business-user-interface/tree/main/src/assets/screenshots)
 
 
-## Release Note : 1.4.4
+## Release Note : 1.5.0(Preview)
 This is a sub-minor release with features, identified bug/fixes.
 Feature Enhancements:
 
-  - The Glossaries sidebar no longer eagerly fetches every root glossary's categories and terms on page load (which could issue hundreds of requests at once); they now load on demand when you expand a glossary, with a loading indicator on that row while they fetch.
-  - Searching in Glossaries now only ever returns glossaries themselves — categories and terms are no longer shown directly as search results, avoiding confusing, incorrectly-placed entries. Clicking a glossary result you don't have access to shows the same "Access Denied" state as elsewhere in the app, instead of a disabled, locked-looking row.
+  - Docker Container Package OS version upgrade for deployments from **node-20:alpine** to **node-24:alpine**. 
+  - New **Lineage (V2 Preview)** tab on a resource's detail page, rebuilt on the Knowledge Catalog Data Lineage REST API and modeled on the BigQuery lineage view in the Google Cloud console. It shows upstream and downstream lineage around the asset, lets you expand or collapse any node in either direction, and offers a depth selector (1–10 hops) for multi-hop lineage in a single request. Nodes are deduplicated by fully qualified name, the selected node's full upstream/downstream path is highlighted, and the graph includes a minimap, a legend, "Find in graph" and fullscreen.
+  - Lineage (V2 Preview) adds **real column-level lineage**: pick one or more columns (or "All columns") to see column-to-column links between assets, with exact copies drawn solid and transformations dashed. It also supports **every asset type BigQuery lineage supports**, not just BigQuery tables and Looker: Cloud Storage, Pub/Sub, Spanner, Cloud SQL, Bigtable, AlloyDB, Looker / Looker Studio, Vertex AI, Dataproc Metastore, Knowledge Catalog, BigQuery sharing, and third-party/custom (OpenLineage) systems, each shown with its own icon and asset type.
+  - Clicking an asset in Lineage (V2 Preview) opens a side panel with its lineage details (system, type, fully qualified name, upstream/downstream counts, first/last seen), its catalog details (Asset Info, Aspects, Schema), and actions to re-center the graph on it ("Show lineage from here") or open its detail page. Clicking a process (BigQuery job, Dataflow, Composer, Data Fusion, Dataproc, Vertex AI, Looker, custom) opens a panel with the process details and its **query runs**. Expanding a run shows its lineage events and, for BigQuery jobs, the SQL text and job statistics (bytes processed, slot time, user, destination table) with an "Open in BigQuery" link.
+  - Lineage (V2 Preview) also includes a list view of all lineage links (with CSV export), direction (Upstream / Both / Downstream) and filters (time range, dependency type, projects, additional locations), plus clear messages when lineage isn't available: no lineage recorded, the Data Lineage API not enabled, no permission, results truncated, or locations that couldn't be searched. If the multi-hop search isn't available in a project, the tab automatically falls back to single-hop lineage.
+  - The original **Lineage** tab is now hidden, and Lineage (V2 Preview) takes its place in the tab bar. Existing links to a resource's Lineage tab (`?tab=lineage`) now open Lineage (V2 Preview). The original tab can be shown again by setting `VITE_FEATURE_LEGACY_LINEAGE_TAB="true"` in the frontend `.env`. Viewing lineage requires the Data Lineage API (`datalineage.googleapis.com`) to be enabled and the Data Lineage Viewer role (`roles/datalineage.viewer`); column-level lineage also requires the `datalineage.events.getFields` permission.
+  - Browse by Annotations → Linked Assets now shows the browsed aspect field's actual value for each asset — as a new "Aspect Value" column in table view, and as a chip next to the title in card view.
+  - Linked Assets can now be filtered by Aspect Value: type-to-match for free-text (string) fields, and a category picker (with typing still supported) for enum and boolean fields.
 
 Bug Fixes:
 
-  - Fixed Data Products sometimes listing the same product twice — once from the Dataplex API and once from the organization-wide search — when the two described the product's project differently (project ID vs. project number); matching now recognizes either spelling.
-  - Fixed the Data Products page, its detail view, and the sidebar's "Data Products" shortcut fetching the list before the project list had actually finished loading, which could also produce duplicate entries; the Data Products page now shows a clear "Could not load your project list, so Data Products cannot be shown" message instead of an empty grid if the project list fails to load.
-  - Fixed the backend's Data Products endpoint trusting the browser to report its configured project list, which could silently fall back to a single project if the app's configuration hadn't loaded yet, or fetch (and list) the same project's products twice if it was sent more than once; the server now reads and de-duplicates the configured project list itself.
-  - Fixed the Glossaries sidebar and root glossary list silently showing an incomplete or inconsistent set of glossaries — search results and the root list were previously capped and unordered, so which glossaries appeared could change between loads once a workspace had more than a page's worth.
-  - Fixed a glossary's categories/terms list being truncated when it had more items than a single page from the catalog, so expanding a large glossary could show only part of its contents.
-  - Fixed a glossary discovered via search (before it had been separately loaded) sometimes getting permanently stuck titled "Loading..." instead of showing its real name.
-  - Fixed Glossaries search occasionally showing unrelated results (e.g. BigQuery tables, aspect types) styled and clickable as if they were real glossaries.
-  - Fixed the Glossaries sidebar's root list failing to load entirely when a single returned glossary entry was malformed, instead of loading the rest.
-  - Fixed a Term's Synonyms/Related terms list failing to load entirely when one linked result was malformed, instead of showing the other valid results.
-  - Fixed the `/api/v1/app-configs` bootstrap request (used by Glossaries, Browse by Aspect, and project scoping across the app) failing entirely when a single aspect entry in the response was malformed.
-  - Fixed the "Glossary Terms" tab on a resource's detail page staying empty and never loading, requiring a page refresh, after navigating to a different resource and back to the original one.
-  - Fixed the root Glossaries list occasionally showing a category as if it were its own standalone top-level glossary.
-  - Fixed the Browse by Aspect list being silently truncated (missing aspect types) due to a pagination bug in how the list is fetched.
-  - Fixed signing out leaving the previous user's Browse by Aspect list and Glossaries search/filter state visible after a different user logged back in.
-  - Fixed the Glossaries content pane getting stuck on a loading placeholder indefinitely after searching for content belonging to a resource the user doesn't have access to.
-  - Fixed the Browse by Aspect list inconsistently including or excluding project-restricted aspect types depending on a transient error when resolving the configured project list, which could make the same workspace show a different aspect list across logins.
-  - Fixed clicking to open every Aspect accordion in a resource's Aspects panel one by one (without using the "Open All" button) causing every nested field across every aspect to auto-expand as well; manually opening aspects individually now only opens each aspect's own content, and full nested expansion only happens via "Open All".
-  - Fixed the Data Products access request form silently failing and staying open with no feedback when the backend rejected the request (e.g. requesting access for a Google Group Dataplex doesn't support); it now closes and shows the actual error message as a notification.
-  - Fixed the Data Products access request form's Submit button remaining clickable while a request was in flight, which could let a user resubmit before the first request finished; it's now disabled (greyed out) until a response arrives.
+  - Fixed the Linked Assets "Aspect Value" column/chip showing a dash instead of the actual value for assets whose aspect data used a different response shape.
+  - Fixed switching between an aspect's sub-types re-fetching every linked asset's data from scratch each time, causing dozens of redundant batch-aspect requests; asset aspect data is now fetched once per entry and reused across sub-types.
+  - Fixed opening/closing the sidebar (sections panel) while viewing Linked Assets unexpectedly re-triggering the Aspect Value fetch.
+  - Fixed a brief flicker where a Linked Asset's Aspect Value cell showed its loading state, then a dash, then the real value, instead of going straight to the value.
+  - Fixed the Aspect Value chip in card view blending into the card's background on hover, making it hard to see, and fixed its text appearing vertically off-center.
+  - Fixed a crash on load for users with previously-saved app state that predates the Aspect Value feature (stale persisted data missing a newer required field).

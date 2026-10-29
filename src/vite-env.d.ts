@@ -9,6 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_GOOGLE_REDIRECT_URI: string;
   readonly VITE_FEATURE_DARK_MODE: string;
   readonly VITE_FEATURE_REQUEST_ACCESS: string;
+  readonly VITE_FEATURE_LEGACY_LINEAGE_TAB?: string;
 }
 
 interface ImportMeta {

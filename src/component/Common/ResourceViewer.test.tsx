@@ -52,7 +52,7 @@ vi.mock('../../contexts/NoAccessContext', () => ({
 
 // Mock child components
 vi.mock('../SearchEntriesCard/SearchEntriesCard', () => ({
-  default: function MockSearchEntriesCard({ entry, css, isSelected, onDoubleClick }: any) {
+  default: function MockSearchEntriesCard({ entry, css, isSelected, onDoubleClick, aspectValueColumn }: any) {
     return (
       <div
         data-testid="search-entries-card"
@@ -61,6 +61,11 @@ vi.mock('../SearchEntriesCard/SearchEntriesCard', () => ({
       >
         {entry?.entrySource?.displayName || entry?.name}
         {isSelected && <span data-testid="selected-indicator">Selected</span>}
+        {aspectValueColumn && (
+          <span data-testid="aspect-value-column">
+            {aspectValueColumn.label}:{aspectValueColumn.valuesByEntry?.[entry?.name] ?? ''}
+          </span>
+        )}
       </div>
     );
   }
@@ -231,6 +236,18 @@ describe('ResourceViewer', () => {
     expect(screen.getByText('Table 2')).toBeInTheDocument();
     expect(screen.getByText('Dataset 1')).toBeInTheDocument();
     expect(screen.getAllByTestId('search-entries-card')).toHaveLength(3);
+  });
+
+  it('forwards aspectValueColumn through to SearchEntriesCard in list view', () => {
+    renderResourceViewer({
+      aspectValueColumn: {
+        label: 'Aspect Value',
+        valuesByEntry: { 'project/dataset/table1': 'Confidential' },
+      },
+    });
+
+    const columns = screen.getAllByTestId('aspect-value-column');
+    expect(columns[0]).toHaveTextContent('Aspect Value:Confidential');
   });
 
   it('renders resources in table view when viewMode is table', () => {

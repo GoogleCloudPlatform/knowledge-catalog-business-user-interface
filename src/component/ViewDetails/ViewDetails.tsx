@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { Box, IconButton, Tab, Tabs, Skeleton, Tooltip } from '@mui/material'
-import { ArrowBack, KeyboardArrowUp, KeyboardArrowDown, DashboardOutlined, Inventory2Outlined, BadgeOutlined, TimelineOutlined, WorkspacePremiumOutlined, CategoryOutlined, ArticleOutlined, LinkOutlined } from '@mui/icons-material'
+import { ArrowBack, KeyboardArrowUp, KeyboardArrowDown, DashboardOutlined, Inventory2Outlined, BadgeOutlined, TimelineOutlined, WorkspacePremiumOutlined, CategoryOutlined, ArticleOutlined, LinkOutlined, AccountTreeOutlined } from '@mui/icons-material'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import ConditionalTooltip from '../Common/ConditionalTooltip'
@@ -11,6 +11,10 @@ import Tag from '../Tags/Tag'
 import DetailPageOverview from '../DetailPageOverview/DetailPageOverview'
 import DetailPageOverviewSkeleton from '../DetailPageOverview/DetailPageOverviewSkeleton'
 import Lineage from '../Lineage'
+import DataLineage from '../DataLineage'
+import { isDataLineageSupported } from '../DataLineage/utils/eligibility'
+import { FEATURE_FLAGS } from '../../utils/featureFlags'
+import type { CatalogEntryLike } from '../DataLineage/types'
 import DataQuality from '../DataQuality/DataQuality'
 import { extractDataQualityScorecard } from '../DataQuality/aspectScorecard'
 import DataProfile from '../DataProfile/DataProfile'
@@ -99,6 +103,31 @@ const getGlossaryType = (entry: any): 'glossary' | 'category' | 'term' | null =>
   return null;
 };
 
+/**
+ * Ordered tab keys for an entry. Single source of truth for mapping between
+ * tab indices and the tab names used in the `?tab=` URL param.
+ */
+// Label for the redesigned lineage tab (Knowledge Catalog Data Lineage REST API).
+const LINEAGE_V2_LABEL = 'Lineage (V2 Preview)';
+
+const getTabKeys = (entry: CatalogEntryLike | null | undefined): string[] => {
+  const type = getEntryType(entry?.name || '', '/');
+  const system = entry?.entrySource?.system?.toLowerCase();
+  const gType = getGlossaryType(entry);
+  const dataLineage = isDataLineageSupported(entry) ? ['dataLineage'] : [];
+  // The original "Lineage" tab is hidden unless explicitly re-enabled.
+  const legacyLineage = FEATURE_FLAGS.enableLegacyLineageTab ? ['lineage'] : [];
+  if (type === 'Tables' && system === 'bigquery') {
+    return ['overview', 'aspects', 'terms', ...legacyLineage, 'dataLineage', 'dataProfile', 'dataQuality', 'insights'];
+  }
+  if (type === 'Datasets') return ['overview', 'entryList', 'aspects', 'terms', 'insights'];
+  if (system === 'looker') return ['overview', 'entryList', 'aspects', ...legacyLineage, 'dataLineage', 'terms'];
+  if (gType === 'glossary' || gType === 'category') return ['overview', 'categories', 'terms', 'aspects'];
+  if (gType === 'term') return ['overview', 'linkedAssets', 'synonyms', 'aspects'];
+  if (type === 'Entries') return ['overview', 'aspects', ...dataLineage];
+  return ['overview', 'aspects', 'terms', ...dataLineage];
+};
+
 const ViewDetails = () => {
   const { user } = useAuth();
   const entry = useSelector((state: any) => state.entry.items);
@@ -173,17 +202,7 @@ const ViewDetails = () => {
     }
   };
   // Inverse of resolveTabName: numeric tab index → tab name string for URL params
-  const resolveTabIndex = (index: number): string => {
-    const type = getEntryType(entry?.name || '', '/');
-    const isBQTable = type === 'Tables' && entry?.entrySource?.system?.toLowerCase() === 'bigquery';
-    const gType = getGlossaryType(entry);
-    if (isBQTable) return (['overview','aspects','terms','lineage','dataProfile','dataQuality','insights'] as const)[index] ?? 'overview';
-    if (type === 'Datasets') return (['overview','entryList','aspects','terms','insights'] as const)[index] ?? 'overview';
-    if (gType === 'glossary' || gType === 'category') return (['overview','categories','terms','aspects'] as const)[index] ?? 'overview';
-    if (gType === 'term') return (['overview','linkedAssets','synonyms','aspects'] as const)[index] ?? 'overview';
-    if (type === 'Entries') return (['overview','aspects'] as const)[index] ?? 'overview';
-    return (['overview','aspects','terms'] as const)[index] ?? 'overview';
-  };
+  const resolveTabIndex = (index: number): string => getTabKeys(entry)[index] ?? 'overview';
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -632,38 +651,10 @@ useEffect(() => {
 
   // Resolve a tab name (e.g. 'aspects', 'lineage') to a numeric index based on entry type
   const resolveTabName = (tabName: string): number => {
-    const type = getEntryType(entry.name, '/');
-    const isBigQueryTable = type === 'Tables' && entry.entrySource?.system?.toLowerCase() === 'bigquery';
-    const isLooker = entry.entrySource?.system?.toLowerCase() === 'looker';
-    const gType = getGlossaryType(entry);
-
-    if (isBigQueryTable) {
-      const map: Record<string, number> = { overview: 0, aspects: 1, terms: 2, lineage: 3, dataProfile: 4, dataQuality: 5, insights: 6 };
-      return map[tabName] ?? 0;
-    }
-    if (type === 'Datasets') {
-      const map: Record<string, number> = { overview: 0, entryList: 1, aspects: 2, terms: 3, insights: 4 };
-      return map[tabName] ?? 0;
-    }
-    if (isLooker) {
-      const map: Record<string, number> = { overview: 0, entryList: 1, aspects: 2, lineage: 3, terms: 4 };
-      return map[tabName] ?? 0;
-    }
-    if (gType === 'glossary' || gType === 'category') {
-      const map: Record<string, number> = { overview: 0, categories: 1, terms: 2, aspects: 3 };
-      return map[tabName] ?? 0;
-    }
-    if (gType === 'term') {
-      const map: Record<string, number> = { overview: 0, linkedAssets: 1, synonyms: 2, aspects: 3 };
-      return map[tabName] ?? 0;
-    }
-    // Default (non-Entries types get Glossary Terms tab)
-    if (type === 'Entries') {
-      const map: Record<string, number> = { overview: 0, aspects: 1 };
-      return map[tabName] ?? 0;
-    }
-    const map: Record<string, number> = { overview: 0, aspects: 1, terms: 2 };
-    return map[tabName] ?? 0;
+    const keys = getTabKeys(entry);
+    // Old links (?tab=lineage) open the V2 lineage tab while the legacy tab is hidden.
+    const name = tabName === 'lineage' && !keys.includes('lineage') ? 'dataLineage' : tabName;
+    return Math.max(0, keys.indexOf(name));
   };
 
   // Apply tabName from route state or URL ?tab param when the new entry finishes loading
@@ -680,6 +671,12 @@ useEffect(() => {
 
   // Lineage tab with full Lineage component
   const lineageTab = <Lineage entry={displayEntry}/>;
+  // Data Lineage tab (Knowledge Catalog Data Lineage REST API)
+  const dataLineageTab = <DataLineage entry={displayEntry}/>;
+  const showDataLineageTab = isDataLineageSupported(displayEntry);
+  const showLegacyLineageTab = FEATURE_FLAGS.enableLegacyLineageTab;
+  // Tab position by key (positions shift when the legacy Lineage tab is hidden).
+  const tabIdx = (key: string): number => getTabKeys(displayEntry).indexOf(key);
 
   // Terms tab content for non-glossary entries (linked glossary terms via lookupEntryLinks)
   const linkedTermsTab = (
@@ -821,10 +818,13 @@ const ctaButtons = (
     <Tab key="overview" icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />,
     <Tab key="annotations" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>newsmode</span>} iconPosition="start" label="Aspects" {...tabProps(1)} />,
     <Tab key="terms" icon={<ArticleOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Glossary Terms" {...tabProps(2)} />,
-    <Tab key="lineage" icon={<TimelineOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Lineage" {...tabProps(3)} />,
-    <Tab key="dataProfile" icon={<BadgeOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Data Profile" {...tabProps(4)} />,
-    <Tab key="dataQuality" icon={<WorkspacePremiumOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Data Quality" {...tabProps(5)} />,
-    <Tab key="insights" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>query_stats</span>} iconPosition="start" label="Insights" {...tabProps(6)} />,
+    ...(showLegacyLineageTab ? [
+    <Tab key="lineage" icon={<TimelineOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Lineage" {...tabProps(tabIdx('lineage'))} />,
+    ] : []),
+    <Tab key="dataLineage" icon={<AccountTreeOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label={LINEAGE_V2_LABEL} {...tabProps(tabIdx('dataLineage'))} />,
+    <Tab key="dataProfile" icon={<BadgeOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Data Profile" {...tabProps(tabIdx('dataProfile'))} />,
+    <Tab key="dataQuality" icon={<WorkspacePremiumOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Data Quality" {...tabProps(tabIdx('dataQuality'))} />,
+    <Tab key="insights" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>query_stats</span>} iconPosition="start" label="Insights" {...tabProps(tabIdx('insights'))} />,
   ] : getEntryType(displayEntry.name, '/') === 'Datasets' ? [
     <Tab key="overview" icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />,
     <Tab key="entryList" icon={<Inventory2Outlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Entry List" {...tabProps(1)} />,
@@ -835,8 +835,11 @@ const ctaButtons = (
     <Tab key="overview" icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />,
     <Tab key="entryList" icon={<Inventory2Outlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Entry List" {...tabProps(1)} />,
     <Tab key="annotations" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>newsmode</span>} iconPosition="start" label="Aspects" {...tabProps(2)} />,
-    <Tab key="lineage" icon={<TimelineOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Lineage" {...tabProps(3)} />,
-    <Tab key="terms" icon={<ArticleOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Glossary Terms" {...tabProps(4)} />,
+    ...(showLegacyLineageTab ? [
+    <Tab key="lineage" icon={<TimelineOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Lineage" {...tabProps(tabIdx('lineage'))} />,
+    ] : []),
+    <Tab key="dataLineage" icon={<AccountTreeOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label={LINEAGE_V2_LABEL} {...tabProps(tabIdx('dataLineage'))} />,
+    <Tab key="terms" icon={<ArticleOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Glossary Terms" {...tabProps(tabIdx('terms'))} />,
   ] : glossaryType === 'glossary' || glossaryType === 'category' ? [
     <Tab key="overview" icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />,
     <Tab key="categories" icon={<CategoryOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Categories" {...tabProps(1)} />,
@@ -850,10 +853,16 @@ const ctaButtons = (
   ] : getEntryType(displayEntry.name, '/') === 'Entries' ? [
     <Tab key="overview" icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />,
     <Tab key="annotations" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>newsmode</span>} iconPosition="start" label="Aspects" {...tabProps(1)} />,
+    ...(showDataLineageTab ? [
+    <Tab key="dataLineage" icon={<AccountTreeOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label={LINEAGE_V2_LABEL} {...tabProps(2)} />
+    ] : []),
   ] : [
     <Tab key="overview" icon={<DashboardOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Overview" {...tabProps(0)} />,
     <Tab key="annotations" icon={<span className="material-symbols-outlined" style={{ fontSize: "20px", display: "inline-block", verticalAlign: "middle" }}>newsmode</span>} iconPosition="start" label="Aspects" {...tabProps(1)} />,
     <Tab key="terms" icon={<ArticleOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label="Glossary Terms" {...tabProps(2)} />,
+    ...(showDataLineageTab ? [
+    <Tab key="dataLineage" icon={<AccountTreeOutlined sx={{ fontSize: "20px" }} />} iconPosition="start" label={LINEAGE_V2_LABEL} {...tabProps(3)} />
+    ] : []),
   ];
 
   return (
@@ -1297,16 +1306,21 @@ const ctaButtons = (
                         <CustomTabPanel value={tabValue} index={2}>
                             {linkedTermsTab}
                         </CustomTabPanel>
-                       <CustomTabPanel value={tabValue} index={3}>
+                       {showLegacyLineageTab && (
+                        <CustomTabPanel value={tabValue} index={tabIdx('lineage')}>
                             {lineageTab}
                         </CustomTabPanel>
-                        <CustomTabPanel value={tabValue} index={4}>
+                       )}
+                        <CustomTabPanel value={tabValue} index={tabIdx('dataLineage')}>
+                            {dataLineageTab}
+                        </CustomTabPanel>
+                        <CustomTabPanel value={tabValue} index={tabIdx('dataProfile')}>
                             <DataProfile scanName={dpScanName} allScansStatus={allScansStatus} />
                         </CustomTabPanel>
-                        <CustomTabPanel value={tabValue} index={5}>
+                        <CustomTabPanel value={tabValue} index={tabIdx('dataQuality')}>
                             <DataQuality scanName={dqScanName} allScansStatus={allScansStatus} aspectScorecard={aspectScorecard} />
                         </CustomTabPanel>
-                        <CustomTabPanel value={tabValue} index={6}>
+                        <CustomTabPanel value={tabValue} index={tabIdx('insights')}>
                             <TableInsights entry={entry} scanName={tableInsightsScanName} />
                         </CustomTabPanel>
                       </>
@@ -1347,10 +1361,15 @@ const ctaButtons = (
                             />
                             {annotationTab}
                         </CustomTabPanel>
-                        <CustomTabPanel value={tabValue} index={3}>
+                        {showLegacyLineageTab && (
+                        <CustomTabPanel value={tabValue} index={tabIdx('lineage')}>
                             {lineageTab}
                         </CustomTabPanel>
-                        <CustomTabPanel value={tabValue} index={4}>
+                        )}
+                        <CustomTabPanel value={tabValue} index={tabIdx('dataLineage')}>
+                            {dataLineageTab}
+                        </CustomTabPanel>
+                        <CustomTabPanel value={tabValue} index={tabIdx('terms')}>
                             {linkedTermsTab}
                         </CustomTabPanel>
                       </>
@@ -1471,6 +1490,11 @@ const ctaButtons = (
                             />
                             {annotationTab}
                         </CustomTabPanel>
+                        {showDataLineageTab && (
+                          <CustomTabPanel value={tabValue} index={2}>
+                              {dataLineageTab}
+                          </CustomTabPanel>
+                        )}
                       </>
                     ) : (
                       <>
@@ -1488,6 +1512,11 @@ const ctaButtons = (
                         <CustomTabPanel value={tabValue} index={2}>
                             {linkedTermsTab}
                         </CustomTabPanel>
+                        {showDataLineageTab && (
+                          <CustomTabPanel value={tabValue} index={3}>
+                              {dataLineageTab}
+                          </CustomTabPanel>
+                        )}
                       </>
                     )}
           </div>

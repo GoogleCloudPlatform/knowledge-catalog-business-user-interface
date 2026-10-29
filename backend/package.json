@@ -1,6 +1,6 @@
 {
   "name": "knowledge-catalog-business-ui-api",
-  "version": "1.4.4",
+  "version": "1.5.0-preview",
   "description": "Backend api for knowledge-catalog-business-ui to communicate with knowledge catalog api's",
   "main": "index.js",
   "scripts": {

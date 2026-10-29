@@ -21,6 +21,10 @@ html[data-theme="dark"] .entriesHoverEffect:not(.selected):hover {
   opacity: 1;
 }
 
+.entriesHoverEffect:not(.selected):hover .aspect-value-chip {
+  background: #ffffff !important;
+}
+
 /* Smaller screens: reduce hover button padding to prevent overflow */
 @media (max-width: 1200px) {
   .entriesHoverEffect .hover-actions .MuiBox-root,

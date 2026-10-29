@@ -8,7 +8,10 @@ import { findProjectByNumber } from '../../utils/resourceUtils';
 // Builds the `projectId.location.aspectType` form of an aspect name.
 // The aspect itself comes from appConfig; the project number -> id mapping
 // comes from /get-projects (the single source for project identity).
-const getAspectName = (name: string, appConfig: any, projectsList: Project[]) => {
+// Exported so components can resolve the same aspectTypeId client-side (to
+// derive a displayed aspect value from a cached raw-aspects map) without a
+// thunk round-trip - see fetchEntryAspects below.
+export const getAspectName = (name: string, appConfig: any, projectsList: Project[]) => {
   const resource: string[] = appConfig?.aspects
     ?.find((a: any) => a.dataplexEntry?.entrySource?.displayName === name)
     ?.dataplexEntry?.entrySource?.resource?.split('/') ?? [];
@@ -251,6 +254,51 @@ export const browseResourcesByAspects = createAsyncThunk('resources/browseResour
     return rejectWithValue('An unknown error occurred');
   }
 });
+// Thunk backing Browse by Annotations' Linked Assets "Aspect Value" column.
+// Fetches each given entry's FULL `aspects` map (`/batch-entry-aspects`, one
+// getEntry(view=ALL) per entry - see backend/server.js) and merges it into
+// the persistent `entryAspectsByName` cache (see the reducer below) - keyed
+// by entry name, not by which aspect/sub-type the caller is currently
+// browsing. An entry's aspects don't depend on how it was found, so this
+// cache survives switching between sub-types of the same (or a different)
+// aspect: the caller (MainComponent) is responsible for only requesting
+// entryNames not already present in the cache, and for extracting whichever
+// field it currently needs from the cached raw map client-side (see
+// extractAspectFieldValue in aspectValueUtils.ts) - no re-fetch required
+// just because the selected sub-type/field changed.
+export const fetchEntryAspects = createAsyncThunk('resources/fetchEntryAspects', async (requestData: { entryNames: string[]; id_token?: string; signal?: AbortSignal }, { rejectWithValue, signal }) => {
+  try {
+    axios.defaults.headers.common['Authorization'] = requestData.id_token ? `Bearer ${requestData.id_token}` : '';
+    const entryNames = requestData.entryNames ?? [];
+
+    if (entryNames.length === 0) {
+      return { entryAspectsByName: {} };
+    }
+
+    const response = await axios.post(URLS.API_URL + URLS.BATCH_ENTRY_ASPECTS, {
+      entryNames,
+    }, {
+      signal: requestData.signal || signal,
+    });
+
+    const entryAspectsByName: Record<string, unknown> = {};
+    entryNames.forEach((entryName) => {
+      entryAspectsByName[entryName] = response.data?.[entryName] ?? null;
+    });
+
+    return { entryAspectsByName };
+
+  } catch (error) {
+    if (axios.isCancel(error) || (error instanceof Error && (error.name === 'AbortError' || error.name === 'CanceledError'))) {
+      return rejectWithValue({ aborted: true, message: 'Request aborted' });
+    }
+    if (error instanceof AxiosError) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+    return rejectWithValue('An unknown error occurred');
+  }
+});
+
 export const fetchEntriesByParent = createAsyncThunk('resources/fetchEntriesByParent', async (requestData: any , { rejectWithValue }) => {
   // If the search parent is empty, we are returning an empty list.
   if (!requestData.parent) {
@@ -309,6 +357,19 @@ type ResourcesState = {
   // Tracks which aspect (or `aspectName__subTypeName`) most recently returned 403,
   // so the UI can render an inline "Permission Required" panel instead of a global modal.
   accessDeniedItemId: string | null;
+  // Persistent cache of each entry's full raw `aspects` map (Browse by
+  // Annotations' Linked Assets "Aspect Value" column), keyed by entry name -
+  // NOT reset when the selected aspect/sub-type changes, since an entry's
+  // aspects are a fact about the entry, not about which sub-type found it.
+  // `null` means the fetch for that entry failed. Components derive the
+  // displayed value for whichever field they currently need via
+  // extractAspectFieldValue (aspectValueUtils.ts) client-side, from this
+  // cache - see fetchEntryAspects below.
+  entryAspectsByName: Record<string, unknown>;
+  // Reflects only the most recently dispatched fetchEntryAspects call - not
+  // meant to gate per-row loading (that's purely whether a row's entryName
+  // is present in entryAspectsByName yet), just useful for diagnostics.
+  entryAspectsStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
 };
 
 const initialState: ResourcesState = {
@@ -331,6 +392,8 @@ const initialState: ResourcesState = {
   browseDynamicAnnotationsData: [],
   browseSubTypesWithCache: {},
   accessDeniedItemId: null,
+  entryAspectsByName: {},
+  entryAspectsStatus: 'idle',
 };
 
 // createSlice generates actions and reducers for a slice of the Redux state.
@@ -429,6 +492,8 @@ export const resourcesSlice = createSlice({
       .addCase(browseResourcesByAspects.pending, (state) => {
         state.items = [];
         state.status = 'loading';
+        // entryAspectsByName is deliberately NOT reset here - it's a
+        // persistent, entry-keyed cache that survives selection changes.
       })
       .addCase(browseResourcesByAspects.fulfilled, (state, action) => {
         state.totalItems = action.payload?.results?.totalSize ?? 0;
@@ -447,6 +512,27 @@ export const resourcesSlice = createSlice({
         if (payload && typeof payload === 'object' && payload.type === 'PERMISSION_DENIED') {
           state.accessDeniedItemId = payload.itemId || null;
         }
+      })
+      .addCase(fetchEntryAspects.pending, (state) => {
+        state.entryAspectsStatus = 'loading';
+      })
+      .addCase(fetchEntryAspects.fulfilled, (state, action) => {
+        // Merge, never replace - entries fetched for a previous selection
+        // stay valid and cached. Guard against state.entryAspectsByName
+        // itself being missing: this slice's state is rehydrated from
+        // localStorage (see app/store.ts), so a browser with state persisted
+        // before this field existed would otherwise crash here.
+        if (!state.entryAspectsByName || typeof state.entryAspectsByName !== 'object') {
+          state.entryAspectsByName = {};
+        }
+        Object.assign(state.entryAspectsByName, action.payload?.entryAspectsByName ?? {});
+        state.entryAspectsStatus = 'succeeded';
+      })
+      .addCase(fetchEntryAspects.rejected, (state, action) => {
+        if ((action.payload as { aborted?: boolean })?.aborted) {
+          return; // Superseded by a newer request - keep current state
+        }
+        state.entryAspectsStatus = 'failed';
       })
       .addCase(fetchEntriesByParent.pending, (state) => {
         state.entryListStatus = 'loading';

@@ -395,6 +395,58 @@ app.post('/api/v1/aspects', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/v1/batch-entry-aspects
+ * A protected endpoint to fetch the `aspects` map for many Knowledge Catalog
+ * entries at once (e.g. to populate an "Aspect Value" column for a page of
+ * search/browse results). One failing/inaccessible entry does not fail the
+ * whole batch - its value comes back as null.
+ *
+ * Request Body:
+ * {
+ * "entryNames": ["The full resource name of each entry", ...]
+ * }
+ */
+app.post('/api/v1/batch-entry-aspects', async (req, res) => {
+  const { entryNames } = req.body;
+  const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
+
+  if (!entryNames || !Array.isArray(entryNames)) {
+    return checkErrorAndSendResponse(res, error, 'Bad Request: An "entryNames" field (array of strings) is required.');
+  }
+
+  try {
+    const oauth2Client = getAuthClient(accessToken);
+
+    const dataplexClientv1 = new CatalogServiceClient({
+        auth: oauth2Client,
+    });
+
+    console.log(`Fetching aspects for a batch of ${entryNames.length} entries.`);
+
+    const results = await Promise.allSettled(
+      entryNames.map((name) => dataplexClientv1.getEntry({ name, view: protos.google.cloud.dataplex.v1.EntryView.ALL }))
+    );
+
+    const aspectsByEntry = {};
+    results.forEach((result, index) => {
+      const entryName = entryNames[index];
+      if (result.status === 'fulfilled') {
+        aspectsByEntry[entryName] = result.value?.[0]?.aspects || {};
+      } else {
+        console.error(`Error fetching aspects for entry ${entryName}:`, result.reason);
+        aspectsByEntry[entryName] = null;
+      }
+    });
+
+    res.json(aspectsByEntry);
+
+  } catch (error) {
+    console.error('Error fetching aspects for a batch of entries:', error);
+    return checkErrorAndSendResponse(res, error, 'An error occurred while fetching aspects for the batch.');
+  }
+});
+
 app.post('/api/v1/batch-aspects', async (req, res) => {
     const { entryNames } = req.body;
     const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
@@ -1625,6 +1677,247 @@ app.post('/api/v1/lineage-column-level', async (req, res) => {
   } catch (error) {
     console.error('Error searching for lineage links:', error);
     return checkErrorAndSendResponse(res, error, 'An error occurred while fetching data lineage.');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Data Lineage REST (Knowledge Catalog) proxy routes
+//
+// Thin pass-through routes used by the "Data Lineage" tab. They call the
+// Data Lineage REST API (https://datalineage.googleapis.com/v1) directly with
+// axios instead of the gRPC client library, authenticating with either the
+// caller's forwarded OAuth token or the runtime service account
+// (see getRequestAccessToken).
+// ---------------------------------------------------------------------------
+const DATALINEAGE_BASE = 'https://datalineage.googleapis.com/v1';
+const BIGQUERY_REST_BASE = 'https://bigquery.googleapis.com/bigquery/v2';
+// projects/{p}/locations/{l}[/{collection}/{id}...]
+const LINEAGE_RESOURCE_NAME_RE = /^projects\/[^/\s]+\/locations\/[^/\s]+(\/[A-Za-z]+\/[^/\s]+)*$/;
+const LINEAGE_PARENT_RE = /^projects\/[^/\s]+\/locations\/[^/\s]+$/;
+const SAFE_ID_RE = /^[\w.:-]+$/;
+
+async function lineageRest(req, method, url, { data, params } = {}) {
+  const token = await getRequestAccessToken(req.headers.authorization?.split(' ')[1]);
+  const response = await axios({
+    method,
+    url,
+    data,
+    params,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  return response.data;
+}
+
+// Axios errors carry HTTP statuses (not gRPC codes), so they need their own mapper.
+function sendGoogleRestError(res, error, message) {
+  const status = error?.response?.status || 500;
+  const googleError = error?.response?.data?.error
+    || (Array.isArray(error?.response?.data) ? error.response.data[0]?.error : undefined);
+  console.error(message, googleError || error?.message);
+  return res.status(status).json({
+    error: message,
+    status: googleError?.status,
+    details: googleError?.message || error?.message,
+  });
+}
+
+/**
+ * POST /api/v1/data-lineage/search-lineage
+ * Wraps projects.locations.searchLineageStreaming. The REST transport returns
+ * server-streamed messages as a JSON array; they are flattened into a single
+ * { links, unreachable, truncated } response.
+ */
+app.post('/api/v1/data-lineage/search-lineage', async (req, res) => {
+  const { parent, locations, rootCriteria, direction, filters, limits } = req.body || {};
+  if (!parent || !LINEAGE_PARENT_RE.test(parent)) {
+    return res.status(400).json({ error: 'Bad Request: a valid "parent" (projects/{p}/locations/{l}) is required.' });
+  }
+  if (!rootCriteria?.entities?.entities?.length) {
+    return res.status(400).json({ error: 'Bad Request: "rootCriteria.entities.entities" is required.' });
+  }
+  if (!['UPSTREAM', 'DOWNSTREAM'].includes(direction)) {
+    return res.status(400).json({ error: 'Bad Request: "direction" must be UPSTREAM or DOWNSTREAM.' });
+  }
+  try {
+    const location = parent.split('/')[3];
+    const body = {
+      locations: Array.isArray(locations) && locations.length ? locations : [location],
+      rootCriteria,
+      direction,
+    };
+    if (filters && Object.keys(filters).length) body.filters = filters;
+    if (limits && Object.keys(limits).length) body.limits = limits;
+
+    const data = await lineageRest(req, 'post', `${DATALINEAGE_BASE}/${parent}:searchLineageStreaming`, { data: body });
+    const chunks = Array.isArray(data) ? data : [data];
+    const links = [];
+    const unreachable = new Set();
+    chunks.forEach((chunk) => {
+      (chunk?.links || []).forEach((l) => links.push(l));
+      (chunk?.unreachable || []).forEach((u) => unreachable.add(u));
+    });
+    const maxResults = limits?.maxResults || 1000;
+    res.json({ links, unreachable: [...unreachable], truncated: links.length >= maxResults });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while searching data lineage.');
+  }
+});
+
+/**
+ * POST /api/v1/data-lineage/search-links
+ * Wraps projects.locations.searchLinks (single hop) and drains pagination.
+ */
+app.post('/api/v1/data-lineage/search-links', async (req, res) => {
+  const { parent, source, target, pageSize = 100, maxPages = 10 } = req.body || {};
+  if (!parent || !LINEAGE_PARENT_RE.test(parent)) {
+    return res.status(400).json({ error: 'Bad Request: a valid "parent" is required.' });
+  }
+  if (!source?.fullyQualifiedName && !target?.fullyQualifiedName) {
+    return res.status(400).json({ error: 'Bad Request: "source" or "target" entity reference is required.' });
+  }
+  try {
+    const links = [];
+    let pageToken;
+    let pages = 0;
+    do {
+      const body = { pageSize: Math.min(Number(pageSize) || 100, 100) };
+      if (source?.fullyQualifiedName) body.source = source;
+      else body.target = target;
+      if (pageToken) body.pageToken = pageToken;
+      const data = await lineageRest(req, 'post', `${DATALINEAGE_BASE}/${parent}:searchLinks`, { data: body });
+      (data?.links || []).forEach((l) => links.push(l));
+      pageToken = data?.nextPageToken;
+      pages += 1;
+    } while (pageToken && pages < Math.min(Number(maxPages) || 10, 50));
+    res.json({ links, truncated: Boolean(pageToken) });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while searching lineage links.');
+  }
+});
+
+/**
+ * POST /api/v1/data-lineage/link-processes
+ * Wraps projects.locations.batchSearchLinkProcesses; chunks links by 100.
+ */
+app.post('/api/v1/data-lineage/link-processes', async (req, res) => {
+  const { parent, links } = req.body || {};
+  if (!parent || !LINEAGE_PARENT_RE.test(parent)) {
+    return res.status(400).json({ error: 'Bad Request: a valid "parent" is required.' });
+  }
+  if (!Array.isArray(links) || links.length === 0) {
+    return res.json({ processLinks: [] });
+  }
+  try {
+    const processLinks = [];
+    for (let i = 0; i < links.length; i += 100) {
+      const chunk = links.slice(i, i + 100);
+      let pageToken;
+      let pages = 0;
+      do {
+        const body = { links: chunk, pageSize: 100 };
+        if (pageToken) body.pageToken = pageToken;
+        const data = await lineageRest(req, 'post', `${DATALINEAGE_BASE}/${parent}:batchSearchLinkProcesses`, { data: body });
+        (data?.processLinks || []).forEach((p) => processLinks.push(p));
+        pageToken = data?.nextPageToken;
+        pages += 1;
+      } while (pageToken && pages < 10);
+    }
+    res.json({ processLinks });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching lineage processes.');
+  }
+});
+
+/** GET /api/v1/data-lineage/process?name=projects/.../processes/... */
+app.get('/api/v1/data-lineage/process', async (req, res) => {
+  const { name } = req.query;
+  if (!name || !LINEAGE_RESOURCE_NAME_RE.test(name) || !name.includes('/processes/')) {
+    return res.status(400).json({ error: 'Bad Request: a valid process "name" is required.' });
+  }
+  try {
+    const data = await lineageRest(req, 'get', `${DATALINEAGE_BASE}/${name}`);
+    res.json(data);
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching the lineage process.');
+  }
+});
+
+/** GET /api/v1/data-lineage/runs?process=...&pageToken=&pageSize= */
+app.get('/api/v1/data-lineage/runs', async (req, res) => {
+  const { process, pageToken, pageSize = 25 } = req.query;
+  if (!process || !LINEAGE_RESOURCE_NAME_RE.test(process) || !process.includes('/processes/')) {
+    return res.status(400).json({ error: 'Bad Request: a valid "process" is required.' });
+  }
+  try {
+    const params = { pageSize: Math.min(Number(pageSize) || 25, 100) };
+    if (pageToken) params.pageToken = pageToken;
+    const data = await lineageRest(req, 'get', `${DATALINEAGE_BASE}/${process}/runs`, { params });
+    res.json({ runs: data?.runs || [], nextPageToken: data?.nextPageToken });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching lineage runs.');
+  }
+});
+
+/** GET /api/v1/data-lineage/lineage-events?run=...&pageToken= */
+app.get('/api/v1/data-lineage/lineage-events', async (req, res) => {
+  const { run, pageToken, pageSize = 50 } = req.query;
+  if (!run || !LINEAGE_RESOURCE_NAME_RE.test(run) || !run.includes('/runs/')) {
+    return res.status(400).json({ error: 'Bad Request: a valid "run" is required.' });
+  }
+  try {
+    const params = { pageSize: Math.min(Number(pageSize) || 50, 100) };
+    if (pageToken) params.pageToken = pageToken;
+    const data = await lineageRest(req, 'get', `${DATALINEAGE_BASE}/${run}/lineageEvents`, { params });
+    res.json({ lineageEvents: data?.lineageEvents || [], nextPageToken: data?.nextPageToken });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching lineage events.');
+  }
+});
+
+/**
+ * GET /api/v1/data-lineage/bigquery-job?projectId=&jobId=&location=
+ * Fetches a BigQuery job (jobs.get) and returns a trimmed summary used by the
+ * process "Query runs" panel (SQL text + statistics).
+ */
+app.get('/api/v1/data-lineage/bigquery-job', async (req, res) => {
+  const { projectId, jobId, location } = req.query;
+  if (!projectId || !jobId || !SAFE_ID_RE.test(projectId) || !SAFE_ID_RE.test(jobId) || (location && !SAFE_ID_RE.test(location))) {
+    return res.status(400).json({ error: 'Bad Request: valid "projectId" and "jobId" are required.' });
+  }
+  try {
+    const params = location ? { location } : undefined;
+    const job = await lineageRest(
+      req, 'get',
+      `${BIGQUERY_REST_BASE}/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(jobId)}`,
+      { params }
+    );
+    const stats = job?.statistics || {};
+    const query = job?.configuration?.query || {};
+    res.json({
+      id: job?.id,
+      jobId: job?.jobReference?.jobId,
+      projectId: job?.jobReference?.projectId,
+      location: job?.jobReference?.location,
+      userEmail: job?.user_email,
+      state: job?.status?.state,
+      errorResult: job?.status?.errorResult,
+      query: query.query,
+      statementType: stats?.query?.statementType,
+      destinationTable: query.destinationTable,
+      referencedTables: stats?.query?.referencedTables || [],
+      creationTime: stats.creationTime,
+      startTime: stats.startTime,
+      endTime: stats.endTime,
+      totalBytesProcessed: stats.totalBytesProcessed || stats?.query?.totalBytesProcessed,
+      totalSlotMs: stats.totalSlotMs || stats?.query?.totalSlotMs,
+      cacheHit: stats?.query?.cacheHit,
+      finalExecutionDurationMs: stats.finalExecutionDurationMs,
+    });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching the BigQuery job.');
   }
 });
 

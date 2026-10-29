@@ -30,6 +30,7 @@ export const URLS = {
     LOOKUP_ENTRY_LINKS: '/lookup-entry-links',
     GET_SAMPLE_DATA: '/get-sample-data',
     BATCH_ASPECTS: '/batch-aspects',
+    BATCH_ENTRY_ASPECTS: '/batch-entry-aspects',
     LINEAGE_SEARCH: '/lineage',
     ENTRY_DATA_QUALITY: '/entry-data-quality',
     GET_DATA_SCAN: '/get-data-scan',
@@ -47,4 +48,12 @@ export const URLS = {
     GLOSSARY_CHILDREN: '/glossary-children',
     LOOKUP_ENTRY_REST: '/lookup-entry-rest',
     SEARCH_ENTRIES: '/search-entries',
+    // Data Lineage (Knowledge Catalog REST) proxy routes
+    DATA_LINEAGE_SEARCH: '/data-lineage/search-lineage',
+    DATA_LINEAGE_SEARCH_LINKS: '/data-lineage/search-links',
+    DATA_LINEAGE_LINK_PROCESSES: '/data-lineage/link-processes',
+    DATA_LINEAGE_PROCESS: '/data-lineage/process',
+    DATA_LINEAGE_RUNS: '/data-lineage/runs',
+    DATA_LINEAGE_EVENTS: '/data-lineage/lineage-events',
+    DATA_LINEAGE_BQ_JOB: '/data-lineage/bigquery-job',
 }
