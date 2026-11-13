@@ -9,6 +9,7 @@ import { useSelector } from 'react-redux';
 import DataProductAssets from './DataProductAssets';
 import { useAuth } from '../../auth/AuthProvider';
 import axios from 'axios';
+import { buildFqnSearchQueries, mergeAssetsWithSearchResults, resourceToFqn, type DataProductAsset, type SearchResult } from './dataProductAssetUtils';
 
 /**
  * @file DetailPageOverview.tsx
@@ -171,39 +172,39 @@ const Assets: React.FC<AssetsProps> = ({ entry, css, onAssetPreviewChange  }) =>
         }
 
         if(dataProductAssetsStatus === 'succeeded' && dataProductAssets.length > 0){
-            let a = dataProductAssets.map((item: any) => {
-                let p = item.resource.split('projects/')[1].split('/').length == 5 ?
-                    `${item.resource.split('projects/')[1].split('/')[0]}.${item.resource.split('projects/')[1].split('/')[2]}.${item.resource.split('projects/')[1].split('/')[4]}`:
-                    `${item.resource.split('projects/')[1].split('/')[0]}.${item.resource.split('projects/')[1].split('/')[2]}`;
-                let b = item.resource.includes('//') ? item.resource.split('projects/')[0].split('.')[0].slice(2) : 'bigquery';
-                return b + ':' + p;
-            });
-            let searchTerm = 'fully_qualified_name=(' + a.join(' | ');
-            searchTerm += ')';
-            const requestResourceData = {
-                query: searchTerm,
-            }
-            axios.post(
-            `https://dataplex.googleapis.com/v1/projects/${import.meta.env.VITE_GOOGLE_PROJECT_ID}/locations/global:searchEntries`,
-                requestResourceData,
+            // Every asset the data product API returned must be listed. Each one is
+            // enriched with its Knowledge Catalog entry (looked up by fully qualified
+            // name); assets the search can't resolve - FQN not derivable from the
+            // resource, not indexed in the catalog, not visible to the user, or the
+            // search failing - are still shown as fallback rows instead of vanishing.
+            let cancelled = false;
+            const fqns = (dataProductAssets as DataProductAsset[])
+                .map((asset) => resourceToFqn(String(asset?.resource || '')))
+                .filter((fqn): fqn is string => Boolean(fqn));
+            const queries = buildFqnSearchQueries(fqns);
+            Promise.allSettled(queries.map((query) => axios.post(
+                `https://dataplex.googleapis.com/v1/projects/${import.meta.env.VITE_GOOGLE_PROJECT_ID}/locations/global:searchEntries`,
+                // Default page size is 10; ask for every FQN in the batch.
+                { query, pageSize: 1000 },
                 {
                     headers: {
-                    Authorization: `Bearer ${user?.token}`,
-                    'Content-Type': 'application/json',
+                        Authorization: `Bearer ${user?.token}`,
+                        'Content-Type': 'application/json',
                     },
                 }
-            ).then((response:any) => {
-                console.log('fet Ass', response.data);
-                //response.data.results.map()
-                setDataProductsAssetsList(response.data.results);
-                console.log(dataProductsAssetsList);
+            ))).then((settled) => {
+                if (cancelled) return;
+                const results: SearchResult[] = [];
+                settled.forEach((r) => {
+                    if (r.status === 'fulfilled') results.push(...(r.value?.data?.results || []));
+                    else console.error('Error fetching data product assets details:', r.reason);
+                });
+                setDataProductsAssetsList(mergeAssetsWithSearchResults(dataProductAssets, results) as any);
                 setTimeout(() => {
-                  setAssetListLoader(true);
-                }, 300)
-                
-            }).catch((error:any) => {
-                console.error('Error fetching data product assets details:', error);
+                  if (!cancelled) setAssetListLoader(true);
+                }, 300);
             });
+            return () => { cancelled = true; };
         }
     }, [dataProductAssets, dataProductAssetsStatus]);
 

@@ -9,6 +9,7 @@ import { extractProjectNumberFromEntryName } from '../../utils/resourceUtils';
 import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
 import { browseResourcesByAspects, setAspectBrowseCache, setBrowseSelectedItemName, setBrowseSelectedSubItem, setBrowseTabValue, setBrowseDynamicAnnotationsData, setBrowseSubTypesWithCache, setAccessDeniedItemId, clearAccessDeniedItemId } from '../../features/resources/resourcesSlice';
 import { getAspectDetail } from '../../features/aspectDetail/aspectDetailSlice';
+import { normalizeEnumValues } from '../../utils/aspectValueUtils';
 import { fetchEntry } from '../../features/entry/entrySlice';
 import type { AppDispatch, RootState } from '../../app/store';
 import type { ActiveFilter } from '../Common/FilterBar';
@@ -324,7 +325,7 @@ const BrowseByAnnotation = () => {
 
         // Create initial subItems with loading state for counts
         // Check cache to avoid showing loader for already-fetched data
-        const initialSubItems = filteredRecordFields.map((field: { name: string; annotations?: { displayName?: string; description?: string; stringType?: string }; type?: string }) => {
+        const initialSubItems = filteredRecordFields.map((field: { name: string; annotations?: { displayName?: string; description?: string; stringType?: string }; type?: string; enumValues?: unknown }) => {
           const cacheKey = generateCacheKey(item.title, field.name);
           const cachedData = aspectBrowseCache[cacheKey];
           const hasCachedData = !!cachedData;
@@ -342,6 +343,10 @@ const BrowseByAnnotation = () => {
             description: field.annotations?.description || '',
             type: field.type || 'string',
             stringType: field.annotations?.stringType || '',
+            // Only meaningful when type === 'enum' - the field's fixed set of
+            // allowed values, used by AspectLinkedAssets to render the
+            // "Aspect Value" filter as a category picker instead of free text.
+            enumValues: normalizeEnumValues(field.enumValues),
             isCountLoading: !hasCachedData, // Only show loading if not cached
             hasCachedData: hasCachedData,
           };

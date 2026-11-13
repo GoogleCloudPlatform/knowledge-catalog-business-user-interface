@@ -170,6 +170,11 @@ interface ResourceViewerProps {
   isDataProduct?: boolean;
   hideViewToggle?: boolean;
   isGlossary?: boolean;
+
+  // Browse by Annotations' Linked Assets "Aspect Value" column — undefined
+  // everywhere else (Search, Data Products), so their table output is
+  // unaffected. Forwarded as-is to SearchTableView (table view mode only).
+  aspectValueColumn?: { label: string; valuesByEntry: Record<string, unknown> };
 }
 
 const ResourceViewer: React.FC<ResourceViewerProps> = ({
@@ -208,7 +213,8 @@ const ResourceViewer: React.FC<ResourceViewerProps> = ({
   id_token,
   isDataProduct = false,
   hideViewToggle = false,
-  isGlossary = false
+  isGlossary = false,
+  aspectValueColumn,
 }) => {
   // Navigation and auth hooks
   const navigate = useNavigate();
@@ -738,6 +744,7 @@ const ResourceViewer: React.FC<ResourceViewerProps> = ({
                     onNavigateToTab={handleNavigateToTab}
                     id_token={id_token}
                     onRequestAccess={FEATURE_FLAGS.enableRequestAccess ? handleRequestAccessFromCard : undefined}
+                    aspectValueColumn={aspectValueColumn}
                   />
                 </Box>
               );
@@ -753,6 +760,7 @@ const ResourceViewer: React.FC<ResourceViewerProps> = ({
                 previewOpen={!!previewData}
                 selectedEntryName={previewData?.name || null}
                 isDataProduct={isDataProduct}
+                aspectValueColumn={aspectValueColumn}
               />
             </div>
           )

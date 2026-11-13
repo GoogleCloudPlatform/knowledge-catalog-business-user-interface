@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Set working directory
 WORKDIR /app/frontend
@@ -19,7 +19,7 @@ RUN VITE_API_URL=__VITE_API_URL__ \
 # EXPOSE 80
 
 # ---------- 2. Build backend and copy frontend build ----------
-FROM node:20-alpine AS backend
+FROM node:24-alpine AS backend
 
 WORKDIR /app
 

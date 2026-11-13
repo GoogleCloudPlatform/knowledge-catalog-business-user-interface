@@ -12,7 +12,19 @@ vi.mock('./routes/Routing', () => ({
   default: () => <div data-testid="routing">Routing Component</div>,
 }));
 
+// The redeploy watcher renders nothing and needs NotificationProvider; it is
+// covered by src/hooks/useAppVersionCheck.test.ts.
+const { mockWatcher } = vi.hoisted(() => ({ mockWatcher: vi.fn(() => null) }));
+vi.mock('./hooks/useAppVersionCheck', () => ({ AppVersionWatcher: mockWatcher }));
+
 describe('App', () => {
+  it('mounts the redeploy watcher', async () => {
+    const { render } = await import('@testing-library/react');
+    const { default: AppComponent } = await import('./App');
+    render(<AppComponent />);
+    expect(mockWatcher).toHaveBeenCalled();
+  });
+
   describe('rendering', () => {
     it('should render CssBaseline component', () => {
       render(<App />);

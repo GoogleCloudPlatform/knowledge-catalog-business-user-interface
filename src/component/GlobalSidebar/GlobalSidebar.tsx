@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import SidebarMenuItem from './SidebarMenuItem';
 import { useAccessRequest } from '../../contexts/AccessRequestContext';
 import './GlobalSidebar.css';
-import { fetchDataProductsList, resetDataProductsUIState } from '../../features/dataProducts/dataProductsSlice';
+import { ensureDataProductsLoaded, resetDataProductsUIState } from '../../features/dataProducts/dataProductsSlice';
 import { fetchGlossaries, resetGlossaryUIState } from '../../features/glossaries/glossariesSlice';
 import { resetBrowseUIState } from '../../features/resources/resourcesSlice';
 import { useDispatch } from 'react-redux';
@@ -22,7 +22,7 @@ const GlobalSidebar: React.FC = () => {
   // These eager refresh-on-navigate fetches read appConfig (project scoping) at
   // dispatch time. During the bootstrap they'd run unscoped, so skip them and
   // let the destination page's own gated mount effect do the fetch instead.
-  const { isAppConfigReady, isProjectMappingReady } = useAppBootstrapStatus();
+  const { isAppConfigReady } = useAppBootstrapStatus();
 
   const isSearchActive = location.pathname === '/home'
                       || location.pathname === '/search'
@@ -50,12 +50,11 @@ const GlobalSidebar: React.FC = () => {
 
   const handleDataProducts = () => {
     dispatch(resetDataProductsUIState());
-    // Also waits on /get-projects: fetchDataProductsList needs that list to tell
-    // whether a product found by the org-wide search is the same one the API
-    // already returned (the two spell the project segment differently). Firing on
-    // isAppConfigReady alone let this run first and list the product twice.
-    if (isAppConfigReady && isProjectMappingReady) {
-      dispatch(fetchDataProductsList({ id_token: user?.token }));
+    // No bootstrap gate: the list no longer depends on appConfig or the
+    // /get-projects mapping. Revisits render instantly from memory/cache and
+    // only revalidate (in the background) when the data is stale.
+    if (user?.token) {
+      dispatch(ensureDataProductsLoaded({ id_token: user.token, email: user.email }));
     }
     navigate('/data-products');
   };

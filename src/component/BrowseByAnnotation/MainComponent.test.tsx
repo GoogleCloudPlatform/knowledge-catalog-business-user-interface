@@ -47,6 +47,13 @@ vi.mock('../../features/resources/resourcesSlice', () => ({
     type: 'resources/browseResourcesByAspects',
     payload: params,
   })),
+  fetchEntryAspects: vi.fn((params) => ({
+    type: 'resources/fetchEntryAspects',
+    payload: params,
+  })),
+  setItems: vi.fn((payload) => ({ type: 'resources/setItems', payload })),
+  setItemsStatus: vi.fn((payload) => ({ type: 'resources/setItemsStatus', payload })),
+  getAspectName: vi.fn(() => 'test-project.global.sensitivity'),
 }));
 
 // Mock ResourceViewer component
@@ -305,6 +312,7 @@ const createMockSelectorState = (overrides = {}) => ({
     itemsRequestData: null,
     itemsStore: [],
     aspectBrowseCache: {},
+    entryAspectsByName: {},
     ...overrides,
   },
   search: {
@@ -345,6 +353,25 @@ describe('MainComponent', () => {
     mockOnItemClick = vi.fn();
     mockOnSubItemClick = vi.fn();
     mockOnTabChange = vi.fn();
+
+    // browseResourcesByAspects/fetchEntryAspects are real createAsyncThunk
+    // actions in production, so dispatching them returns a promise with
+    // unwrap()/abort() AND a plain .then() - mirror that shape here so
+    // component code that chains off dispatch(...) (ensureEntryAspectsFetched's
+    // .then(...), the .unwrap().then(...) after browseResourcesByAspects)
+    // doesn't throw. Every other action just passes through, matching real dispatch.
+    mockDispatch.mockImplementation((action: any) => {
+      if (
+        action?.type === 'resources/browseResourcesByAspects' ||
+        action?.type === 'resources/fetchEntryAspects'
+      ) {
+        const promise: any = Promise.resolve({ data: [] });
+        promise.unwrap = () => Promise.resolve({ data: [] });
+        promise.abort = vi.fn();
+        return promise;
+      }
+      return action;
+    });
 
     // Setup default useAuth mock
     mockUseAuth.mockReturnValue({
