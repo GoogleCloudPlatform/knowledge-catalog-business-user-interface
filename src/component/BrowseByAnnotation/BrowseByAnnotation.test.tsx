@@ -1451,6 +1451,106 @@ describe('BrowseByAnnotation', () => {
       });
     });
 
+    it('captures a field\'s enumValues (normalized) alongside its type, for AspectLinkedAssets\' value filter', async () => {
+      // Uses "Aspect Two" (aspect2), not the auto-selected-on-mount aspect1:
+      // aspect1 is already fetched (consuming the beforeEach-queued mock
+      // values) before this test's own click, and its button payload also
+      // dispatches a title-only subItems placeholder ahead of the real fetch
+      // - both make it ambiguous which dispatch is "the real one". aspect2
+      // is untouched until explicitly clicked here.
+      //
+      // Field names must match aspect2's browseByAspectTypes whitelist
+      // (mockBrowseByAspectTypes: ['FieldA', 'FieldB', 'FieldC']) - anything
+      // else gets filtered out before initialSubItems is ever built.
+      const aspectDetailWithEnumField = {
+        metadataTemplate: {
+          recordFields: [
+            {
+              name: 'FieldA',
+              type: 'enum',
+              annotations: { displayName: 'Sensitivity Level' },
+              // Dataplex's real shape: enum values as {name, index, deprecated}
+              // objects, not bare strings - see normalizeEnumValues.
+              enumValues: [
+                { name: 'HIGH', index: 0, deprecated: false },
+                { name: 'LOW', index: 1, deprecated: false },
+              ],
+            },
+            {
+              name: 'FieldB',
+              type: 'string',
+              annotations: { displayName: 'Owner' },
+              // No enumValues on a plain string field.
+            },
+          ],
+        },
+        createTime: '2023-01-01T00:00:00Z',
+        updateTime: '2023-01-02T00:00:00Z',
+      };
+
+      // Let the initial auto-select (aspect1, 2 fields) run to completion
+      // first with its own simple queue, then reset and requeue for this
+      // test's aspect2 click - interleaving aspect1's 2-field Phase 2 counts
+      // with aspect2's responses in one shared queue is exactly the kind of
+      // off-by-one that broke the earlier (Field1/Field2-on-aspect1) version
+      // of this test; resetting avoids it entirely.
+      mockUnwrap
+        .mockResolvedValueOnce(mockAspectDetailResponse) // Initial auto-select (aspect1) getAspectDetail
+        .mockResolvedValueOnce(mockEntryResponse) // Initial auto-select fetchEntry
+        .mockResolvedValue({ results: { totalSize: 10 } }); // Initial auto-select's per-field counts (aspect1 has 2 fields)
+
+      mockUseAuth.mockReturnValue({ user: mockUserWithConfig });
+      const user = userEvent.setup();
+
+      render(<BrowseByAnnotation />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('side-nav')).toBeInTheDocument();
+      });
+
+      // Wait for the auto-select fetch for aspect1 to complete before moving on.
+      await waitFor(() => {
+        expect(mockDispatch).toHaveBeenCalled();
+      });
+
+      mockUnwrap.mockReset();
+      mockUnwrap
+        .mockResolvedValueOnce(aspectDetailWithEnumField) // aspect2 getAspectDetail (this test's click)
+        .mockResolvedValueOnce(mockEntryResponse) // aspect2 fetchEntry
+        .mockResolvedValue({ results: { totalSize: 5 } }); // aspect2 per-field counts
+
+      await user.click(screen.getByTestId('item-click-btn'));
+
+      // Multiple setBrowseDynamicAnnotationsData dispatches happen overall
+      // (auto-select's aspect1 fetch, then this click's aspect2 fetch) -
+      // search all of them for the one carrying aspect2's real fetched
+      // fields (identified by the enum field actually having a `type`).
+      let subItems: any[] = [];
+      await waitFor(() => {
+        const setAnnotationsCalls = mockDispatch.mock.calls.filter(
+          (call: any) => call[0]?.type === 'resources/setBrowseDynamicAnnotationsData'
+        );
+        expect(setAnnotationsCalls.length).toBeGreaterThan(0);
+
+        const match = setAnnotationsCalls
+          .map((call: any) => call[0].payload.find(
+            (a: any) => a.name === 'projects/test/locations/us/aspectTypes/aspect2'
+          ))
+          .find((annotation: any) => annotation?.subItems?.some((s: any) => s.title === 'FieldA' && s.type === 'enum'));
+
+        expect(match).toBeDefined();
+        subItems = match.subItems;
+      });
+
+      const enumField = subItems.find((s) => s.title === 'FieldA');
+      expect(enumField?.type).toBe('enum');
+      expect(enumField?.enumValues).toEqual(['HIGH', 'LOW']);
+
+      const stringField = subItems.find((s) => s.title === 'FieldB');
+      expect(stringField?.type).toBe('string');
+      expect(stringField?.enumValues).toBeUndefined();
+    });
+
     it('should handle missing entrySource fields gracefully', async () => {
       const entryWithoutFields = {
         entrySource: {},

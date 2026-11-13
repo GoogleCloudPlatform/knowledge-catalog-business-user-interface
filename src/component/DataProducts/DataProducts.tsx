@@ -3,7 +3,7 @@ import useDebounce from '../../hooks/useDebounce';
 import {
   Box, Typography, Paper, Grid,
   Tooltip, Menu, MenuItem,
-  TextField, Skeleton,
+  TextField, Skeleton, CircularProgress,
   ToggleButton,
   ToggleButtonGroup
 } from '@mui/material';
@@ -17,8 +17,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { type AppDispatch } from '../../app/store';
 import { useAuth } from '../../auth/AuthProvider';
-import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
-import { fetchDataProductsList, getDataProductDetails, setDataProductsViewMode, setDataProductsDetailTabValue } from '../../features/dataProducts/dataProductsSlice';
+import { ensureDataProductsLoaded, getDataProductDetails, setDataProductsViewMode, setDataProductsDetailTabValue } from '../../features/dataProducts/dataProductsSlice';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { getMimeType, toJsDate } from '../../utils/resourceUtils';
@@ -308,9 +307,7 @@ const DataProducts = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isBootstrapping, areProjectsReady, isProjectMappingReady, isAppConfigReady } = useAppBootstrapStatus();
-
-  const { dataProductsItems, status, error } = useSelector((state: any) => state.dataProducts);
+  const { dataProductsItems, status, error, searchStatus, isRefreshing } = useSelector((state: any) => state.dataProducts);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
@@ -330,27 +327,39 @@ const DataProducts = () => {
 
 
 
+  // Load without waiting for the app bootstrap: the list no longer needs the
+  // org-wide /get-projects mapping (the backend tags every product with its
+  // project id and number). ensureDataProductsLoaded renders from memory or the
+  // persisted cache first, and only fetches when there is nothing to show or
+  // what is shown is stale (in which case it revalidates in the background).
   useEffect(() => {
-    // Two independent bootstrap gates, both required:
-    //  - isProjectMappingReady: the project list actually loaded (not merely that
-    //    bootstrapping is over). fetchDataProductsList merges the data-products
-    //    API with the org-wide search and needs the project id <-> number mapping
-    //    to tell when both describe the same product; a *failed* /get-projects
-    //    would hand the merge an empty mapping and list the shared product twice.
-    //  - isAppConfigReady: fetchDataProductsList reads appConfig
-    //    (projectsRestricted / configuredProjectIds) to scope the request. Gating
-    //    on project mapping alone would let it run the moment /get-projects
-    //    resolves — even if /app-configs hasn't yet — firing an UNSCOPED fetch
-    //    across every project instead of the configured subset.
-    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && isProjectMappingReady && isAppConfigReady) {
-       dispatch(fetchDataProductsList({ id_token: user?.token }));
+    // No bootstrap gates are needed here any more:
+    //  - Project mapping: the backend tags every product with its project id and
+    //    number, so the merge no longer needs the /get-projects list.
+    //  - appConfig scoping (main #538 gated on isAppConfigReady because the old
+    //    thunk built the search scope from appConfig.configuredProjectIds): both
+    //    /data-products and /data-products/search now read the configured
+    //    projects from configData.json on the server, so there is no unscoped
+    //    window before /app-configs resolves.
+    if (user?.token) {
+      dispatch(ensureDataProductsLoaded({ id_token: user.token, email: user.email }));
     }
+  }, [dispatch, user?.token, user?.email]);
+
+  useEffect(() => {
     if(status=== 'succeeded'){
         localStorage.removeItem('selectedDataProduct');
         const sortedData = sortDataProducts(dataProductsItems, 'lastModified', 'desc');
         setDataProductsList(sortedData);
     }
-  }, [dispatch, dataProductsItems, status, user?.token, isProjectMappingReady, isAppConfigReady]);
+  }, [dataProductsItems, status]);
+
+  // Dev-only timing marks for measuring the route (see performance.getEntriesByType('mark')).
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof performance === 'undefined' || !performance.mark) return;
+    if (status === 'succeeded' && dataProductsItems.length > 0) performance.mark('dp:first-paint');
+    if (status === 'succeeded' && searchStatus === 'succeeded') performance.mark('dp:merged');
+  }, [status, searchStatus, dataProductsItems.length]);
 
   //sorting handlers
   const handleSortMenuClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
@@ -387,7 +396,13 @@ const DataProducts = () => {
 
   // Memoize the display state for better performance
   const showNoAccess = useMemo(() => status === 'failed' && error?.type === 'PERMISSION_DENIED', [status, error]);
-  const showLoading = useMemo(() => status === 'loading' || searchLoader || isBootstrapping, [status, searchLoader, isBootstrapping]);
+  // Skeleton only when there is nothing to show yet; a background refresh or
+  // the catalog-search half of the list never hides cards already on screen.
+  const showLoading = useMemo(
+    () => ((status === 'loading' || status === 'idle') && dataProductsItems.length === 0) || searchLoader,
+    [status, dataProductsItems.length, searchLoader]
+  );
+  const showBackgroundProgress = status === 'succeeded' && (searchStatus === 'loading' || isRefreshing);
   const showEmptyState = useMemo(() =>
     status === 'succeeded' &&
     !searchLoader &&
@@ -400,16 +415,6 @@ const DataProducts = () => {
       ? 'No data products available'
       : 'No data products found matching your search',
     [dataProductsItems.length]
-  );
-  // /get-projects has finished but produced no usable list. The data products
-  // fetch is deliberately not dispatched in that state - the merge needs the
-  // project id <-> number mapping to recognise a product returned by both the
-  // API and the catalog search, and without it the shared product is listed
-  // twice. Say so, rather than leaving an empty grid with no explanation:
-  // status stays 'idle', so neither the loading nor the empty state applies.
-  const showProjectsUnavailable = useMemo(
-    () => status === 'idle' && areProjectsReady && !isProjectMappingReady,
-    [status, areProjectsReady, isProjectMappingReady]
   );
 
 
@@ -709,6 +714,17 @@ const DataProducts = () => {
                         </Typography>
                     </Box>
                 )}
+                {!showNoAccess && showBackgroundProgress && (
+                    <Box
+                        data-testid="data-products-background-progress"
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, color: '#575757' }}
+                    >
+                        <CircularProgress size={14} thickness={5} />
+                        <Typography sx={{ fontSize: '12px', fontFamily: '"Google Sans", sans-serif' }}>
+                            {searchStatus === 'loading' ? 'Searching other projects…' : 'Refreshing…'}
+                        </Typography>
+                    </Box>
+                )}
                 {!showNoAccess && <Grid container spacing={{ xs: 1.5, sm: 2, md: 2.5 }}>
                     {
                         showLoading && viewMode === 'list' &&
@@ -755,7 +771,7 @@ const DataProducts = () => {
                         showLoading && viewMode === 'table' &&
                             <DataProductsTableViewSkeleton />
                     }
-                    { !showLoading && !showEmptyState && !showProjectsUnavailable &&
+                    { !showLoading && !showEmptyState &&
                         ( viewMode === 'list' ?
                         (dataProductsList.map((dataProducts: DataProduct) => (
                             <Grid
@@ -788,22 +804,6 @@ const DataProducts = () => {
                         }}>
                             <Typography variant="body1" color="text.secondary">
                                 {emptyStateMessage}
-                            </Typography>
-                        </Box>
-                    )}
-                    { showProjectsUnavailable && (
-                        <Box sx={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '100%',
-                            minHeight: { xs: 'calc(100vh - 250px)', sm: 'calc(100vh - 300px)' },
-                            opacity: 1,
-                            gap: 2
-                        }}>
-                            <Typography variant="body1" color="text.secondary">
-                                Could not load your project list, so Data Products cannot be shown.
                             </Typography>
                         </Box>
                     )}

@@ -6,6 +6,7 @@ import resourcesReducer, {
   searchResourcesByTerm,
   browseResourcesByAspects,
   fetchEntriesByParent,
+  fetchEntryAspects,
   setItems,
   setItemsStatus,
   setItemsNextPageSize,
@@ -40,6 +41,8 @@ type ResourcesState = {
   browseDynamicAnnotationsData: any[];
   browseSubTypesWithCache: Record<string, boolean>;
   accessDeniedItemId: string | null;
+  entryAspectsByName: Record<string, unknown>;
+  entryAspectsStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
 };
 
 // Define store type
@@ -256,6 +259,8 @@ describe('resourcesSlice', () => {
           browseDynamicAnnotationsData: [],
           browseSubTypesWithCache: {},
           accessDeniedItemId: null,
+          entryAspectsByName: {},
+          entryAspectsStatus: 'idle',
         };
 
         const newItems = [{ new: 'data' }];
@@ -998,6 +1003,89 @@ describe('resourcesSlice', () => {
         const state = store.getState().resources;
         expect(state.status).toBe('failed');
         expect(state.error).toBe('An unknown error occurred');
+      });
+    });
+  });
+
+  describe('fetchEntryAspects Thunk', () => {
+    describe('Pending State', () => {
+      it('sets status to loading', () => {
+        const action = { type: fetchEntryAspects.pending.type };
+        const state = resourcesReducer(undefined, action);
+
+        expect(state.entryAspectsStatus).toBe('loading');
+      });
+    });
+
+    describe('Fulfilled State', () => {
+      it('merges the resolved raw aspects into the cache and sets status to succeeded', () => {
+        const action = {
+          type: fetchEntryAspects.fulfilled.type,
+          payload: { entryAspectsByName: { 'entries/a': { 'p.l.sensitivity': {} } } },
+        };
+        const state = resourcesReducer(undefined, action);
+
+        expect(state.entryAspectsStatus).toBe('succeeded');
+        expect(state.entryAspectsByName).toEqual({ 'entries/a': { 'p.l.sensitivity': {} } });
+      });
+
+      it('merges into the existing cache rather than replacing it', () => {
+        const first = resourcesReducer(undefined, {
+          type: fetchEntryAspects.fulfilled.type,
+          payload: { entryAspectsByName: { 'entries/a': { foo: 1 } } },
+        });
+        const second = resourcesReducer(first, {
+          type: fetchEntryAspects.fulfilled.type,
+          payload: { entryAspectsByName: { 'entries/b': { bar: 2 } } },
+        });
+
+        expect(second.entryAspectsByName).toEqual({
+          'entries/a': { foo: 1 },
+          'entries/b': { bar: 2 },
+        });
+      });
+
+      it('does not crash when the incoming state is missing entryAspectsByName (stale persisted state)', () => {
+        // Redux state for this slice is rehydrated from localStorage
+        // (app/store.ts) - a browser with state persisted before this field
+        // existed would pass a state object lacking it entirely.
+        const staleState = { ...resourcesReducer(undefined, { type: 'unknown' }) } as any;
+        delete staleState.entryAspectsByName;
+
+        const action = {
+          type: fetchEntryAspects.fulfilled.type,
+          payload: { entryAspectsByName: { 'entries/a': { foo: 1 } } },
+        };
+
+        expect(() => resourcesReducer(staleState, action)).not.toThrow();
+        expect(resourcesReducer(staleState, action).entryAspectsByName).toEqual({ 'entries/a': { foo: 1 } });
+      });
+
+      it('is not reset when browseResourcesByAspects starts a new search', () => {
+        const populated = resourcesReducer(undefined, {
+          type: fetchEntryAspects.fulfilled.type,
+          payload: { entryAspectsByName: { 'entries/a': { foo: 1 } } },
+        });
+        const state = resourcesReducer(populated, { type: browseResourcesByAspects.pending.type });
+
+        expect(state.entryAspectsByName).toEqual({ 'entries/a': { foo: 1 } });
+      });
+    });
+
+    describe('Rejected State', () => {
+      it('sets status to failed on a real failure', () => {
+        const action = { type: fetchEntryAspects.rejected.type, payload: { message: 'boom' } };
+        const state = resourcesReducer(undefined, action);
+
+        expect(state.entryAspectsStatus).toBe('failed');
+      });
+
+      it('leaves state untouched when the request was aborted', () => {
+        const pending = resourcesReducer(undefined, { type: fetchEntryAspects.pending.type });
+        const action = { type: fetchEntryAspects.rejected.type, payload: { aborted: true } };
+        const state = resourcesReducer(pending, action);
+
+        expect(state.entryAspectsStatus).toBe('loading');
       });
     });
   });

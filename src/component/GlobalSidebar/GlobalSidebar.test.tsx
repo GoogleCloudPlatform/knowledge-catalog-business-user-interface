@@ -51,13 +51,17 @@ vi.mock('../../auth/AuthProvider', () => ({
 // The sidebar's eager refresh-on-navigate fetches are gated on the bootstrap
 // (they read appConfig for project scoping at dispatch time). These tests cover
 // the normal, already-bootstrapped case.
-vi.mock('../../hooks/useAppBootstrap', () => ({
-  useAppBootstrapStatus: () => ({
+const { mockBootstrapStatus, BOOTSTRAPPED } = vi.hoisted(() => {
+  const BOOTSTRAPPED = {
     isAppConfigReady: true,
     areProjectsReady: true,
     isProjectMappingReady: true,
     isBootstrapping: false,
-  }),
+  };
+  return { mockBootstrapStatus: { ...BOOTSTRAPPED }, BOOTSTRAPPED };
+});
+vi.mock('../../hooks/useAppBootstrap', () => ({
+  useAppBootstrapStatus: () => mockBootstrapStatus,
 }));
 
 vi.mock('../../features/dataProducts/dataProductsSlice', async (importOriginal) => {
@@ -65,6 +69,7 @@ vi.mock('../../features/dataProducts/dataProductsSlice', async (importOriginal) 
   return {
     ...actual,
     fetchDataProductsList: vi.fn((params) => ({ type: 'dataProducts/fetchDataProductsList', payload: params })),
+    ensureDataProductsLoaded: vi.fn((params) => ({ type: 'dataProducts/ensureDataProductsLoaded', payload: params })),
   };
 });
 
@@ -104,6 +109,7 @@ vi.mock('./SidebarMenuItem', () => ({
 
 describe('GlobalSidebar', () => {
   beforeEach(() => {
+    Object.assign(mockBootstrapStatus, BOOTSTRAPPED);
     vi.clearAllMocks();
     mockLocation = { pathname: '/home' };
     mockIsAccessPanelOpen = false;
@@ -260,8 +266,8 @@ describe('GlobalSidebar', () => {
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'dataProducts/fetchDataProductsList',
-          payload: { id_token: 'my-special-token' },
+          type: 'dataProducts/ensureDataProductsLoaded',
+          payload: { id_token: 'my-special-token', email: 'test@test.com' },
         })
       );
     });
@@ -271,10 +277,9 @@ describe('GlobalSidebar', () => {
       mockUser = null;
       render(<GlobalSidebar />);
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          payload: { id_token: undefined },
-        })
+      // No token -> nothing to load; the UI state is still reset and we navigate.
+      expect(mockDispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'dataProducts/ensureDataProductsLoaded' })
       );
       expect(mockNavigate).toHaveBeenCalledWith('/data-products');
     });
@@ -437,7 +442,8 @@ describe('GlobalSidebar', () => {
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
       expect(mockDispatch).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: { id_token: 'abc123' },
+          type: 'dataProducts/ensureDataProductsLoaded',
+          payload: { id_token: 'abc123', email: 'test@test.com' },
         })
       );
     });
@@ -447,10 +453,20 @@ describe('GlobalSidebar', () => {
       mockUser = null;
       render(<GlobalSidebar />);
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
+      expect(mockDispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'dataProducts/ensureDataProductsLoaded' })
+      );
+    });
+
+    it('loads data products even before the project list is ready', async () => {
+      const user = userEvent.setup();
+      mockUser = { token: 'abc123', name: 'Test', email: 'test@test.com', picture: '' };
+      mockBootstrapStatus.isProjectMappingReady = false;
+      mockBootstrapStatus.isAppConfigReady = false;
+      render(<GlobalSidebar />);
+      await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
       expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          payload: { id_token: undefined },
-        })
+        expect.objectContaining({ type: 'dataProducts/ensureDataProductsLoaded' })
       );
     });
 
@@ -459,10 +475,8 @@ describe('GlobalSidebar', () => {
       mockUser = { token: '', name: 'Test', email: 'test@test.com', picture: '' };
       render(<GlobalSidebar />);
       await user.click(screen.getByTestId('sidebar-menu-item-data-products'));
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          payload: { id_token: '' },
-        })
+      expect(mockDispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'dataProducts/ensureDataProductsLoaded' })
       );
     });
   });
