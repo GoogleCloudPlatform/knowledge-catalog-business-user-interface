@@ -3,10 +3,15 @@ import { configureStore } from "@reduxjs/toolkit";
 import axios, { AxiosError } from "axios";
 import dataProductsReducer, {
   fetchDataProductsList,
+  ensureDataProductsLoaded,
   getDataProductDetails,
   fetchDataProductsAssetsList,
   dataproductsSlice,
+  mergeDataProducts,
+  hydrateDataProducts,
+  clearDataProducts,
 } from "./dataProductsSlice";
+import * as dpCache from "../../utils/dataProductsCache";
 import userReducer from "../user/userSlice";
 import projectsReducer from "../projects/projectsSlice";
 
@@ -37,6 +42,16 @@ vi.mock("axios", () => ({
     }
   },
 }));
+
+vi.mock("../../utils/dataProductsCache", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    loadDataProductsCache: vi.fn().mockResolvedValue(null),
+    saveDataProductsCache: vi.fn().mockResolvedValue(undefined),
+    clearDataProductsCache: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 // ==========================================================================
 // Mock Data
@@ -97,7 +112,7 @@ const mockSessionData = {
 const createTestStore = (userData: any = null, projectsItems: any[] = mockProjectsList) => {
   return configureStore({
     reducer: {
-      dataproducts: dataProductsReducer,
+      dataProducts: dataProductsReducer,
       user: userReducer,
       projects: projectsReducer,
     },
@@ -125,6 +140,9 @@ describe("dataProductsSlice", () => {
     // no "original" to restore to for a plain mock), so re-establish the
     // default "no search results" stub for every test.
     vi.mocked(axios.post).mockResolvedValue({ status: 200, data: { results: [] } });
+    vi.mocked(axios.get).mockReset();
+    vi.mocked(dpCache.loadDataProductsCache).mockReset().mockResolvedValue(null);
+    vi.mocked(dpCache.saveDataProductsCache).mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -134,7 +152,7 @@ describe("dataProductsSlice", () => {
   describe("Initial State", () => {
     it("returns the initial state", () => {
       const store = createTestStore();
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
 
       expect(state.dataProductsItems).toEqual([]);
       expect(state.status).toBe("idle");
@@ -162,398 +180,336 @@ describe("dataProductsSlice", () => {
   // ==========================================================================
 
   describe("fetchDataProductsList", () => {
-    describe("Pending State", () => {
-      it("sets status to loading when pending", () => {
-        const store = createTestStore();
-        store.dispatch({ type: fetchDataProductsList.pending.type });
+    const DP_URL = "/data-products";
+    const SEARCH_URL = "/data-products/search";
 
-        const state = store.getState().dataproducts;
+    // Route axios.get by URL: the list and the catalog search are separate calls.
+    const mockGets = (api: any, search: any = { status: 200, data: { items: [] } }) => {
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        if (url.endsWith(SEARCH_URL)) {
+          return search instanceof Error ? Promise.reject(search) : Promise.resolve(search);
+        }
+        if (url.endsWith(DP_URL)) {
+          return api instanceof Error ? Promise.reject(api) : Promise.resolve(api);
+        }
+        return Promise.reject(new Error(`unexpected url ${url}`));
+      });
+    };
+
+    describe("Pending State", () => {
+      it("sets status to loading when pending (foreground)", () => {
+        const store = createTestStore();
+        store.dispatch({ type: fetchDataProductsList.pending.type, meta: { arg: {} } });
+        const state = store.getState().dataProducts;
         expect(state.status).toBe("loading");
+        expect(state.searchStatus).toBe("loading");
+      });
+
+      it("keeps status and sets isRefreshing for background revalidation", () => {
+        const store = createTestStore();
+        store.dispatch(hydrateDataProducts({ items: mockDataProductsList, fetchedAt: 1 }));
+        store.dispatch({ type: fetchDataProductsList.pending.type, meta: { arg: { background: true } } });
+        const state = store.getState().dataProducts;
+        expect(state.status).toBe("succeeded");
+        expect(state.isRefreshing).toBe(true);
+        expect(state.dataProductsItems).toEqual(mockDataProductsList);
       });
     });
 
     describe("Fulfilled State", () => {
-      it("sets status to succeeded and populates data on fulfilled", async () => {
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: mockDataProductsList },
+      it("fetches the list and the catalog search in parallel", async () => {
+        let resolveApi: (v: any) => void = () => {};
+        vi.mocked(axios.get).mockImplementation((url: string) => {
+          if (url.endsWith(SEARCH_URL)) return Promise.resolve({ status: 200, data: { items: [] } });
+          return new Promise((r) => { resolveApi = r; });
         });
-
         const store = createTestStore();
-        await store.dispatch(
-          fetchDataProductsList({ id_token: "test-token" }) as any
-        );
+        const p = store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        // Both requests were issued before the list resolved.
+        expect(vi.mocked(axios.get).mock.calls.map((c) => c[0])).toEqual([
+          expect.stringContaining(DP_URL),
+          expect.stringContaining(SEARCH_URL),
+        ]);
+        resolveApi({ status: 200, data: { dataProducts: mockDataProductsList } });
+        await p;
+        expect(store.getState().dataProducts.status).toBe("succeeded");
+      });
 
-        const state = store.getState().dataproducts;
-        expect(state.status).toBe("succeeded");
-        expect(state.dataProductsItems).toEqual(mockDataProductsList);
+      it("renders the API list before the catalog search resolves", async () => {
+        let resolveSearch: (v: any) => void = () => {};
+        vi.mocked(axios.get).mockImplementation((url: string) => {
+          if (url.endsWith(SEARCH_URL)) return new Promise((r) => { resolveSearch = r; });
+          return Promise.resolve({ status: 200, data: { dataProducts: mockDataProductsList, projects: [] } });
+        });
+        const store = createTestStore();
+        const p = store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        await vi.waitFor(() => expect(store.getState().dataProducts.status).toBe("succeeded"));
+        expect(store.getState().dataProducts.dataProductsItems).toEqual(mockDataProductsList);
+        expect(store.getState().dataProducts.searchStatus).toBe("loading");
+        resolveSearch({ status: 200, data: { items: [] } });
+        await p;
+        expect(store.getState().dataProducts.searchStatus).toBe("succeeded");
+        expect(store.getState().dataProducts.fetchedAt).toEqual(expect.any(Number));
       });
 
       it("sets Authorization header when id_token is provided", async () => {
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: mockDataProductsList },
-        });
-
+        mockGets({ status: 200, data: { dataProducts: mockDataProductsList } });
         const store = createTestStore();
-        await store.dispatch(
-          fetchDataProductsList({ id_token: "test-token" }) as any
-        );
-
-        expect(axios.defaults.headers.common["Authorization"]).toBe(
-          "Bearer test-token"
-        );
+        await store.dispatch(fetchDataProductsList({ id_token: "test-token" }) as any);
+        expect(axios.defaults.headers.common["Authorization"]).toBe("Bearer test-token");
       });
 
       it("sets empty Authorization header when id_token is not provided", async () => {
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: mockDataProductsList },
-        });
-
+        mockGets({ status: 200, data: { dataProducts: mockDataProductsList } });
         const store = createTestStore();
         await store.dispatch(fetchDataProductsList({}) as any);
-
         expect(axios.defaults.headers.common["Authorization"]).toBe("");
       });
 
-      it("returns empty array when requestData is falsy", async () => {
+      it("keeps the API list when the catalog search fails", async () => {
+        mockGets({ status: 200, data: { dataProducts: mockDataProductsList } }, new Error("search down"));
         const store = createTestStore();
-        const result = await store.dispatch(
-          fetchDataProductsList(null) as any
-        );
-
-        expect(result.payload).toEqual([]);
-        const state = store.getState().dataproducts;
-        expect(state.dataProductsItems).toEqual([]);
-      });
-
-      it("returns empty array when requestData is undefined", async () => {
-        const store = createTestStore();
-        const result = await store.dispatch(
-          fetchDataProductsList(undefined) as any
-        );
-
-        expect(result.payload).toEqual([]);
-      });
-
-      it("handles response with status 200", async () => {
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: mockDataProductsList },
-        });
-
-        const store = createTestStore();
-        await store.dispatch(
-          fetchDataProductsList({ id_token: "token" }) as any
-        );
-
-        const state = store.getState().dataproducts;
+        await store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        const state = store.getState().dataProducts;
         expect(state.status).toBe("succeeded");
+        expect(state.searchStatus).toBe("failed");
         expect(state.dataProductsItems).toEqual(mockDataProductsList);
+      });
+
+      it("persists the merged list for the user", async () => {
+        mockGets(
+          { status: 200, data: { dataProducts: mockDataProductsList, projects: [{ projectId: "test-project", projectNumber: "123456789" }] } },
+        );
+        const store = createTestStore();
+        await store.dispatch(fetchDataProductsList({ id_token: "t", email: "a@b.com" }) as any);
+        expect(dpCache.saveDataProductsCache).toHaveBeenCalledWith("a@b.com", expect.objectContaining({
+          items: mockDataProductsList,
+          projectIdentity: expect.objectContaining({ "test-project": expect.anything(), "123456789": expect.anything() }),
+          fetchedAt: expect.any(Number),
+        }));
       });
 
       it("handles fulfilled with empty payload by setting empty array", () => {
         const store = createTestStore();
-        store.dispatch({
-          type: fetchDataProductsList.fulfilled.type,
-          payload: null,
-        });
+        store.dispatch({ type: fetchDataProductsList.fulfilled.type, payload: null });
+        expect(store.getState().dataProducts.dataProductsItems).toEqual([]);
+      });
 
-        const state = store.getState().dataproducts;
-        expect(state.dataProductsItems).toEqual([]);
+      it("does not start a second fetch while one is in flight", async () => {
+        let resolveApi: (v: any) => void = () => {};
+        vi.mocked(axios.get).mockImplementation((url: string) => {
+          if (url.endsWith(SEARCH_URL)) return Promise.resolve({ status: 200, data: { items: [] } });
+          return new Promise((r) => { resolveApi = r; });
+        });
+        const store = createTestStore();
+        const p1 = store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        const p2 = store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(2); // one list + one search
+        resolveApi({ status: 200, data: { dataProducts: [] } });
+        await Promise.all([p1, p2]);
       });
     });
 
-    describe("Search results merge (de-duplication)", () => {
-      // The primary dataProducts.list API returns resource names in
-      // project-number form (the GCP canonical form), while the search
-      // index's entrySource.resource - after replaceProjectNumberWithProjectId
-      // - is rewritten to project-id form for display. A product present in
-      // both sources must be recognized as the same product regardless of
-      // that format difference, or it gets added twice.
-      const numberFormProduct = {
-        name: "projects/123456789/locations/us-central1/dataProducts/product-1",
-        displayName: "Product 1",
-        description: "Test product 1",
-      };
-
-      const searchEntryForSameProduct = {
-        dataplexEntry: {
-          createTime: { seconds: "1700000000" },
-          updateTime: { seconds: "1700000100" },
-          entrySource: {
-            // Raw search resource arrives in project-number form too.
-            resource: "projects/123456789/locations/us-central1/dataProducts/product-1",
-            displayName: "Product 1",
-            description: "Test product 1",
+    describe("Search results merge (de-duplication without /get-projects)", () => {
+      it("does not duplicate a product whose project is spelled differently in the two sources", async () => {
+        mockGets(
+          {
+            status: 200,
+            data: {
+              dataProducts: [{
+                name: "projects/test-project/locations/us-central1/dataProducts/product-1",
+                displayName: "Product 1",
+                projectId: "test-project",
+                projectNumber: "123456789",
+              }],
+            },
           },
-        },
-      };
-
-      it("does not duplicate a product already in the primary list, even when project id/number formats differ", async () => {
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: [numberFormProduct] },
-        });
-        vi.mocked(axios.post).mockResolvedValueOnce({
-          status: 200,
-          data: { results: [searchEntryForSameProduct] },
-        });
-
-        const store = createTestStore(mockSessionData);
-        await store.dispatch(
-          fetchDataProductsList({ id_token: "token" }) as any
+          {
+            status: 200,
+            data: {
+              items: [{
+                resource: "projects/123456789/locations/us-central1/dataProducts/product-1",
+                projectNumber: "123456789",
+                projectId: null,
+                displayName: "Product 1",
+              }],
+            },
+          },
         );
-
-        const state = store.getState().dataproducts;
-        expect(state.dataProductsItems).toHaveLength(1);
-        expect(state.dataProductsItems).toEqual([numberFormProduct]);
+        // Empty project list: the merge must not need it.
+        const store = createTestStore(null, []);
+        await store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        expect(store.getState().dataProducts.dataProductsItems).toHaveLength(1);
       });
 
-      it("still adds a search-only product not present in the primary list at all", async () => {
-        const searchOnlyEntry = {
-          dataplexEntry: {
-            createTime: { seconds: "1700000000" },
-            updateTime: { seconds: "1700000100" },
-            entrySource: {
-              resource: "projects/123456789/locations/us-central1/dataProducts/product-search-only",
-              displayName: "Search Only Product",
-              description: "Only found via search",
+      it("adds search-only products flagged as isOutOfScope, normalized to the project id when known", async () => {
+        mockGets(
+          { status: 200, data: { dataProducts: mockDataProductsList } },
+          {
+            status: 200,
+            data: {
+              items: [{
+                resource: "projects/555/locations/eu/dataProducts/other",
+                projectNumber: "555",
+                projectId: "other-project",
+                displayName: "Other",
+              }],
             },
           },
-        };
-
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: [numberFormProduct] },
-        });
-        vi.mocked(axios.post).mockResolvedValueOnce({
-          status: 200,
-          data: { results: [searchOnlyEntry] },
-        });
-
-        const store = createTestStore(mockSessionData);
-        await store.dispatch(
-          fetchDataProductsList({ id_token: "token" }) as any
         );
+        const store = createTestStore(null, []);
+        await store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        const items = store.getState().dataProducts.dataProductsItems as any[];
+        expect(items).toHaveLength(3);
+        const extra = items[2];
+        expect(extra).toMatchObject({
+          name: "projects/other-project/locations/eu/dataProducts/other",
+          displayName: "Other",
+          isOutOfScope: true,
+          projectNumber: "555",
+          projectId: "other-project",
+        });
+        expect(items[0].isOutOfScope).toBeUndefined();
+      });
+    });
 
-        const state = store.getState().dataproducts;
-        const items = state.dataProductsItems as any[];
-        expect(items).toHaveLength(2);
-        expect(items.map((p: any) => p.displayName)).toEqual(
-          expect.arrayContaining(["Product 1", "Search Only Product"])
+    describe("mergeDataProducts (pure)", () => {
+      const api = [{ name: "projects/p1/locations/us/dataProducts/a", projectId: "p1", projectNumber: "111" }];
+
+      it("drops a search repeat matched by project number", () => {
+        const out = mergeDataProducts(api, [{ resource: "projects/111/locations/us/dataProducts/a", projectNumber: "111" }]);
+        expect(out).toHaveLength(1);
+      });
+
+      it("keeps same-named products in different projects", () => {
+        const out = mergeDataProducts(api, [{ resource: "projects/222/locations/us/dataProducts/a", projectNumber: "222" }]);
+        expect(out).toHaveLength(2);
+      });
+
+      it("does not list the same search-only product twice", () => {
+        const item = { resource: "projects/333/locations/us/dataProducts/z", projectNumber: "333" };
+        const out = mergeDataProducts([], [item, { ...item }]);
+        expect(out).toHaveLength(1);
+      });
+
+      it("uses /get-projects spellings as an extra source when available", () => {
+        const apiNoTags = [{ name: "projects/test-project/locations/us/dataProducts/a" }];
+        const out = mergeDataProducts(
+          apiNoTags,
+          [{ resource: "projects/123456789/locations/us/dataProducts/a" }],
+          mockProjectsList,
         );
+        expect(out).toHaveLength(1);
       });
 
-      it("marks search-only products as isOutOfScope, and leaves primary-list products without the flag", async () => {
-        const searchOnlyEntry = {
-          dataplexEntry: {
-            entrySource: {
-              resource: "projects/123456789/locations/us-central1/dataProducts/product-search-only",
-              displayName: "Search Only Product",
-            },
-          },
-        };
-
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: [numberFormProduct] },
-        });
-        vi.mocked(axios.post).mockResolvedValueOnce({
-          status: 200,
-          data: { results: [searchOnlyEntry] },
-        });
-
-        const store = createTestStore(mockSessionData);
-        await store.dispatch(
-          fetchDataProductsList({ id_token: "token" }) as any
-        );
-
-        const items = store.getState().dataproducts.dataProductsItems as any[];
-        const primaryItem = items.find((p) => p.displayName === "Product 1");
-        const searchOnlyItem = items.find((p) => p.displayName === "Search Only Product");
-        expect(primaryItem?.isOutOfScope).toBeFalsy();
-        expect(searchOnlyItem?.isOutOfScope).toBe(true);
-      });
-
-      it("does not list the same search-only product twice when the index returns it more than once", async () => {
-        // The Search index can return the same resource in more than one result.
-        // Each hit used to be tested only against the API list - never against
-        // the hits already accepted - so every repeat became its own card.
-        const duplicatedSearchEntry = {
-          dataplexEntry: {
-            entrySource: {
-              resource: "projects/123456789/locations/europe-west2/dataProducts/subtitles",
-              displayName: "subtitles",
-            },
-          },
-        };
-
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: [] },
-        });
-        vi.mocked(axios.post).mockResolvedValueOnce({
-          status: 200,
-          data: { results: [duplicatedSearchEntry, { ...duplicatedSearchEntry }] },
-        });
-
-        const store = createTestStore(mockSessionData);
-        await store.dispatch(fetchDataProductsList({ id_token: "token" }) as any);
-
-        const items = store.getState().dataproducts.dataProductsItems as any[];
-        expect(items.filter((p) => p.displayName === "subtitles")).toHaveLength(1);
-      });
-
-      it("matches a product across the two sources when one uses the project id and the other the project number", async () => {
-        // dataProducts.list and the Search index do not agree on how the project
-        // segment is spelled. Both spellings must resolve to the same product.
-        const idFormProduct = {
-          name: "projects/test-project/locations/europe-west2/dataProducts/subtitles",
-          displayName: "subtitles",
-        };
-        const numberFormSearchEntry = {
-          dataplexEntry: {
-            entrySource: {
-              resource: "projects/123456789/locations/europe-west2/dataProducts/subtitles",
-              displayName: "subtitles",
-            },
-          },
-        };
-
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: [idFormProduct] },
-        });
-        vi.mocked(axios.post).mockResolvedValueOnce({
-          status: 200,
-          data: { results: [numberFormSearchEntry] },
-        });
-
-        const store = createTestStore(mockSessionData);
-        await store.dispatch(fetchDataProductsList({ id_token: "token" }) as any);
-
-        const items = store.getState().dataproducts.dataProductsItems as any[];
-        expect(items).toHaveLength(1);
-        expect(items[0].isOutOfScope).toBeFalsy();
-      });
-
-      it("keeps same-named products in different projects as separate entries", async () => {
-        // Three real `subtitles` products in three projects must stay three rows -
-        // de-duplication must not key on location+id alone.
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: {
-            dataProducts: [
-              { name: "projects/123456789/locations/europe-west2/dataProducts/subtitles", displayName: "subtitles" },
-              { name: "projects/987654321/locations/europe-west2/dataProducts/subtitles", displayName: "subtitles" },
-            ],
-          },
-        });
-        vi.mocked(axios.post).mockResolvedValueOnce({
-          status: 200,
-          data: { results: [] },
-        });
-
-        const store = createTestStore(mockSessionData);
-        await store.dispatch(fetchDataProductsList({ id_token: "token" }) as any);
-
-        const items = store.getState().dataproducts.dataProductsItems as any[];
-        expect(items).toHaveLength(2);
-      });
-
-      it("cannot match the two spellings without a project list - callers must gate on it", async () => {
-        // Both sources always contribute, so the merge has no way to recover here:
-        // with no project list there is nothing to translate id <-> number with and
-        // the shared product is listed twice. This is exactly the reported bug, and
-        // the reason every dispatch site gates on `isProjectMappingReady`. Pinned so
-        // the gates are not removed casually.
-        const idFormProduct = {
-          name: "projects/test-project/locations/europe-west2/dataProducts/subtitles",
-          displayName: "subtitles",
-        };
-        const numberFormSearchEntry = {
-          dataplexEntry: {
-            entrySource: {
-              resource: "projects/123456789/locations/europe-west2/dataProducts/subtitles",
-              displayName: "subtitles",
-            },
-          },
-        };
-
-        vi.mocked(axios.get).mockResolvedValueOnce({
-          status: 200,
-          data: { dataProducts: [idFormProduct] },
-        });
-        vi.mocked(axios.post).mockResolvedValueOnce({
-          status: 200,
-          data: { results: [numberFormSearchEntry] },
-        });
-
-        // Empty project list - /get-projects has not landed.
-        const store = createTestStore(mockSessionData, []);
-        await store.dispatch(fetchDataProductsList({ id_token: "token" }) as any);
-
-        const items = store.getState().dataproducts.dataProductsItems as any[];
-        expect(items).toHaveLength(2);
+      it("ignores search items without a resource", () => {
+        expect(mergeDataProducts([], [{ resource: "" } as any])).toHaveLength(0);
       });
     });
 
     describe("Rejected State", () => {
       it("sets status to failed and captures error on rejection", async () => {
-        const axiosError = new AxiosError("Network Error");
-        (axiosError as any).response = { data: "Server error" };
-        vi.mocked(axios.get).mockRejectedValueOnce(axiosError);
-
+        const err = new AxiosError("Network Error", { data: { message: "boom" } } as any);
+        mockGets(err);
         const store = createTestStore();
-        await store.dispatch(
-          fetchDataProductsList({ id_token: "token" }) as any
-        );
-
-        const state = store.getState().dataproducts;
+        await store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        const state = store.getState().dataProducts;
         expect(state.status).toBe("failed");
-        expect(state.error).toBe("Server error");
+        expect(state.error).toEqual({ message: "boom" });
       });
 
-      it("handles AxiosError with error message when response is undefined", async () => {
-        const axiosError = new AxiosError("Network Error");
-        vi.mocked(axios.get).mockRejectedValueOnce(axiosError);
-
+      it("maps 403 to PERMISSION_DENIED", async () => {
+        const err = new AxiosError("Forbidden", { status: 403, data: {} } as any);
+        (err as any).response = { status: 403, data: {} };
+        mockGets(err);
         const store = createTestStore();
-        await store.dispatch(
-          fetchDataProductsList({ id_token: "token" }) as any
-        );
-
-        const state = store.getState().dataproducts;
-        expect(state.status).toBe("failed");
-        expect(state.error).toBe("Network Error");
+        await store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        expect(store.getState().dataProducts.error).toEqual({ type: "PERMISSION_DENIED" });
       });
 
       it("handles non-AxiosError with generic message", async () => {
-        vi.mocked(axios.get).mockRejectedValueOnce(new Error("Generic error"));
-
+        mockGets(new TypeError("x"));
         const store = createTestStore();
-        await store.dispatch(
-          fetchDataProductsList({ id_token: "token" }) as any
-        );
-
-        const state = store.getState().dataproducts;
-        expect(state.status).toBe("failed");
-        expect(state.error).toBe("An unknown error occurred");
+        await store.dispatch(fetchDataProductsList({ id_token: "t" }) as any);
+        expect(store.getState().dataProducts.error).toBe("An unknown error occurred");
       });
 
-      it("handles rejection with payload via reducer", () => {
+      it("keeps cached data when a background revalidation fails", async () => {
+        mockGets(new TypeError("offline"));
         const store = createTestStore();
-        store.dispatch({
-          type: fetchDataProductsList.rejected.type,
-          payload: "Custom error",
+        store.dispatch(hydrateDataProducts({ items: mockDataProductsList, fetchedAt: 1 }));
+        await store.dispatch(fetchDataProductsList({ id_token: "t", background: true }) as any);
+        const state = store.getState().dataProducts;
+        expect(state.status).toBe("succeeded");
+        expect(state.isRefreshing).toBe(false);
+        expect(state.dataProductsItems).toEqual(mockDataProductsList);
+      });
+    });
+
+    describe("clearDataProducts (logout)", () => {
+      it("drops the list and ignores responses from the previous session", async () => {
+        let resolveApi: (v: any) => void = () => {};
+        vi.mocked(axios.get).mockImplementation((url: string) => {
+          if (url.endsWith(SEARCH_URL)) return Promise.resolve({ status: 200, data: { items: [] } });
+          return new Promise((r) => { resolveApi = r; });
         });
-
-        const state = store.getState().dataproducts;
-        expect(state.status).toBe("failed");
-        expect(state.error).toBe("Custom error");
+        const store = createTestStore();
+        const p = store.dispatch(fetchDataProductsList({ id_token: "t", email: "a@b.com" }) as any);
+        store.dispatch(clearDataProducts());
+        resolveApi({ status: 200, data: { dataProducts: mockDataProductsList } });
+        await p;
+        const state = store.getState().dataProducts;
+        expect(state.dataProductsItems).toEqual([]);
+        expect(state.status).toBe("idle");
+        expect(state.epoch).toBe(1);
+        expect(dpCache.saveDataProductsCache).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe("ensureDataProductsLoaded", () => {
+    const mockApi = () => vi.mocked(axios.get).mockImplementation((url: string) =>
+      Promise.resolve(url.endsWith("/data-products/search")
+        ? { status: 200, data: { items: [] } }
+        : { status: 200, data: { dataProducts: mockDataProductsList } }));
+
+    it("foreground-fetches when nothing is cached", async () => {
+      mockApi();
+      const store = createTestStore();
+      await store.dispatch(ensureDataProductsLoaded({ id_token: "t", email: "a@b.com" }) as any);
+      await vi.waitFor(() => expect(store.getState().dataProducts.status).toBe("succeeded"));
+      expect(dpCache.loadDataProductsCache).toHaveBeenCalledWith("a@b.com");
+    });
+
+    it("hydrates from a fresh persisted cache without fetching", async () => {
+      vi.mocked(dpCache.loadDataProductsCache).mockResolvedValueOnce({
+        items: mockDataProductsList, projectIdentity: {}, fetchedAt: Date.now(),
+      });
+      const store = createTestStore();
+      await store.dispatch(ensureDataProductsLoaded({ id_token: "t", email: "a@b.com" }) as any);
+      expect(store.getState().dataProducts.dataProductsItems).toEqual(mockDataProductsList);
+      expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    it("hydrates from a stale cache and revalidates in the background", async () => {
+      mockApi();
+      vi.mocked(dpCache.loadDataProductsCache).mockResolvedValueOnce({
+        items: [mockDataProductsList[0]], projectIdentity: {}, fetchedAt: Date.now() - dpCache.DATA_PRODUCTS_FRESH_MS - 1000,
+      });
+      const store = createTestStore();
+      await store.dispatch(ensureDataProductsLoaded({ id_token: "t", email: "a@b.com" }) as any);
+      // Cached data shown immediately, no skeleton status.
+      expect(store.getState().dataProducts.status).toBe("succeeded");
+      await vi.waitFor(() => expect(store.getState().dataProducts.dataProductsItems).toEqual(mockDataProductsList));
+      expect(store.getState().dataProducts.isRefreshing).toBe(false);
+    });
+
+    it("does nothing when in-memory data is fresh", async () => {
+      const store = createTestStore();
+      store.dispatch(hydrateDataProducts({ items: mockDataProductsList, fetchedAt: Date.now() }));
+      await store.dispatch(ensureDataProductsLoaded({ id_token: "t", email: "a@b.com" }) as any);
+      expect(axios.get).not.toHaveBeenCalled();
+      expect(dpCache.loadDataProductsCache).not.toHaveBeenCalled();
     });
   });
 
@@ -568,7 +524,7 @@ describe("dataProductsSlice", () => {
         const store = createTestStore();
         store.dispatch({ type: getDataProductDetails.pending.type });
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.selectedDataProductStatus).toBe("loading");
       });
     });
@@ -589,7 +545,7 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.selectedDataProductStatus).toBe("succeeded");
         expect(state.selectedDataProductDetails).toEqual(mockDataProductDetails);
       });
@@ -625,12 +581,13 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
+        // The backend now builds the entry name (needs the project number).
         expect(axios.get).toHaveBeenCalledWith(
           expect.stringContaining("data-product-details"),
           expect.objectContaining({
-            params: expect.objectContaining({
-              entry: expect.stringContaining("projects/test-project"),
-            }),
+            params: {
+              dataProduct: "projects/test-project/locations/us-central1/dataProducts/product-1",
+            },
           })
         );
       });
@@ -688,7 +645,7 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.selectedDataProductStatus).toBe("failed");
         expect(state.selectedDataProductError).toBe("Server error details");
       });
@@ -706,7 +663,7 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.selectedDataProductStatus).toBe("failed");
         expect(state.selectedDataProductError).toBe("Connection timeout");
       });
@@ -725,7 +682,7 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.selectedDataProductStatus).toBe("failed");
         expect(state.selectedDataProductError).toBe("An unknown error occurred");
       });
@@ -737,7 +694,7 @@ describe("dataProductsSlice", () => {
           payload: "Details error",
         });
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.selectedDataProductStatus).toBe("failed");
         expect(state.selectedDataProductError).toBe("Details error");
       });
@@ -756,7 +713,7 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.selectedDataProductStatus).toBe("failed");
         // A plain object, not JSON.stringify'd - consumers branch on `.type`
         // directly instead of having to parse it back out of a string.
@@ -779,7 +736,7 @@ describe("dataProductsSlice", () => {
         const store = createTestStore();
         store.dispatch({ type: fetchDataProductsAssetsList.pending.type });
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.dataProductAssetsStatus).toBe("loading");
       });
 
@@ -795,7 +752,7 @@ describe("dataProductsSlice", () => {
         // Now dispatch pending
         store.dispatch({ type: fetchDataProductsAssetsList.pending.type });
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.dataProductAssets).toEqual([]);
       });
     });
@@ -816,7 +773,7 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.dataProductAssetsStatus).toBe("succeeded");
         expect(state.dataProductAssets).toEqual(mockDataProductAssets);
       });
@@ -908,7 +865,7 @@ describe("dataProductsSlice", () => {
           payload: null,
         });
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.dataProductAssets).toEqual([]);
       });
     });
@@ -928,7 +885,7 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.dataProductAssetsStatus).toBe("failed");
         expect(state.dataProductAssetsError).toBe("Assets error");
       });
@@ -946,7 +903,7 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.dataProductAssetsStatus).toBe("failed");
         expect(state.dataProductAssetsError).toBe("Network failure");
       });
@@ -963,7 +920,7 @@ describe("dataProductsSlice", () => {
           }) as any
         );
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.dataProductAssetsStatus).toBe("failed");
         expect(state.dataProductAssetsError).toBe("An unknown error occurred");
       });
@@ -975,7 +932,7 @@ describe("dataProductsSlice", () => {
           payload: "Assets list error",
         });
 
-        const state = store.getState().dataproducts;
+        const state = store.getState().dataProducts;
         expect(state.dataProductAssetsStatus).toBe("failed");
         expect(state.dataProductAssetsError).toBe("Assets list error");
       });
@@ -986,104 +943,32 @@ describe("dataProductsSlice", () => {
   // getProjectNumber Helper Function Tests
   // ==========================================================================
 
-  describe("getProjectNumber helper", () => {
-    it("extracts project number from session data", async () => {
-      vi.mocked(axios.get).mockResolvedValueOnce({
-        status: 200,
-        data: mockDataProductDetails,
-      });
-
-      const store = createTestStore(mockSessionData);
+  describe("details request does not depend on the project list", () => {
+    it("sends the data product name even when /get-projects is empty", async () => {
+      vi.mocked(axios.get).mockResolvedValueOnce({ status: 200, data: mockDataProductDetails });
+      const store = createTestStore(null, []);
       await store.dispatch(
         getDataProductDetails({
           id_token: "test-token",
-          dataProductId:
-            "projects/test-project/locations/us-central1/dataProducts/product-1",
+          dataProductId: "projects/123456789/locations/us-central1/dataProducts/product-1",
         }) as any
       );
-
-      // Verify the entry parameter contains the project number (123456789)
-      expect(axios.get).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          params: expect.objectContaining({
-            entry: expect.stringContaining("123456789"),
-          }),
-        })
-      );
-    });
-
-    it("returns empty string when project is not found", async () => {
-      vi.mocked(axios.get).mockResolvedValueOnce({
-        status: 200,
-        data: mockDataProductDetails,
+      expect(axios.get).toHaveBeenCalledWith(expect.any(String), {
+        params: { dataProduct: "projects/123456789/locations/us-central1/dataProducts/product-1" },
       });
-
-      const store = createTestStore(mockSessionData);
-      await store.dispatch(
-        getDataProductDetails({
-          id_token: "test-token",
-          dataProductId:
-            "projects/unknown-project/locations/us-central1/dataProducts/product-1",
-        }) as any
-      );
-
-      // When project not found, the entry should have empty project number part
-      expect(axios.get).toHaveBeenCalled();
+      expect(store.getState().dataProducts.selectedDataProductStatus).toBe("succeeded");
     });
 
-    it("handles missing appConfig in store", async () => {
-      vi.mocked(axios.get).mockRejectedValueOnce(
-        new TypeError("Cannot read properties of null")
-      );
-
+    it("marks the request failed when the call throws", async () => {
+      vi.mocked(axios.get).mockRejectedValueOnce(new TypeError("Cannot read properties of null"));
       const store = createTestStore();
       await store.dispatch(
         getDataProductDetails({
           id_token: "test-token",
-          dataProductId:
-            "projects/test-project/locations/us-central1/dataProducts/product-1",
+          dataProductId: "projects/test-project/locations/us-central1/dataProducts/product-1",
         }) as any
       );
-
-      const state = store.getState().dataproducts;
-      expect(state.selectedDataProductStatus).toBe("failed");
-    });
-
-    it("handles session data with empty projects array", async () => {
-      vi.mocked(axios.get).mockResolvedValueOnce({
-        status: 200,
-        data: mockDataProductDetails,
-      });
-
-      const store = createTestStore({ appConfig: { projects: [] } });
-      await store.dispatch(
-        getDataProductDetails({
-          id_token: "test-token",
-          dataProductId:
-            "projects/test-project/locations/us-central1/dataProducts/product-1",
-        }) as any
-      );
-
-      expect(axios.get).toHaveBeenCalled();
-    });
-
-    it("handles project name without forward slashes", async () => {
-      vi.mocked(axios.get).mockResolvedValueOnce({
-        status: 200,
-        data: mockDataProductDetails,
-      });
-
-      const store = createTestStore({ appConfig: { projects: [{ projectId: "test-project", name: "simple-name" }] } });
-      await store.dispatch(
-        getDataProductDetails({
-          id_token: "test-token",
-          dataProductId:
-            "projects/test-project/locations/us-central1/dataProducts/product-1",
-        }) as any
-      );
-
-      expect(axios.get).toHaveBeenCalled();
+      expect(store.getState().dataProducts.selectedDataProductStatus).toBe("failed");
     });
   });
 
@@ -1104,7 +989,7 @@ describe("dataProductsSlice", () => {
       );
 
       // Non-401 status passes through (status !== 401 is true)
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(state.status).toBe("succeeded");
     });
 
@@ -1123,7 +1008,7 @@ describe("dataProductsSlice", () => {
         }) as any
       );
 
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(state.selectedDataProductStatus).toBe("succeeded");
     });
 
@@ -1142,7 +1027,7 @@ describe("dataProductsSlice", () => {
         }) as any
       );
 
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(state.dataProductAssetsStatus).toBe("succeeded");
     });
 
@@ -1190,7 +1075,7 @@ describe("dataProductsSlice", () => {
         fetchDataProductsList({ id_token: "token" }) as any
       );
 
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(state.selectedDataProductDetails).toEqual(mockDataProductDetails);
     });
 
@@ -1200,7 +1085,7 @@ describe("dataProductsSlice", () => {
       // Set some initial items
       store.dispatch({
         type: fetchDataProductsList.fulfilled.type,
-        payload: mockDataProductsList,
+        payload: { items: mockDataProductsList, projectIdentity: {}, searchFailed: false, fetchedAt: 1 },
       });
 
       vi.mocked(axios.get).mockResolvedValueOnce({
@@ -1216,7 +1101,7 @@ describe("dataProductsSlice", () => {
         }) as any
       );
 
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(state.dataProductsItems).toEqual(mockDataProductsList);
     });
 
@@ -1226,7 +1111,7 @@ describe("dataProductsSlice", () => {
       // Set initial states
       store.dispatch({
         type: fetchDataProductsList.fulfilled.type,
-        payload: mockDataProductsList,
+        payload: { items: mockDataProductsList, projectIdentity: {}, searchFailed: false, fetchedAt: 1 },
       });
       store.dispatch({
         type: getDataProductDetails.fulfilled.type,
@@ -1246,7 +1131,7 @@ describe("dataProductsSlice", () => {
         }) as any
       );
 
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(state.dataProductsItems).toEqual(mockDataProductsList);
       expect(state.selectedDataProductDetails).toEqual(mockDataProductDetails);
     });
@@ -1268,7 +1153,7 @@ describe("dataProductsSlice", () => {
         fetchDataProductsList({ id_token: "token" }) as any
       );
 
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(state.status).toBe("succeeded");
       expect(state.dataProductsItems).toEqual([]);
     });
@@ -1288,7 +1173,7 @@ describe("dataProductsSlice", () => {
         }) as any
       );
 
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(state.dataProductAssetsStatus).toBe("succeeded");
       expect(state.dataProductAssets).toEqual([]);
     });
@@ -1342,9 +1227,9 @@ describe("dataProductsSlice", () => {
       expect(axios.get).toHaveBeenCalledWith(
         expect.stringContaining("data-product-details"),
         expect.objectContaining({
-          params: expect.objectContaining({
-            project: "project-with-dashes",
-          }),
+          params: {
+            dataProduct: "projects/project-with-dashes/locations/us-west1/dataProducts/product-1",
+          },
         })
       );
     });
@@ -1377,7 +1262,7 @@ describe("dataProductsSlice", () => {
 
       await Promise.all([promise1, promise2]);
 
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(state.status).toBe("succeeded");
     });
 
@@ -1392,13 +1277,13 @@ describe("dataProductsSlice", () => {
       await store.dispatch(
         fetchDataProductsList({ id_token: "token1" }) as any
       );
-      const state1 = store.getState().dataproducts;
+      const state1 = store.getState().dataProducts;
       expect(state1.status).toBe("succeeded");
 
       await store.dispatch(
         fetchDataProductsList({ id_token: "token2" }) as any
       );
-      const state2 = store.getState().dataproducts;
+      const state2 = store.getState().dataProducts;
       expect(state2.status).toBe("succeeded");
     });
   });
@@ -1410,19 +1295,19 @@ describe("dataProductsSlice", () => {
   describe("Type Assertions", () => {
     it("dataProductsItems is typed as unknown initially", () => {
       const store = createTestStore();
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(Array.isArray(state.dataProductsItems)).toBe(true);
     });
 
     it("selectedDataProductDetails is typed as unknown initially", () => {
       const store = createTestStore();
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(typeof state.selectedDataProductDetails).toBe("object");
     });
 
     it("dataProductAssets is typed as unknown initially", () => {
       const store = createTestStore();
-      const state = store.getState().dataproducts;
+      const state = store.getState().dataProducts;
       expect(Array.isArray(state.dataProductAssets)).toBe(true);
     });
   });
@@ -1475,19 +1360,7 @@ describe("dataProductsSlice", () => {
 
   describe("Reducer Direct Tests", () => {
     it("reducer handles unknown action type", () => {
-      const initialState = {
-        dataProductsItems: [],
-        status: "idle" as const,
-        error: null,
-        selectedDataProductDetails: {},
-        selectedDataProductStatus: "idle" as const,
-        selectedDataProductError: null,
-        dataProductAssets: [],
-        dataProductAssetsStatus: "idle" as const,
-        dataProductAssetsError: null,
-        viewMode: 'list' as const,
-        detailTabValue: 0,
-      };
+      const initialState = dataProductsReducer(undefined, { type: "INIT" });
 
       const newState = dataProductsReducer(initialState, {
         type: "UNKNOWN_ACTION",

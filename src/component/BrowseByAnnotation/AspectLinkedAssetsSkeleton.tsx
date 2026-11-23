@@ -101,6 +101,9 @@ const AspectLinkedAssetsSkeleton: React.FC = () => {
                 <Box sx={{ display: "flex", alignItems: "center", gap: "8px", flex: "1 1 auto", minWidth: 0 }}>
                   <Skeleton variant="rounded" width={24} height={24} sx={{ borderRadius: "4px", flexShrink: 0 }} />
                   <Skeleton variant="text" width="45%" height={24} />
+                  {/* Reserves space for the "Aspect Value" chip (SearchEntriesCard)
+                      so the row doesn't jump in shape once real cards render. */}
+                  <Skeleton variant="rounded" width={72} height={20} sx={{ borderRadius: "8px", flexShrink: 0 }} />
                 </Box>
                 <Skeleton variant="circular" width={20} height={20} sx={{ flexShrink: 0 }} />
               </Box>

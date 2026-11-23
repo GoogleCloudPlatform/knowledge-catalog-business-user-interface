@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tooltip } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tooltip, Skeleton } from '@mui/material';
 import { Lock, LocationOnOutlined } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
-import Tag from '../Tags/Tag';
+import OverflowTag from '../Tags/OverflowTag';
 import { useColumnResize } from '../../hooks/useColumnResize';
 import ResizeHandle from '../Schema/ResizeHandle';
+import { formatAspectValue } from '../../utils/aspectValueUtils';
 
 /**
  * @file SearchTableView.tsx
@@ -45,6 +46,10 @@ interface SearchTableViewProps {
   previewOpen?: boolean;
   selectedEntryName?: string | null;
   isDataProduct?: boolean;
+  // Browse by Annotations' Linked Assets "Aspect Value" column. Undefined for
+  // every other caller (Search, Data Products), so this column is never
+  // rendered there.
+  aspectValueColumn?: { label: string; valuesByEntry: Record<string, unknown> };
 }
 
 // const capitalizeFirstLetter = (s: any) => {
@@ -79,33 +84,6 @@ const OverflowTooltip: React.FC<{ text: string; children: React.ReactElement<{ o
   );
 };
 
-const OverflowTag: React.FC<{ text: string; className?: string; css?: React.CSSProperties }> = ({ text, className, css }) => {
-  const [showTooltip, setShowTooltip] = useState(false);
-  const spanRef = useRef<HTMLSpanElement>(null);
-
-  const handleMouseEnter = () => {
-    const el = spanRef.current?.querySelector('span') as HTMLElement;
-    if (el) setShowTooltip(el.scrollWidth > el.clientWidth);
-  };
-
-  const handleMouseLeave = () => {
-    setShowTooltip(false);
-  };
-
-  return (
-    <Tooltip title={showTooltip ? text : ''} slotProps={{ popper: { modifiers: [{ name: 'offset', options: { offset: [0, -8] } }] } }}>
-      <span
-        ref={spanRef}
-        style={{ maxWidth: '100%', overflow: 'hidden' }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <Tag text={text} className={className} css={{ ...css, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', display: 'block' }} />
-      </span>
-    </Tooltip>
-  );
-};
-
 const SearchTableView: React.FC<SearchTableViewProps> = ({
   resources,
   onRowClick,
@@ -114,7 +92,8 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
   getEntryType,
   previewOpen,
   selectedEntryName,
-  isDataProduct
+  isDataProduct,
+  aspectValueColumn
 }) => {
   const mode = useSelector((state: any) => state.user.mode) as string;
   const isDark = mode === 'dark';
@@ -128,7 +107,8 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
     { key: 'type', initialWidth: 170, minWidth: 100 },
     { key: 'location', initialWidth: 130, minWidth: 80 },
     { key: 'lastModified', initialWidth: 150, minWidth: 100 },
-  ], []);
+    ...(aspectValueColumn ? [{ key: 'aspectValue', initialWidth: 180, minWidth: 100 }] : []),
+  ], [aspectValueColumn]);
 
   const { columnWidths, activeIndex, handleMouseDown } = useColumnResize({
     columns: COLUMN_CONFIGS,
@@ -517,7 +497,33 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                   <span style={{ whiteSpace: 'nowrap' }}>Last modified</span>
                 </Box>
               </Tooltip>
+              {aspectValueColumn && (
+                <ResizeHandle
+                  onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(4, e); }}
+                  isActive={activeIndex === 4}
+                  darkMode={isDark}
+                />
+              )}
             </TableCell>
+
+            {/* Aspect Value (Browse by Annotations' Linked Assets only) */}
+            {aspectValueColumn && (
+              <TableCell
+                sx={{
+                    fontFamily: '"Google Sans", sans-serif',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    height: '48px',
+                    color: isDark ? '#dedfe0' : '#444746',
+                    position: 'relative',
+                    padding: '0px !important'
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%', boxSizing: 'border-box', padding: '0px 20px' }}>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Aspect Value</span>
+                </Box>
+              </TableCell>
+            )}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -731,6 +737,48 @@ const SearchTableView: React.FC<SearchTableViewProps> = ({
                 >
                   {getFormatedDate(entry?.updateTime || entry?.createTime)}
                 </TableCell>
+
+                {/* Aspect Value (Browse by Annotations' Linked Assets only) */}
+                {aspectValueColumn && (
+                  <TableCell
+                    sx={{
+                      fontFamily: '"Product Sans", "Google Sans Text", sans-serif',
+                      fontSize: '12px',
+                      color: mode === 'dark' ? '#dedfe0' : '#575757',
+                      padding: '10px 20px',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {/* Loading is purely per-row: keyed on whether this
+                        entry's value has actually landed in the map yet.
+                        Deliberately NOT also gated on a "terminal status"
+                        escape hatch - that previously let a stray early
+                        resolution (succeeded with an incomplete/empty map,
+                        e.g. a transient aspect-type lookup hiccup) flash a
+                        dash before a later, correct dispatch overwrote it
+                        with the real value. Pure key-presence can't race like
+                        that: a row only ever shows a dash once its own key is
+                        actually in the map. */}
+                    {!Object.prototype.hasOwnProperty.call(aspectValueColumn.valuesByEntry, entry.name) ? (
+                      <Skeleton data-testid="aspect-value-skeleton" variant="text" width={80} height={20} sx={{ bgcolor: isDark ? '#3c4043' : '#E8EAED' }} />
+                    ) : (
+                      <Typography
+                        sx={{
+                          fontFamily: '"Product Sans", "Google Sans Text", sans-serif',
+                          fontSize: '14px',
+                          fontWeight: '400',
+                          color: mode === 'dark' ? '#dedfe0' : '#575757',
+                          letterSpacing: '0.1px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {formatAspectValue(aspectValueColumn.valuesByEntry[entry.name])}
+                      </Typography>
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}

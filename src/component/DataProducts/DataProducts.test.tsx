@@ -161,6 +161,7 @@ vi.mock('../../utils/resourceUtils', () => ({
 vi.mock('../../features/dataProducts/dataProductsSlice', () => ({
   default: (state = {}) => state,
   fetchDataProductsList: vi.fn((args) => ({ type: 'dataProducts/fetchDataProductsList', payload: args })),
+  ensureDataProductsLoaded: vi.fn((args) => ({ type: 'dataProducts/ensureDataProductsLoaded', payload: args })),
   getDataProductDetails: vi.fn((args) => ({ type: 'dataProducts/getDataProductDetails', payload: args })),
   setDataProductsViewMode: vi.fn((val) => ({ type: 'dataProducts/setViewMode', payload: val })),
   setDataProductsDetailTabValue: vi.fn((val) => ({ type: 'dataProducts/setDetailTabValue', payload: val })),
@@ -837,6 +838,66 @@ describe('DataProducts Components', () => {
         // Wait for API call to complete (and fail)
         await waitFor(() => {
           expect(mockAxiosPost).toHaveBeenCalled();
+        });
+        // The asset from the API is still listed (fallback row) - no endless skeleton.
+        await waitFor(() => {
+          expect(screen.getByTestId('data-product-assets')).toHaveTextContent('1 assets');
+        });
+        expect(capturedDataProductAssetsProps.linkedAssets[0].dataplexEntry).toMatchObject({
+          notInCatalog: true,
+          entrySource: { displayName: 't', system: 'BigQuery' },
+        });
+      });
+
+      it('lists an asset returned by the API even when the catalog search does not find it', async () => {
+        // Regression: the tab used to render only catalog search results, so an
+        // asset missing from the search (e.g. "Test Customer Hierarchy Spine") vanished.
+        mockAxiosPost.mockResolvedValue({ data: { results: [] } });
+        mockReduxState = {
+          dataProducts: {
+            dataProductAssets: [
+              { resource: '//bigquery.googleapis.com/projects/p/datasets/d/tables/customer_hierarchy' },
+              { resource: '//spanner.googleapis.com/projects/p/instances/i/databases/spine' },
+            ],
+            dataProductAssetsStatus: 'succeeded'
+          }
+        };
+
+        renderAssets();
+
+        await waitFor(() => {
+          expect(screen.getByTestId('data-product-assets')).toHaveTextContent('2 assets');
+        });
+        // Only the asset with a derivable FQN is searched; both are listed.
+        expect(mockAxiosPost).toHaveBeenCalledTimes(1);
+        expect(mockAxiosPost.mock.calls[0][1]).toMatchObject({
+          query: 'fully_qualified_name=(bigquery:p.d.customer_hierarchy)',
+          pageSize: 1000,
+        });
+        const names = capturedDataProductAssetsProps.linkedAssets.map((a: any) => a.dataplexEntry.entrySource.displayName);
+        expect(names).toEqual(['customer_hierarchy', 'spine']);
+      });
+
+      it('uses the catalog entry when the search finds the asset', async () => {
+        const catalogEntry = {
+          dataplexEntry: {
+            name: 'projects/p/locations/us/entryGroups/@bigquery/entries/x',
+            fullyQualifiedName: 'bigquery:p.d.t',
+            entrySource: { resource: 'projects/p/datasets/d/tables/t', displayName: 'Nice Table', system: 'BigQuery' },
+          },
+        };
+        mockAxiosPost.mockResolvedValue({ data: { results: [catalogEntry] } });
+        mockReduxState = {
+          dataProducts: {
+            dataProductAssets: [{ resource: '//bigquery.googleapis.com/projects/p/datasets/d/tables/t' }],
+            dataProductAssetsStatus: 'succeeded'
+          }
+        };
+
+        renderAssets();
+
+        await waitFor(() => {
+          expect(capturedDataProductAssetsProps?.linkedAssets?.[0]).toBe(catalogEntry);
         });
       });
     });
@@ -1936,11 +1997,14 @@ describe('DataProducts Components', () => {
         expect(localStorageMock.removeItem).toHaveBeenCalledWith('selectedDataProduct');
       });
 
-      it('does not fetch, and explains why, when the project list is unavailable', () => {
-        // /get-projects finished but gave nothing usable. Fetching anyway would
-        // leave the merge unable to tell that a product returned by both the API
-        // and the catalog search is the same product, and list it twice.
+      it('fetches immediately, without waiting for the project list or appConfig', () => {
+        // The list no longer needs the /get-projects id<->number mapping (the
+        // backend tags each product with both spellings of its project), nor
+        // appConfig for scoping (applied server-side from configData.json).
         mockBootstrapStatus.isProjectMappingReady = false;
+        mockBootstrapStatus.isAppConfigReady = false;
+        mockBootstrapStatus.areProjectsReady = false;
+        mockBootstrapStatus.isBootstrapping = true;
         mockReduxState = {
           dataProducts: {
             dataProductsItems: [],
@@ -1952,11 +2016,48 @@ describe('DataProducts Components', () => {
         };
         renderDataProducts();
 
-        expect(mockDispatch).not.toHaveBeenCalled();
-        // Must not render a bare empty grid with no explanation.
-        expect(
-          screen.getByText(/Could not load your project list/i)
-        ).toBeInTheDocument();
+        expect(mockDispatch).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'dataProducts/ensureDataProductsLoaded' })
+        );
+        expect(screen.queryByText(/Could not load your project list/i)).not.toBeInTheDocument();
+      });
+
+      it('keeps cards visible and shows inline progress while the catalog search loads', async () => {
+        mockReduxState = {
+          dataProducts: {
+            dataProductsItems: mockDataProducts,
+            status: 'succeeded',
+            searchStatus: 'loading',
+            isRefreshing: false,
+            dataProductAssets: [],
+            dataProductAssetsStatus: 'idle'
+          },
+          user: { mode: 'light' }
+        };
+        renderDataProducts();
+        expect(screen.getByTestId('data-products-background-progress')).toHaveTextContent('Searching other projects');
+        await waitFor(() => {
+          expect(screen.getByText(mockDataProducts[0].displayName)).toBeInTheDocument();
+        });
+      });
+
+      it('does not show the skeleton during a background refresh', async () => {
+        mockReduxState = {
+          dataProducts: {
+            dataProductsItems: mockDataProducts,
+            status: 'succeeded',
+            searchStatus: 'succeeded',
+            isRefreshing: true,
+            dataProductAssets: [],
+            dataProductAssetsStatus: 'idle'
+          },
+          user: { mode: 'light' }
+        };
+        renderDataProducts();
+        expect(screen.getByTestId('data-products-background-progress')).toHaveTextContent('Refreshing');
+        await waitFor(() => {
+          expect(screen.getByText(mockDataProducts[0].displayName)).toBeInTheDocument();
+        });
       });
     });
 

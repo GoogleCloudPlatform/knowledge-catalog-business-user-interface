@@ -176,6 +176,18 @@ vi.mock('../Lineage', () => ({
   }
 }));
 
+// Mutable so tests can turn the legacy "Lineage" tab back on.
+const { mockFeatureFlags } = vi.hoisted(() => ({
+  mockFeatureFlags: { enableRequestAccess: false, enableLegacyLineageTab: false },
+}));
+vi.mock('../../utils/featureFlags', () => ({ FEATURE_FLAGS: mockFeatureFlags }));
+
+vi.mock('../DataLineage', () => ({
+  default: function MockDataLineage({ entry }: any) {
+    return <div data-testid="data-lineage">Data Lineage for {entry?.fullyQualifiedName}</div>;
+  }
+}));
+
 vi.mock('../DataQuality/DataQuality', () => ({
   default: function MockDataQuality({ scanName }: any) {
     return <div data-testid="data-quality">Data Quality - Scan: {scanName}</div>;
@@ -553,10 +565,111 @@ describe('ViewDetails', () => {
       await waitFor(() => {
         expect(screen.getByText('Overview')).toBeInTheDocument();
         expect(screen.getByText('Aspects')).toBeInTheDocument();
-        expect(screen.getByText('Lineage')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Lineage (V2 Preview)' })).toBeInTheDocument();
         expect(screen.getByText('Data Profile')).toBeInTheDocument();
         expect(screen.getByRole('tab', { name: 'Data Quality' })).toBeInTheDocument();
       });
+      // The legacy Lineage tab is hidden by default.
+      expect(screen.queryByRole('tab', { name: 'Lineage' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Lineage (V2 Preview) Tab', () => {
+    const mockGcsEntry = {
+      name: 'projects/test/locations/us/entryGroups/@cloudstorage/entries/bucket',
+      fullyQualifiedName: 'gcs:my-bucket',
+      entryType: 'projects/test/locations/global/entryTypes/cloudstorage-bucket',
+      entrySource: { system: 'cloud_storage', displayName: 'My Bucket', resource: 'projects/_/buckets/my-bucket' },
+      aspects: {},
+    };
+
+    afterEach(() => {
+      mockFeatureFlags.enableLegacyLineageTab = false;
+    });
+
+    it('replaces the legacy Lineage tab for BigQuery tables', async () => {
+      renderViewDetails();
+      await waitFor(() => {
+        const labels = screen.getAllByRole('tab').map((t) => t.textContent);
+        expect(labels).not.toContain('Lineage');
+        // Right after Glossary Terms, where the legacy tab used to be.
+        expect(labels[labels.indexOf('Glossary Terms') + 1]).toBe('Lineage (V2 Preview)');
+      });
+      fireEvent.click(screen.getAllByRole('tab', { name: 'Lineage (V2 Preview)' })[0]);
+      await waitFor(() => {
+        expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
+        expect(screen.getByTestId('data-lineage')).toHaveTextContent('project:dataset.table');
+      });
+      expect(screen.queryByTestId('lineage')).not.toBeInTheDocument();
+    });
+
+    it('shows Lineage (V2 Preview) and hides the legacy tab for Looker entries', async () => {
+      renderViewDetails(mockLookerEntry);
+      await waitFor(() => expect(screen.getAllByRole('tab', { name: 'Lineage (V2 Preview)' }).length).toBeGreaterThan(0));
+      expect(screen.queryByRole('tab', { name: 'Lineage' })).not.toBeInTheDocument();
+      fireEvent.click(screen.getAllByRole('tab', { name: 'Lineage (V2 Preview)' })[0]);
+      await waitFor(() => {
+        expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
+        expect(screen.getByTestId('data-lineage')).toBeInTheDocument();
+      });
+    });
+
+    it('shows Lineage (V2 Preview) for other lineage-capable systems (Cloud Storage)', async () => {
+      renderViewDetails(mockGcsEntry);
+      await waitFor(() => expect(screen.getAllByRole('tab', { name: 'Lineage (V2 Preview)' }).length).toBeGreaterThan(0));
+      fireEvent.click(screen.getAllByRole('tab', { name: 'Lineage (V2 Preview)' })[0]);
+      await waitFor(() => {
+        expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
+        expect(screen.getByTestId('data-lineage')).toHaveTextContent('gcs:my-bucket');
+      });
+    });
+
+    it('hides Lineage (V2 Preview) for datasets, glossaries and unknown systems', async () => {
+      for (const e of [mockDatasetEntry, mockGlossaryEntry, mockOtherEntry]) {
+        const { unmount } = renderViewDetails(e);
+        await waitFor(() => expect(screen.getAllByRole('tab').length).toBeGreaterThan(0));
+        expect(screen.queryByRole('tab', { name: 'Lineage (V2 Preview)' })).not.toBeInTheDocument();
+        unmount();
+      }
+    });
+
+    it('opens the V2 tab from a ?tab=dataLineage deep link', async () => {
+      window.history.pushState({}, '', '/view-details?tab=dataLineage');
+      try {
+        renderViewDetails();
+        await waitFor(() => expect(screen.getByTestId('data-lineage')).toBeInTheDocument());
+      } finally {
+        window.history.pushState({}, '', '/');
+      }
+    });
+
+    it('redirects old ?tab=lineage links to the V2 tab', async () => {
+      window.history.pushState({}, '', '/view-details?tab=lineage');
+      try {
+        renderViewDetails();
+        await waitFor(() => expect(screen.getByTestId('data-lineage')).toBeInTheDocument());
+        expect(screen.queryByTestId('lineage')).not.toBeInTheDocument();
+      } finally {
+        window.history.pushState({}, '', '/');
+      }
+    });
+
+    it('shows the legacy Lineage tab before V2 when the feature flag is enabled', async () => {
+      mockFeatureFlags.enableLegacyLineageTab = true;
+      renderViewDetails();
+      await waitFor(() => {
+        const labels = screen.getAllByRole('tab').map((t) => t.textContent);
+        const idx = labels.indexOf('Lineage');
+        expect(idx).toBeGreaterThan(-1);
+        expect(labels[idx + 1]).toBe('Lineage (V2 Preview)');
+      });
+      fireEvent.click(screen.getAllByRole('tab', { name: 'Lineage' })[0]);
+      await waitFor(() => {
+        expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
+        expect(screen.getByTestId('lineage')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getAllByRole('tab', { name: 'Data Profile' })[0]);
+      await waitFor(() => expect(screen.getByTestId('tabpanel-5')).toBeInTheDocument());
     });
   });
 
@@ -576,16 +689,16 @@ describe('ViewDetails', () => {
       });
     });
 
-    it('switches to Lineage tab when clicked', async () => {
+    it('switches to Lineage (V2 Preview) tab when clicked', async () => {
       renderViewDetails();
 
       await waitFor(() => {
-        fireEvent.click(screen.getByText('Lineage'));
+        fireEvent.click(screen.getByRole('tab', { name: 'Lineage (V2 Preview)' }));
       });
 
       await waitFor(() => {
         expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
-        expect(screen.getByTestId('lineage')).toBeInTheDocument();
+        expect(screen.getByTestId('data-lineage')).toBeInTheDocument();
       });
     });
 
@@ -597,6 +710,7 @@ describe('ViewDetails', () => {
       });
 
       await waitFor(() => {
+        // Legacy Lineage tab hidden: V2 lineage is index 3, Data Profile 4.
         expect(screen.getByTestId('tabpanel-4')).toBeInTheDocument();
         expect(screen.getByTestId('data-profile')).toBeInTheDocument();
       });
@@ -700,14 +814,14 @@ describe('ViewDetails', () => {
   });
 
   describe('Looker Entry Type', () => {
-    it('renders Entry List, Lineage and Glossary Terms tabs for Looker entries', async () => {
+    it('renders Entry List, Lineage (V2 Preview) and Glossary Terms tabs for Looker entries', async () => {
       renderViewDetails(mockLookerEntry);
 
       await waitFor(() => {
         expect(screen.getByText('Overview')).toBeInTheDocument();
         expect(screen.getByText('Entry List')).toBeInTheDocument();
         expect(screen.getByText('Aspects')).toBeInTheDocument();
-        expect(screen.getByText('Lineage')).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Lineage (V2 Preview)' })).toBeInTheDocument();
         expect(screen.getByRole('tab', { name: 'Glossary Terms' })).toBeInTheDocument();
       });
 
@@ -727,16 +841,16 @@ describe('ViewDetails', () => {
       });
     });
 
-    it('renders lineage content for Looker entries', async () => {
+    it('renders V2 lineage content for Looker entries', async () => {
       renderViewDetails(mockLookerEntry);
 
       await waitFor(() => {
-        fireEvent.click(screen.getByText('Lineage'));
+        fireEvent.click(screen.getByRole('tab', { name: 'Lineage (V2 Preview)' }));
       });
 
       await waitFor(() => {
         expect(screen.getByTestId('tabpanel-3')).toBeInTheDocument();
-        expect(screen.getByTestId('lineage')).toBeInTheDocument();
+        expect(screen.getByTestId('data-lineage')).toBeInTheDocument();
       });
     });
 

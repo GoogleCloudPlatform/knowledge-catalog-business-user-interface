@@ -1,8 +1,9 @@
-import {Box, CircularProgress, Tooltip, Typography} from '@mui/material';
+import {Box, CircularProgress, Skeleton, Tooltip, Typography} from '@mui/material';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import Tag from '../Tags/Tag';
+import OverflowTag from '../Tags/OverflowTag';
 import { DateRangeOutlined, LocationOnOutlined, LockOutlined } from '@mui/icons-material';
 import BigQueryProductIcon from '../../assets/svg/BigQuery.svg';
 import LookerStudioIcon from "/assets/svg/looker-icon.svg";
@@ -13,6 +14,7 @@ import type { AppDispatch } from '../../app/store';
 import { generateBigQueryLink, generateLookerStudioLink, getEntryType, toJsDate } from '../../utils/resourceUtils';
 import { FEATURE_FLAGS } from '../../utils/featureFlags';
 import { debounce } from '../../utils/debounce';
+import { formatAspectValue } from '../../utils/aspectValueUtils';
 import DatabaseIcon from '../../assets/svg/database_icon.svg';
 import BucketIcon from '../../assets/svg/bucket_icon.svg';
 import ClusterIcon from '../../assets/svg/cluster_icon.svg';
@@ -91,6 +93,11 @@ interface SearchEntriesCardProps {
   onNavigateToTab?: (entry: any, tabName: string) => void;
   id_token?: string;
   onRequestAccess?: (entry: any) => void;
+  // Browse by Annotations' Linked Assets "Aspect Value" chip (card/list view
+  // counterpart to SearchTableView's column). Undefined for every other
+  // caller (Search, Data Products, Glossaries), so the chip is never
+  // rendered there - see ResourceViewer.tsx's list-view branch.
+  aspectValueColumn?: { label: string; valuesByEntry: Record<string, unknown> };
 }
 
 // const getProductIcon = (productName: string) => {
@@ -185,7 +192,7 @@ const getAssetIcon = (assetName: string) => {
       return GenericIcon;
   }
 };
-const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSelected = false, onDoubleClick, disableHoverEffect: _disableHoverEffect = false, hideTopBorderOnHover: _hideTopBorderOnHover = false, index: _index, onNavigateToTab, id_token = '', onRequestAccess}) => {
+const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSelected = false, onDoubleClick, disableHoverEffect: _disableHoverEffect = false, hideTopBorderOnHover: _hideTopBorderOnHover = false, index: _index, onNavigateToTab, id_token = '', onRequestAccess, aspectValueColumn}) => {
   const entryData = entry;//useState<any>(entry);
   //const [parentName, setParentName] = useState<string>('');
   const [name, setName] = useState<string>('');
@@ -316,18 +323,18 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
           }}
           className={`entriesHoverEffect${isSelected ? ' selected' : ''}`}
           >
-          {/* Row 1: Icon + Title + Action Icons */}
+          {/* Row 1: Icon + Title + Aspect Value chip + Action Icons */}
           <div style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
+            gap: '8px',
             flex: 'none',
           }}>
             <div style={{
               display: "flex",
               alignItems: "center",
               gap: '8px',
-              flex: '1 1 auto',
+              flex: '0 1 auto',
               minWidth: 0,
             }}>
               {isGlossaryAssetType(capitalizeFirstLetter(entryType)) ? (
@@ -364,11 +371,77 @@ const SearchEntriesCard: React.FC<SearchEntriesCardProps> = ({ entry, sx, isSele
                   {name}
                 </Typography>
             </div>
+            {aspectValueColumn && (
+              // Loading is per-card, keyed on whether this entry's value has
+              // actually landed in the map yet - same key-presence check as
+              // SearchTableView's column (see its comment for why this is
+              // deliberately not also gated on a status flag). Rendered as a
+              // sibling of the title-group (not nested inside it) and before
+              // the action-icon group below, which is pushed flush right via
+              // its own marginLeft:'auto' - this keeps the chip reliably
+              // snug against the title regardless of nested flex shrink-to-
+              // fit sizing quirks.
+              !Object.prototype.hasOwnProperty.call(aspectValueColumn.valuesByEntry, entry.name) ? (
+                <Skeleton
+                  data-testid="aspect-value-chip-skeleton"
+                  variant="rounded"
+                  width={72}
+                  height={20}
+                  sx={{ borderRadius: '8px', flexShrink: 0 }}
+                />
+              ) : (
+                <div className="aspect-value-chip" style={{
+                  flexShrink: 1,
+                  minWidth: 0,
+                  maxWidth: '40%',
+                  // Vertical centering lives here, via flexbox, rather than
+                  // on the text element itself (a `lineHeight` matching a
+                  // fixed `height` is font-metric-dependent and was visibly
+                  // imprecise - easy to miss without a border, obvious once
+                  // one was added). This centers whatever single-line height
+                  // the text naturally takes, regardless of font metrics.
+                  display: 'flex',
+                  alignItems: 'center',
+                  height: '20px',
+                  boxSizing: 'border-box',
+                  padding: '0px 8px',
+                  // Darkened from the original #E9EEF6/no-border design
+                  // reference, plus a border and subtle shadow: the card's
+                  // hover background (#EDF2FC, see SearchEntriesCard.css) is
+                  // only a few RGB units off from a flat #E9EEF6 fill, so the
+                  // chip needs real contrast (not just a hairline) to read
+                  // clearly in both the default and hovered states.
+                  background: '#E3E8F0',
+                  borderRadius: '8px',
+                }}>
+                  <OverflowTag
+                    text={formatAspectValue(aspectValueColumn.valuesByEntry[entry.name])}
+                    className="asset-tag"
+                    css={{
+                      fontFamily: '"Google Sans", sans-serif',
+                      color: '#575757',
+                      background: 'transparent',
+                      border: 'none',
+                      margin: 0,
+                      padding: 0,
+                      height: 'auto',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      letterSpacing: '0.2px',
+                      lineHeight: 'normal',
+                      cursor: 'default',
+                      transition: 'none',
+                    }}
+                  />
+                </div>
+              )
+            )}
             <div style={{
               display: "flex",
               alignItems: "center",
               flex: '0 0 auto',
               gap: '20px',
+              marginLeft: 'auto',
             }}>
               {/* Aspects — always shown */}
               {isAccessConfirmed ? (

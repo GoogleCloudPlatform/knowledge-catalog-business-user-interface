@@ -1020,4 +1020,119 @@ describe('SearchEntriesCard', () => {
       });
     });
   });
+
+  describe('Aspect Value chip (Browse by Annotations Linked Assets only)', () => {
+    it('does not render a chip or skeleton when aspectValueColumn is not provided', async () => {
+      const entry = createMockEntry();
+      render(<SearchEntriesCard entry={entry} />);
+
+      await waitFor(() => {
+        expect(screen.getAllByTestId('tag')).toHaveLength(2); // system + type only
+      });
+      expect(screen.queryByTestId('aspect-value-chip-skeleton')).not.toBeInTheDocument();
+    });
+
+    it('shows a skeleton while this entry is missing from valuesByEntry', async () => {
+      const entry = createMockEntry();
+      render(
+        <SearchEntriesCard
+          entry={entry}
+          aspectValueColumn={{ label: 'sensitivityLevel', valuesByEntry: {} }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('aspect-value-chip-skeleton')).toBeInTheDocument();
+      });
+      // Only the system + type tags - the chip itself is still a skeleton, not a Tag.
+      expect(screen.getAllByTestId('tag')).toHaveLength(2);
+    });
+
+    it('renders the resolved value as a chip once this entry is in valuesByEntry', async () => {
+      const entry = createMockEntry();
+      render(
+        <SearchEntriesCard
+          entry={entry}
+          aspectValueColumn={{
+            label: 'sensitivityLevel',
+            valuesByEntry: { [entry.name]: 'HIGH' },
+          }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('aspect-value-chip-skeleton')).not.toBeInTheDocument();
+        const tags = screen.getAllByTestId('tag');
+        expect(tags).toHaveLength(3); // system + type + aspect value
+        // The chip is in the title row, which comes before the system/type
+        // tags in DOM order, so it's the first "tag"-testid element.
+        expect(tags[0]).toHaveTextContent('HIGH');
+        // Flat neutral chip style (not the blue system/type tag style). The
+        // pill's box-model (background/border/height/radius) lives on the
+        // wrapping div, which also flex-centers the text vertically - the
+        // Tag/text element itself only carries font/color. Checked via raw
+        // inline style (not toHaveStyle/getComputedStyle): this tree
+        // includes a `flex` shorthand rule elsewhere, which hits a known
+        // jsdom/cssstyle crash on any computed-style access - see the same
+        // note in AspectLinkedAssetsSkeleton.tsx.
+        const chipBox = tags[0].parentElement?.parentElement as HTMLElement;
+        expect(chipBox.style.background).toBe('rgb(227, 232, 240)'); // #E3E8F0
+        // Note: the `border` shorthand (and its longhands, and even the raw
+        // style attribute text) all come back empty for this value in jsdom
+        // - the same underlying shorthand-parsing limitation already hit
+        // with `flex` (see AspectLinkedAssetsSkeleton.tsx's comment), so it
+        // isn't asserted here; verified visually instead.
+        expect(chipBox.style.height).toBe('20px');
+        expect(chipBox.style.borderRadius).toBe('8px');
+        expect(tags[0].style.color).toBe('rgb(87, 87, 87)'); // #575757
+      });
+    });
+
+    it('renders the chip as the icon+title group\'s very next sibling, before the action icons', async () => {
+      const entry = createMockEntry();
+      render(
+        <SearchEntriesCard
+          entry={entry}
+          aspectValueColumn={{
+            label: 'sensitivityLevel',
+            valuesByEntry: { [entry.name]: 'HIGH' },
+          }}
+        />
+      );
+
+      await waitFor(() => {
+        const titleGroup = screen.getByText('Test Entry Name').parentElement as HTMLElement;
+        // The chip is a sibling of the icon+title group (not nested inside
+        // it), immediately following it, with the action-icon group (pushed
+        // flush right via its own marginLeft: 'auto') coming after that -
+        // this ordering is what keeps the chip snug against the title
+        // regardless of nested flex shrink-to-fit sizing quirks.
+        const chipEl = titleGroup.nextElementSibling as HTMLElement;
+        expect(chipEl).toHaveTextContent('HIGH');
+
+        const actionIconsGroup = chipEl.nextElementSibling as HTMLElement;
+        expect(actionIconsGroup.style.marginLeft).toBe('auto');
+      });
+    });
+
+    it('shows a dash for a resolved-but-unset value, not a loader', async () => {
+      const entry = createMockEntry();
+      render(
+        <SearchEntriesCard
+          entry={entry}
+          aspectValueColumn={{
+            label: 'sensitivityLevel',
+            // Key present (fetch completed for this row) but the field isn't set.
+            valuesByEntry: { [entry.name]: undefined },
+          }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('aspect-value-chip-skeleton')).not.toBeInTheDocument();
+        const tags = screen.getAllByTestId('tag');
+        expect(tags[0]).toHaveTextContent('—');
+      });
+    });
+  });
 });

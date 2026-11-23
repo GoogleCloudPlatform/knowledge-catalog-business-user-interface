@@ -343,6 +343,9 @@ const DataProductAssets: React.FC<DataProductAssetsProps> = ({
               isDataProduct={true}
               hideViewToggle={true}
               onViewDetails={(entry) => {
+                // Assets not found in Knowledge Catalog are listed from the data
+                // product API alone; they have no catalog entry to open.
+                if (entry?.notInCatalog) return;
                 dispatch(clearHistory());
                 dispatch(fetchEntry({ entryName: entry.name, id_token: idToken }));
                 navigate(`/view-details?entry=${encodeURIComponent(btoa(entry.name))}`);

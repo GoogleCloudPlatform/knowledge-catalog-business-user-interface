@@ -7,6 +7,7 @@ import { typeAliases } from "../../utils/resourceUtils";
 import AspectLinkedAssetsSkeleton from "./AspectLinkedAssetsSkeleton";
 import FilterBar, { FilterBarChips } from '../Common/FilterBar';
 import type { ActiveFilter as FilterBarActiveFilter } from '../Common/FilterBar';
+import { formatAspectValue } from '../../utils/aspectValueUtils';
 
 interface AspectLinkedAssetsProps {
   linkedAssets: any[];
@@ -18,6 +19,18 @@ interface AspectLinkedAssetsProps {
   resourcesStatus: 'idle' | 'loading' | 'succeeded' | 'failed';
   isSidebarOpen?: boolean;
   onSidebarToggle?: (open: boolean) => void;
+  // The value of the aspect field currently being browsed, per entry name.
+  // Only ever passed here (Browse by Annotations) - other ResourceViewer call
+  // sites (Search, Data Products) never pass it, so their table is unaffected.
+  aspectValueColumn?: { label: string; valuesByEntry: Record<string, unknown> };
+  // The currently-browsed field's Dataplex schema type ('string' | 'enum' |
+  // ...) and, when it's an enum, its fixed set of allowed values - drives
+  // whether the "Aspect Value" filter below is free-text or a category
+  // picker (which still allows typing). Kept separate from aspectValueColumn
+  // (rather than folded into it) so ResourceViewer/SearchTableView/
+  // SearchEntriesCard, which also type that prop, need no changes.
+  aspectFieldType?: string;
+  aspectEnumValues?: string[];
 }
 
 const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
@@ -30,6 +43,9 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
   resourcesStatus,
   isSidebarOpen,
   onSidebarToggle,
+  aspectValueColumn,
+  aspectFieldType,
+  aspectEnumValues,
 }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<any[]>([]);
@@ -39,11 +55,31 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
   const [assetPreviewData, setAssetPreviewData] = useState<any | null>(null);
   const isSmallScreen = useMediaQuery('(max-width: 1280px)');
 
+  const isEnumAspectValue = aspectFieldType === 'enum' && Array.isArray(aspectEnumValues) && aspectEnumValues.length > 0;
+  // Booleans aren't Dataplex enums (no schema-provided enumValues), but have
+  // exactly two known values - same category-picker-with-typing treatment as
+  // enum, just with a hardcoded options list instead of one read from the
+  // aspect type's schema. Every other field type (string, int, datetime, ...)
+  // is unaffected and stays plain free-text, as before.
+  const isBooleanAspectValue = aspectFieldType === 'bool' || aspectFieldType === 'boolean';
+  const isCategoryAspectValue = isEnumAspectValue || isBooleanAspectValue;
+  const aspectCategoryValues = isBooleanAspectValue ? ['true', 'false'] : (aspectEnumValues ?? []);
+
   useEffect(() => {
     if (isPreviewOpen === false) {
       setAssetPreviewData(null);
     }
   }, [isPreviewOpen]);
+
+  // The "Aspect Value" filter is specific to whichever sub-type/field is
+  // currently being browsed - switching to a different one makes any active
+  // value filter meaningless (e.g. "HIGH" selected under one field has no
+  // relation to a different field's values), so clear it rather than let it
+  // silently and confusingly carry over. Name/Description filters are
+  // unrelated to the selected field and are intentionally left alone.
+  useEffect(() => {
+    setFilterBarActiveFilters((prev) => prev.filter((f) => f.property !== 'Aspect Value'));
+  }, [aspectValueColumn?.label]);
 
   useEffect(() => {
     if (isSmallScreen && isSidebarOpen) {
@@ -59,6 +95,13 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
       assets = assets.filter((asset: any) => {
         const name = asset.dataplexEntry?.entrySource?.displayName || "";
         const description = asset.dataplexEntry?.entrySource?.description || "";
+        // Formatted the same way it's displayed (column/chip), so the filter
+        // always matches exactly what's shown on screen - including '—' for
+        // an entry whose value hasn't loaded yet or isn't set, which simply
+        // won't match a real search term.
+        const aspectValue = aspectValueColumn
+          ? formatAspectValue(aspectValueColumn.valuesByEntry[asset.dataplexEntry?.name])
+          : "";
 
         const filterGroups: FilterBarActiveFilter[][] = [];
         let currentGroup: FilterBarActiveFilter[] = [];
@@ -79,6 +122,10 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
               switch (filter.property) {
                 case 'Name': return name.toLowerCase().includes(lower);
                 case 'Description': return description.toLowerCase().includes(lower);
+                // Same substring match as every other property here - a
+                // clicked enum option matches exactly (values don't overlap
+                // in practice), and free-typed partial text still works.
+                case 'Aspect Value': return aspectValue.toLowerCase().includes(lower);
                 default: return name.toLowerCase().includes(lower) || description.toLowerCase().includes(lower);
               }
             })
@@ -162,7 +209,7 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
     }
 
     return assets;
-  }, [linkedAssets, filterBarActiveFilters, activeFilters]);
+  }, [linkedAssets, filterBarActiveFilters, activeFilters, aspectValueColumn]);
 
   const handleRemoveChip = (filter: FilterBarActiveFilter) => {
     if (filter.id) {
@@ -280,6 +327,7 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
               setPageSize={setAssetPageSize}
               requestItemStore={filteredLinkedAssets}
               handlePagination={() => {}}
+              aspectValueColumn={aspectValueColumn}
               showFilters={true}
               showSortBy={true}
               showResultsCount={false}
@@ -336,7 +384,18 @@ const AspectLinkedAssets: React.FC<AspectLinkedAssetsProps> = ({
                     propertyNames={[
                       { name: 'Name', mode: 'text' as const },
                       { name: 'Description', mode: 'text' as const },
+                      ...(aspectValueColumn ? [{
+                        name: 'Aspect Value',
+                        // Enum/boolean field: show as a selectable category
+                        // list (via getPropertyValues below) while 'both'
+                        // still allows typing. Every other field type: free
+                        // text only, same as before.
+                        mode: isCategoryAspectValue ? 'both' as const : 'text' as const,
+                      }] : []),
                     ]}
+                    getPropertyValues={(property) =>
+                      property === 'Aspect Value' && isCategoryAspectValue ? aspectCategoryValues : []
+                    }
                     activeFilters={filterBarActiveFilters}
                     onActiveFiltersChange={setFilterBarActiveFilters}
                     marginLeft="0px"

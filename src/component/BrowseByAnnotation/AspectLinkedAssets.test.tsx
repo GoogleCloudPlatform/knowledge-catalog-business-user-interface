@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -513,6 +514,176 @@ describe('AspectLinkedAssets', () => {
     });
   });
 
+  describe('Aspect Value filter', () => {
+    const assetsWithAspectValues = [
+      {
+        dataplexEntry: {
+          name: 'entries/alpha',
+          entrySource: { displayName: 'Alpha', description: 'Alpha asset', system: 'BigQuery', resource: 'projects/p/datasets/d/tables/alpha' },
+          entryType: 'projects/test/entryTypes/table',
+          aspects: {},
+        },
+        linkedResource: 'projects/p/datasets/d/tables/alpha',
+      },
+      {
+        dataplexEntry: {
+          name: 'entries/beta',
+          entrySource: { displayName: 'Beta', description: 'Beta asset', system: 'BigQuery', resource: 'projects/p/datasets/d/tables/beta' },
+          entryType: 'projects/test/entryTypes/table',
+          aspects: {},
+        },
+        linkedResource: 'projects/p/datasets/d/tables/beta',
+      },
+      {
+        dataplexEntry: {
+          name: 'entries/gamma',
+          entrySource: { displayName: 'Gamma', description: 'Gamma asset', system: 'BigQuery', resource: 'projects/p/datasets/d/tables/gamma' },
+          entryType: 'projects/test/entryTypes/table',
+          aspects: {},
+        },
+        linkedResource: 'projects/p/datasets/d/tables/gamma',
+      },
+    ];
+
+    const openFilterBarMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+      const filterListIcon = document.querySelector('[data-testid="FilterListIcon"]')?.closest('button') as HTMLElement;
+      await user.click(filterListIcon);
+    };
+
+    // FilterBar's text input is controlled (searchTerm/onSearchTermChange) -
+    // defaultProps.onSearchTermChange is a no-op vi.fn(), which would leave
+    // the input permanently empty while typing. This wrapper actually wires
+    // the two together, the way the real MainComponent/AspectLinkedAssets
+    // parent does, so typed text is reflected back into the controlled input.
+    const StatefulSearchTerm: React.FC<Omit<React.ComponentProps<typeof AspectLinkedAssets>, 'searchTerm' | 'onSearchTermChange'>> = (props) => {
+      const [term, setTerm] = useState('');
+      return <AspectLinkedAssets {...props} searchTerm={term} onSearchTermChange={setTerm} />;
+    };
+
+    it('does not add an "Aspect Value" property when aspectValueColumn is not provided', async () => {
+      const user = userEvent.setup();
+      render(<AspectLinkedAssets {...defaultProps} />);
+
+      await openFilterBarMenu(user);
+
+      expect(screen.queryByText('Aspect Value')).not.toBeInTheDocument();
+    });
+
+    it('adds a free-text "Aspect Value" property for a plain string field', async () => {
+      const user = userEvent.setup();
+      render(
+        <StatefulSearchTerm
+          {...defaultProps}
+          linkedAssets={assetsWithAspectValues}
+          aspectValueColumn={{
+            label: 'owner',
+            valuesByEntry: { 'entries/alpha': 'alice@example.com', 'entries/beta': 'bob@example.com', 'entries/gamma': 'alice@example.com' },
+          }}
+          aspectFieldType="string"
+        />
+      );
+
+      await openFilterBarMenu(user);
+      expect(screen.getByText('Aspect Value')).toBeInTheDocument();
+
+      await user.click(screen.getByText('Aspect Value'));
+      await user.keyboard('alice{Enter}');
+
+      // Only the two entries whose owner value contains "alice" remain.
+      expect(screen.getByTestId('rv-count')).toHaveTextContent('2');
+    });
+
+    it('shows a selectable category list for an enum field, still matching on click', async () => {
+      const user = userEvent.setup();
+      render(
+        <AspectLinkedAssets
+          {...defaultProps}
+          linkedAssets={assetsWithAspectValues}
+          aspectValueColumn={{
+            label: 'sensitivityLevel',
+            valuesByEntry: { 'entries/alpha': 'HIGH', 'entries/beta': 'LOW', 'entries/gamma': 'HIGH' },
+          }}
+          aspectFieldType="enum"
+          aspectEnumValues={['HIGH', 'LOW', 'MEDIUM']}
+        />
+      );
+
+      await openFilterBarMenu(user);
+      await user.hover(screen.getByText('Aspect Value'));
+
+      const highOption = await screen.findByText('HIGH');
+      await user.click(highOption);
+
+      expect(screen.getByTestId('rv-count')).toHaveTextContent('2');
+    });
+
+    it('shows a true/false category list for a boolean field, still matching on click', async () => {
+      const user = userEvent.setup();
+      render(
+        <AspectLinkedAssets
+          {...defaultProps}
+          linkedAssets={assetsWithAspectValues}
+          aspectValueColumn={{
+            label: 'isCertified',
+            valuesByEntry: { 'entries/alpha': true, 'entries/beta': false, 'entries/gamma': true },
+          }}
+          aspectFieldType="bool"
+        />
+      );
+
+      await openFilterBarMenu(user);
+      await user.hover(screen.getByText('Aspect Value'));
+
+      // Hardcoded options (booleans have no schema-provided enumValues), not
+      // the aspectEnumValues prop (unset here). Queried by menuitem role -
+      // the mocked ResourceViewer also renders plain "true"/"false" text for
+      // several boolean props, so a bare text query would be ambiguous.
+      const trueOption = await screen.findByRole('menuitem', { name: 'true' });
+      expect(trueOption).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'false' })).toBeInTheDocument();
+
+      await user.click(trueOption);
+      expect(screen.getByTestId('rv-count')).toHaveTextContent('2');
+    });
+
+    it('clears the "Aspect Value" filter when the browsed field changes, but keeps Name/Description filters', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <AspectLinkedAssets
+          {...defaultProps}
+          linkedAssets={assetsWithAspectValues}
+          aspectValueColumn={{
+            label: 'sensitivityLevel',
+            valuesByEntry: { 'entries/alpha': 'HIGH', 'entries/beta': 'LOW', 'entries/gamma': 'HIGH' },
+          }}
+          aspectFieldType="enum"
+          aspectEnumValues={['HIGH', 'LOW', 'MEDIUM']}
+        />
+      );
+
+      await openFilterBarMenu(user);
+      await user.hover(screen.getByText('Aspect Value'));
+      await user.click(await screen.findByText('HIGH'));
+      expect(screen.getByTestId('rv-count')).toHaveTextContent('2');
+
+      // Switch to a different field - a new (unrelated) set of values.
+      rerender(
+        <AspectLinkedAssets
+          {...defaultProps}
+          linkedAssets={assetsWithAspectValues}
+          aspectValueColumn={{
+            label: 'owner',
+            valuesByEntry: { 'entries/alpha': 'alice@example.com', 'entries/beta': 'bob@example.com', 'entries/gamma': 'carol@example.com' },
+          }}
+          aspectFieldType="string"
+        />
+      );
+
+      // The stale "HIGH" filter (meaningless for the new field) is gone, so all three assets show again.
+      expect(screen.getByTestId('rv-count')).toHaveTextContent('3');
+    });
+  });
+
   describe('preview data handling', () => {
     it('should call onAssetPreviewChange when preview is set', async () => {
       const user = userEvent.setup();
@@ -851,6 +1022,19 @@ describe('AspectLinkedAssetsSkeleton', () => {
       const roundedSkeletons = document.querySelectorAll('.MuiSkeleton-rounded');
       // 6 cards * 2 tags + icon + filter button + search = at least 14
       expect(roundedSkeletons.length).toBeGreaterThanOrEqual(14);
+    });
+
+    it('should render one Aspect Value chip placeholder (72x20) per card', () => {
+      render(<AspectLinkedAssetsSkeleton />);
+
+      // Reserves space next to the title for the real "Aspect Value" chip
+      // (see SearchEntriesCard.tsx) so the card doesn't jump in height/width
+      // once the chip's value loads in.
+      const roundedSkeletons = Array.from(document.querySelectorAll('.MuiSkeleton-rounded'));
+      const chipPlaceholders = roundedSkeletons.filter(
+        (el) => el.getAttribute('style')?.includes('width: 72px') && el.getAttribute('style')?.includes('height: 20px')
+      );
+      expect(chipPlaceholders).toHaveLength(6);
     });
   });
 

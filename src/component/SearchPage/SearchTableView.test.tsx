@@ -1384,4 +1384,71 @@ describe("SearchTableView", () => {
       });
     });
   });
+
+  describe("Aspect Value column", () => {
+    it("does not render the column when aspectValueColumn is not provided", () => {
+      render(<SearchTableView {...defaultProps} />);
+      expect(screen.queryByText("Aspect Value")).not.toBeInTheDocument();
+    });
+
+    it("renders the column header as the static title \"Aspect Value\"", () => {
+      render(
+        <SearchTableView
+          {...defaultProps}
+          aspectValueColumn={{ label: "sensitivityLevel", valuesByEntry: {} }}
+        />
+      );
+      expect(screen.getByText("Aspect Value")).toBeInTheDocument();
+    });
+
+    it("shows a loading skeleton for a row whose value hasn't arrived yet", () => {
+      render(
+        <SearchTableView
+          {...defaultProps}
+          aspectValueColumn={{ label: "sensitivityLevel", valuesByEntry: {} }}
+        />
+      );
+      // None of the three mock entries are in valuesByEntry yet.
+      expect(screen.getAllByTestId("aspect-value-skeleton")).toHaveLength(mockResources.length);
+    });
+
+    it("renders the resolved value once the row's key is present in valuesByEntry", () => {
+      render(
+        <SearchTableView
+          {...defaultProps}
+          aspectValueColumn={{
+            label: "sensitivityLevel",
+            valuesByEntry: {
+              "projects/test/locations/us/entries/alpha_entry": "HIGH",
+              "projects/test/locations/us/entries/beta_entry": undefined,
+              "projects/test/locations/us/entries/gamma_entry": "LOW",
+            },
+          }}
+        />
+      );
+      expect(screen.getByText("HIGH")).toBeInTheDocument();
+      expect(screen.getByText("LOW")).toBeInTheDocument();
+      // beta's key is present (value undefined - field not set on that entry),
+      // so it's resolved too: shown as a dash, not a loader.
+      expect(screen.queryAllByTestId("aspect-value-skeleton")).toHaveLength(0);
+      expect(screen.getByText("—")).toBeInTheDocument();
+    });
+
+    it("keeps showing the loader for rows missing from valuesByEntry regardless of any other state", () => {
+      // Deliberate: there is no separate "status" escape hatch here. An
+      // earlier version bypassed the loader once a fetch reached a terminal
+      // state, which let a stray resolution (succeeded with an incomplete
+      // map) flash a dash before a later correct dispatch overwrote it -
+      // this column only ever resolves a row once that row's own key
+      // actually lands in valuesByEntry.
+      render(
+        <SearchTableView
+          {...defaultProps}
+          aspectValueColumn={{ label: "sensitivityLevel", valuesByEntry: {} }}
+        />
+      );
+      expect(screen.getAllByTestId("aspect-value-skeleton")).toHaveLength(mockResources.length);
+      expect(screen.queryByText("—")).not.toBeInTheDocument();
+    });
+  });
 });

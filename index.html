@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/icon" href="/assets/svg/dataplex_icon_new.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Build/deploy stamp used to auto-reload open clients after a redeploy (src/utils/appVersion.ts).
+         app-build-time is set by vite.config.ts; app-deploy-id by entrypoint.sh at container start. -->
+    <meta name="app-build-time" content="__APP_BUILD_TIME__" />
+    <meta name="app-deploy-id" content="__APP_DEPLOY_ID__" />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,600&family=Google+Sans:wght@400;500;600;700&family=Google+Sans+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0" rel="stylesheet" />
     <title>Knowledge Catalog | Business Interface</title>

@@ -8,10 +8,9 @@ import PreviewAnnotation from '../Annotation/PreviewAnnotation'
 import AnnotationFilter from '../Annotation/AnnotationFilter'
 import type { AppDispatch } from '../../app/store'
 import { useAuth } from '../../auth/AuthProvider'
-import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap'
 import { getMimeType, getName  } from '../../utils/resourceUtils'
 import DetailPageOverviewSkeleton from '../DetailPageOverview/DetailPageOverviewSkeleton';
-import { fetchDataProductsAssetsList, fetchDataProductsList, getDataProductDetails, setDataProductsDetailTabValue } from '../../features/dataProducts/dataProductsSlice'
+import { fetchDataProductsAssetsList, ensureDataProductsLoaded, getDataProductDetails, setDataProductsDetailTabValue } from '../../features/dataProducts/dataProductsSlice'
 import Assets from './Assets'
 import AccessGroup from './AccessGroup'
 import Contract from './Contract'
@@ -78,7 +77,6 @@ interface DataProductsDetailViewProps {
 const DataProductsDetailView: React.FC<DataProductsDetailViewProps> = ({ onRequestAccess }) => {
 
   const { user } = useAuth();
-  const { isBootstrapping, isProjectMappingReady, isAppConfigReady } = useAppBootstrapStatus();
   const {
         dataProductsItems,
         status, 
@@ -268,30 +266,30 @@ const tabProps = (index: number)  => {
 }
 
   useEffect(() => {
-    // Gated on the project mapping AND appConfig - see the matching effect in
-    // DataProducts.tsx. isProjectMappingReady: a failed /get-projects satisfies
-    // isBootstrapping but leaves the merge unable to recognise a product returned
-    // by both sources. isAppConfigReady: fetchDataProductsList reads appConfig
-    // (projectsRestricted / configuredProjectIds) to scope the request, so gating
-    // on project mapping alone would let it fire unscoped if /get-projects
-    // resolves before /app-configs.
-    if (dataProductsItems.length === 0 && status === 'idle' && user?.token && isProjectMappingReady && isAppConfigReady) {
-       dispatch(fetchDataProductsList({ id_token: user?.token }));
+    // No bootstrap gate - see the matching effect in DataProducts.tsx (project
+    // mapping comes from the backend, and project scoping is applied server-side
+    // from configData.json, so there is no unscoped window before /app-configs).
+    // Renders from memory / the persisted cache and revalidates only when stale.
+    if (user?.token) {
+       dispatch(ensureDataProductsLoaded({ id_token: user.token, email: user.email }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch, user?.token]);
+
+  useEffect(() => {
     if(status=== 'succeeded'){
         setDataProductsList(dataProductsItems);
     }
-  }, [dispatch, dataProductsItems.length, status, user?.token, isProjectMappingReady, isAppConfigReady]);
+  }, [dataProductsItems, status]);
 
-    // Wait for the bootstrap before fetching: getDataProductDetails resolves the
-    // project number from the /get-projects list at dispatch time to build the
-    // entry name, so firing on a cold deep-link/reload before it's populated
-    // produces a malformed entry name and a false PERMISSION_DENIED.
+    // No bootstrap gate: the backend builds the catalog entry name (which needs
+    // the project number) from the data product name and resolves/caches the
+    // project identity itself, so cold deep links and reloads fetch immediately.
     useEffect(() => {
-    if (selectedDataProductStatus === 'idle' && dataProductIdFromUrl && user?.token && !isBootstrapping) {
+    if (selectedDataProductStatus === 'idle' && dataProductIdFromUrl && user?.token) {
       dispatch(getDataProductDetails({ id_token: user.token, dataProductId: dataProductIdFromUrl }));
     }
-    }, [dispatch, selectedDataProductStatus, dataProductIdFromUrl, user?.token, isBootstrapping]);
+    }, [dispatch, selectedDataProductStatus, dataProductIdFromUrl, user?.token]);
 
     useEffect(() => {
     if(selectedDataProductStatus=== 'succeeded'){

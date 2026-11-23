@@ -15,7 +15,9 @@ const { sendAccessRequestEmail, sendFeedbackEmail, sendDataplexAccessRequest } =
 const { BigQuery } = require('@google-cloud/bigquery');
 const rateLimit = require('express-rate-limit');
 const { default: axios } = require('axios');
+const crypto = require('crypto');
 const { googleAuthMiddleware } = require('./middleware/googleAuth');
+const { parseLocationList, locationFromResourceName, resolveLineageLocations } = require('./lineageLocations');
 
 
 class CustomGoogleAuth extends GoogleAuth {
@@ -164,23 +166,53 @@ app.use('/api', googleAuthMiddleware);
 // Serve static files from the React build folder
 const staticFilesPath = path.join(__dirname, 'dist'); 
 
+// ---------------------------------------------------------------------------
+// Caching policy for the frontend (so a redeploy reaches every client):
+//  - index.html (direct or via the SPA fallback) and version.json: never cached.
+//    They are what tells the browser - and open tabs - which build is current.
+//  - Content-hashed build output directly under dist/assets (Vite names these
+//    <name>-<8 char hash>.<ext>): cached for a year, immutable. A new build gets
+//    new names; the entry JS/CSS that entrypoint.sh rewrites at startup are also
+//    referenced with ?v=<deployId>, so a config-only redeploy changes the URL too.
+//  - Everything else (unhashed files copied from public/, e.g. assets/svg/*):
+//    revalidated on every use (ETag), so a changed image is picked up at once.
+//  - A missing file is a 404 (never index.html), so a stale page asking for a
+//    removed asset fails fast instead of parsing HTML as JavaScript.
+// ---------------------------------------------------------------------------
+const NO_STORE_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, max-age=0';
+const HASHED_ASSET_RE = /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/;
+const hashedAssetsDir = path.join(staticFilesPath, 'assets');
+
+function setNoStoreHeaders(res) {
+  res.setHeader('Cache-Control', NO_STORE_CACHE_CONTROL);
+  res.setHeader('Pragma', 'no-cache'); // For backward compatibility with HTTP/1.0
+  res.setHeader('Expires', '0'); // For backward compatibility
+}
+
 // Serve static files with custom headers
 app.use(express.static(staticFilesPath, {
     index: 'index.html', // Ensure index.html is served for directory requests
     setHeaders: (res, filePath) => {
-        // Check if the file path ends with index.html
-        if (filePath.endsWith('index.html')) {
-            // Apply cache-busting headers for index.html
-            res.setHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, no-store');
-            res.setHeader('Pragma', 'no-cache'); // For backward compatibility with HTTP/1.0
-            res.setHeader('Expires', '0'); // For backward compatibility
+        const fileName = path.basename(filePath);
+        if (fileName === 'index.html' || fileName === 'version.json') {
+            setNoStoreHeaders(res);
+        } else if (path.dirname(filePath) === hashedAssetsDir && HASHED_ASSET_RE.test(fileName)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // Cache for 1 year
         } else {
-          // For other static assets (which typically have cache-busting hashes in their filenames in React SPAs)
-          // We are setting a long max-age for long-term caching
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // Cache for 1 year
+            res.setHeader('Cache-Control', 'no-cache'); // Revalidate (ETag) on every use
         }
     }
 }));
+
+// A request for a file (path with an extension) that express.static did not
+// find must not fall through to the SPA fallback: return a non-cacheable 404.
+app.use((req, res, next) => {
+  if ((req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api/') && path.extname(req.path)) {
+    setNoStoreHeaders(res);
+    return res.status(404).send('Not found');
+  }
+  next();
+});
 
 // --- File Path for Local Data ---
 const dataFilePath = path.join(__dirname, 'configData.json');
@@ -392,6 +424,58 @@ app.post('/api/v1/aspects', async (req, res) => {
     console.error(`Error fetching aspects for entry ${entryName}:`, error);
     // Return a generic error message to the client
     return checkErrorAndSendResponse(res, error, 'An error occurred while fetching aspects from Knowledge Catalog.');
+  }
+});
+
+/**
+ * POST /api/v1/batch-entry-aspects
+ * A protected endpoint to fetch the `aspects` map for many Knowledge Catalog
+ * entries at once (e.g. to populate an "Aspect Value" column for a page of
+ * search/browse results). One failing/inaccessible entry does not fail the
+ * whole batch - its value comes back as null.
+ *
+ * Request Body:
+ * {
+ * "entryNames": ["The full resource name of each entry", ...]
+ * }
+ */
+app.post('/api/v1/batch-entry-aspects', async (req, res) => {
+  const { entryNames } = req.body;
+  const accessToken = req.headers.authorization?.split(' ')[1]; // Expect
+
+  if (!entryNames || !Array.isArray(entryNames)) {
+    return checkErrorAndSendResponse(res, error, 'Bad Request: An "entryNames" field (array of strings) is required.');
+  }
+
+  try {
+    const oauth2Client = getAuthClient(accessToken);
+
+    const dataplexClientv1 = new CatalogServiceClient({
+        auth: oauth2Client,
+    });
+
+    console.log(`Fetching aspects for a batch of ${entryNames.length} entries.`);
+
+    const results = await Promise.allSettled(
+      entryNames.map((name) => dataplexClientv1.getEntry({ name, view: protos.google.cloud.dataplex.v1.EntryView.ALL }))
+    );
+
+    const aspectsByEntry = {};
+    results.forEach((result, index) => {
+      const entryName = entryNames[index];
+      if (result.status === 'fulfilled') {
+        aspectsByEntry[entryName] = result.value?.[0]?.aspects || {};
+      } else {
+        console.error(`Error fetching aspects for entry ${entryName}:`, result.reason);
+        aspectsByEntry[entryName] = null;
+      }
+    });
+
+    res.json(aspectsByEntry);
+
+  } catch (error) {
+    console.error('Error fetching aspects for a batch of entries:', error);
+    return checkErrorAndSendResponse(res, error, 'An error occurred while fetching aspects for the batch.');
   }
 });
 
@@ -796,6 +880,137 @@ app.get('/api/v1/lookup-entry-links', async (req, res) => {
  * Query params:
  *   projectId (optional) - overrides GOOGLE_CLOUD_PROJECT_ID
  */
+// ---------------------------------------------------------------------------
+// Performance helpers (Data Products route)
+// ---------------------------------------------------------------------------
+
+/** Admin-configured project ids from configData.json (de-duplicated). */
+async function readConfiguredProjectIds() {
+  try {
+    const raw = await fs.readFile(dataFilePath, 'utf8');
+    const cfg = raw ? JSON.parse(raw) : {};
+    if (Array.isArray(cfg.projects)) {
+      return [...new Set(cfg.projects.map((id) => String(id).trim()).filter(Boolean))];
+    }
+  } catch (err) {
+    console.error('Could not read configData.json:', err.message);
+  }
+  return [];
+}
+
+// Project id <-> number is immutable, so it is cached process-wide in a bounded
+// LRU with no TTL. Only identity is stored (never anything user-specific);
+// access is still enforced by the Dataplex calls made with the caller's token.
+const PROJECT_IDENTITY_MAX = 100000;
+const projectIdentityCache = new Map(); // key (id or number) -> { projectId, projectNumber, displayName }
+const projectIdentityInFlight = new Map();
+const isProjectNumber = (s) => /^\d+$/.test(String(s || ''));
+
+function rememberProjectIdentity(identity) {
+  if (!identity?.projectId || !identity?.projectNumber) return;
+  [identity.projectId, identity.projectNumber].forEach((k) => {
+    projectIdentityCache.delete(k); // refresh LRU position
+    projectIdentityCache.set(k, identity);
+  });
+  while (projectIdentityCache.size > PROJECT_IDENTITY_MAX) {
+    projectIdentityCache.delete(projectIdentityCache.keys().next().value);
+  }
+}
+
+function getCachedProjectIdentity(idOrNumber) {
+  return projectIdentityCache.get(String(idOrNumber)) || null;
+}
+
+/** Resolve a project id or number to its identity (cached, in-flight de-duplicated). */
+async function resolveProjectIdentity(idOrNumber, accessToken) {
+  const key = String(idOrNumber || '');
+  if (!key) return null;
+  const cached = getCachedProjectIdentity(key);
+  if (cached) return cached;
+  if (projectIdentityInFlight.has(key)) return projectIdentityInFlight.get(key);
+  const promise = (async () => {
+    const client = new ProjectsClient({ auth: getAuthClient(accessToken) });
+    const [project] = await client.getProject({ name: `projects/${key}` });
+    const identity = {
+      projectId: project?.projectId,
+      projectNumber: (project?.name || '').split('/')[1],
+      displayName: project?.displayName || project?.projectId,
+    };
+    rememberProjectIdentity(identity);
+    return identity.projectId ? identity : null;
+  })().finally(() => projectIdentityInFlight.delete(key));
+  projectIdentityInFlight.set(key, promise);
+  return promise;
+}
+
+/**
+ * Best-effort resolution of many projects within a time budget. Never throws;
+ * projects the caller cannot read (or that take too long) are simply skipped.
+ */
+async function resolveProjectIdentitiesWithBudget(keys, accessToken, { budgetMs = 1500, concurrency = 8 } = {}) {
+  const pending = [...new Set(keys.map(String).filter(Boolean))].filter((k) => !getCachedProjectIdentity(k));
+  if (pending.length) {
+    const queue = [...pending];
+    const worker = async () => {
+      while (queue.length) {
+        const k = queue.shift();
+        await resolveProjectIdentity(k, accessToken).catch(() => null);
+      }
+    };
+    const workers = Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+    await Promise.race([workers, new Promise((r) => setTimeout(r, budgetMs))]);
+  }
+  const out = new Map();
+  keys.forEach((k) => {
+    const id = getCachedProjectIdentity(k);
+    if (id) out.set(String(k), id);
+  });
+  return out;
+}
+
+// Short-TTL per-user response cache with in-flight de-duplication, so rapid
+// revisits / double mounts share one upstream call. Keyed by the verified user
+// email (googleAuth middleware) or, if auth is disabled, a hash of the token.
+const userResponseCache = new Map(); // key -> { expiresAt, value }
+const userResponseInFlight = new Map();
+const USER_RESPONSE_CACHE_MAX = 2000;
+
+function userCacheIdentity(req) {
+  if (req.user?.email) return `u:${req.user.email}`;
+  const token = req.headers.authorization?.split(' ')[1] || '';
+  return `t:${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}`;
+}
+
+async function cachedPerUser(req, namespace, ttlMs, producer) {
+  const key = `${namespace}|${userCacheIdentity(req)}`;
+  const hit = userResponseCache.get(key);
+  if (hit && hit.expiresAt > Date.now() && req.query?.fresh !== '1') return hit.value;
+  if (userResponseInFlight.has(key)) return userResponseInFlight.get(key);
+  const promise = (async () => {
+    // Producers throw on failure; a producer that degrades gracefully (returns
+    // a partial result) calls skipCache() so the partial result is not reused.
+    let cacheable = true;
+    const value = await producer(() => { cacheable = false; });
+    if (!cacheable) return value;
+    userResponseCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+    while (userResponseCache.size > USER_RESPONSE_CACHE_MAX) {
+      userResponseCache.delete(userResponseCache.keys().next().value);
+    }
+    return value;
+  })().finally(() => userResponseInFlight.delete(key));
+  userResponseInFlight.set(key, promise);
+  return promise;
+}
+
+const DATA_PRODUCTS_CACHE_TTL_MS = 60 * 1000;
+const GET_PROJECTS_CACHE_TTL_MS = 10 * 60 * 1000;
+
+/** Split `projects/{p}/locations/{l}/dataProducts/{id}` into parts. */
+function parseDataProductName(name) {
+  const m = String(name || '').match(/^projects\/([^/]+)\/locations\/([^/]+)\/dataProducts\/([^/]+)$/);
+  return m ? { project: m[1], location: m[2], dataProductId: m[3] } : null;
+}
+
 app.get('/api/v1/data-products', async (req, res) => {
   try {
     const accessToken = req.headers.authorization?.split(' ')[1];
@@ -808,16 +1023,7 @@ app.get('/api/v1/data-products', async (req, res) => {
     //
     // De-duplicated: a project repeated here was previously fetched twice and
     // both results concatenated, listing its products twice.
-    let projectIds = [];
-    try {
-      const raw = await fs.readFile(dataFilePath, 'utf8');
-      const cfg = raw ? JSON.parse(raw) : {};
-      if (Array.isArray(cfg.projects)) {
-        projectIds = [...new Set(cfg.projects.map(id => String(id).trim()).filter(Boolean))];
-      }
-    } catch (err) {
-      console.error('Could not read configData.json for data-products:', err.message);
-    }
+    let projectIds = await readConfiguredProjectIds();
 
     // No configured projects means "no restriction". Today that still resolves to
     // the deployment's own project; widening it to every project the caller can
@@ -830,27 +1036,137 @@ app.get('/api/v1/data-products', async (req, res) => {
       return res.status(500).json({ message: 'Server Configuration Error: GOOGLE_CLOUD_PROJECT_ID must be set in the .env file.' });
     }
 
-    const bearerToken = await getRequestAccessToken(accessToken);
+    const payload = await cachedPerUser(req, `data-products:${projectIds.join(',')}`, DATA_PRODUCTS_CACHE_TTL_MS, async (skipCache) => {
+      const bearerToken = await getRequestAccessToken(accessToken);
 
-    // Fetch data products for each project in parallel and merge results.
-    const results = await Promise.all(
-      projectIds.map(pid =>
-        axios.get(`https://dataplex.googleapis.com/v1/projects/${pid}/locations/-/dataProducts`, {
-          headers: { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' },
-        })
-        .then(r => r.data.dataProducts || [])
-        .catch(err => {
-          console.warn(`Error fetching data products for project ${pid}:`, err?.response?.data || err.message);
-          return [];
-        })
-      )
-    );
+      // Fetch data products for each project in parallel, and resolve each
+      // project's id <-> number alongside (cached, so usually free). Every
+      // product is tagged with both so the client can de-duplicate against the
+      // catalog search WITHOUT the org-wide /get-projects list.
+      const results = await Promise.all(
+        projectIds.map(async (pid) => {
+          const [products, identity] = await Promise.all([
+            axios.get(`https://dataplex.googleapis.com/v1/projects/${pid}/locations/-/dataProducts`, {
+              headers: { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' },
+            })
+              .then((r) => r.data.dataProducts || [])
+              .catch((err) => {
+                console.warn(`Error fetching data products for project ${pid}:`, err?.response?.data || err.message);
+                skipCache(); // never cache a partial/empty list caused by an error
+                return [];
+              }),
+            resolveProjectIdentity(pid, accessToken).catch((err) => {
+              console.warn(`Could not resolve project identity for ${pid}:`, err?.message);
+              return null;
+            }),
+          ]);
 
-    res.json({ dataProducts: results.flat() });
+          return products.map((p) => {
+            const segment = (p?.name || '').split('/')[1] || '';
+            let projectNumber = identity?.projectNumber || (isProjectNumber(segment) ? segment : null);
+            let projectId = identity?.projectId || (!isProjectNumber(pid) ? pid : (!isProjectNumber(segment) ? segment : null));
+            // The request id + response number is itself a free mapping.
+            if (projectId && projectNumber) rememberProjectIdentity({ projectId, projectNumber, displayName: identity?.displayName || projectId });
+            return { ...p, projectId, projectNumber };
+          });
+        })
+      );
+
+      const dataProducts = results.flat();
+      const projects = new Map();
+      dataProducts.forEach((p) => {
+        if (p.projectId && p.projectNumber) {
+          const cached = getCachedProjectIdentity(p.projectId);
+          projects.set(p.projectId, { projectId: p.projectId, projectNumber: p.projectNumber, displayName: cached?.displayName || p.projectId });
+        }
+      });
+      return { dataProducts, projects: [...projects.values()] };
+    });
+
+    res.json(payload);
   } catch (error) {
     console.error('Error listing data products', error?.response?.data || error);
     const err = error?.response?.data?.error || error;
     return checkErrorAndSendResponse(res, err, 'An error occurred while listing data products.');
+  }
+});
+
+/**
+ * GET /api/v1/data-products/search
+ * Org-wide catalog search for data products, scoped server-side to the
+ * admin-configured projects (configData.json) when set. Returns normalized
+ * items tagged with projectNumber and (best-effort) projectId so the client can
+ * merge them with /data-products without the org-wide project list.
+ */
+app.get('/api/v1/data-products/search', async (req, res) => {
+  try {
+    const accessToken = req.headers.authorization?.split(' ')[1];
+    const searchProject = process.env.GOOGLE_CLOUD_PROJECT_ID;
+    if (!searchProject) {
+      return res.status(500).json({ message: 'Server Configuration Error: GOOGLE_CLOUD_PROJECT_ID must be set in the .env file.' });
+    }
+    const configuredProjectIds = await readConfiguredProjectIds();
+    let query = '(type=DATA_PRODUCT)';
+    if (configuredProjectIds.length > 0) {
+      query += ` (projectid=(${configuredProjectIds.join('|')}))`;
+    }
+
+    const payload = await cachedPerUser(req, `data-products-search:${query}`, DATA_PRODUCTS_CACHE_TTL_MS, async () => {
+      const bearerToken = await getRequestAccessToken(accessToken);
+      const url = `https://dataplex.googleapis.com/v1/projects/${searchProject}/locations/global:searchEntries`;
+      const results = [];
+      let pageToken;
+      let pages = 0;
+      do {
+        const body = { query, orderBy: 'relevance', pageSize: 1000 };
+        if (pageToken) body.pageToken = pageToken;
+        const response = await axios.post(url, body, {
+          headers: { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' },
+        });
+        (response.data?.results || []).forEach((r) => results.push(r));
+        pageToken = response.data?.nextPageToken;
+        pages += 1;
+      } while (pageToken && pages < 5);
+
+      const items = results
+        .map((r) => {
+          const entry = r?.dataplexEntry || {};
+          const source = entry.entrySource || {};
+          const resource = source.resource || '';
+          const segment = (resource.match(/^projects\/([^/]+)\//) || [])[1] || '';
+          if (!resource || !segment) return null;
+          return {
+            resource,
+            projectSegment: segment,
+            displayName: source.displayName ?? null,
+            description: source.description ?? null,
+            createTime: entry.createTime ?? null,
+            updateTime: entry.updateTime ?? null,
+            labels: source.labels ?? null,
+          };
+        })
+        .filter(Boolean);
+
+      // Best-effort id<->number for display; never blocks for long.
+      const identities = await resolveProjectIdentitiesWithBudget(items.map((i) => i.projectSegment), accessToken);
+      return {
+        items: items.map(({ projectSegment, ...rest }) => {
+          const identity = identities.get(projectSegment);
+          return {
+            ...rest,
+            projectNumber: identity?.projectNumber || (isProjectNumber(projectSegment) ? projectSegment : null),
+            projectId: identity?.projectId || (!isProjectNumber(projectSegment) ? projectSegment : null),
+          };
+        }),
+        truncated: Boolean(pageToken),
+      };
+    });
+
+    res.json(payload);
+  } catch (error) {
+    console.error('Error searching data products', error?.response?.data || error);
+    const err = error?.response?.data?.error || error;
+    return checkErrorAndSendResponse(res, err, 'An error occurred while searching data products.');
   }
 });
 
@@ -866,8 +1182,27 @@ app.get('/api/v1/data-products', async (req, res) => {
  */
 app.get('/api/v1/data-product-details', async (req, res) => {
   try {
-    const { project, location, entry } = req.query;
+    let { project, location, entry } = req.query;
+    const { dataProduct } = req.query;
     const accessToken = req.headers.authorization?.split(' ')[1];
+
+    // Preferred form: ?dataProduct=projects/{id|number}/locations/{l}/dataProducts/{id}.
+    // The entry name needs the project NUMBER; it is resolved here (cached)
+    // so the client no longer needs the org-wide project list to build it.
+    if (dataProduct) {
+      const parsed = parseDataProductName(dataProduct);
+      if (!parsed) {
+        return res.status(400).json({ message: 'Bad Request: "dataProduct" must be projects/{p}/locations/{l}/dataProducts/{id}.' });
+      }
+      let projectNumber = isProjectNumber(parsed.project) ? parsed.project : null;
+      if (!projectNumber) {
+        const identity = await resolveProjectIdentity(parsed.project, accessToken).catch(() => null);
+        projectNumber = identity?.projectNumber || parsed.project;
+      }
+      project = parsed.project;
+      location = parsed.location;
+      entry = `projects/${project}/locations/${location}/entryGroups/@dataplex/entries/projects/${projectNumber}/locations/${location}/dataProducts/${parsed.dataProductId}`;
+    }
 
     if (!project || !location || !entry) {
       return res.status(400).json({ message: 'Bad Request: "project", "location" and "entry" query params are required.' });
@@ -907,8 +1242,19 @@ app.get('/api/v1/data-product-assets', async (req, res) => {
       return res.status(400).json({ message: 'Bad Request: A "dataProduct" query param is required.' });
     }
 
+    const parsed = parseDataProductName(dataProduct);
+    if (!parsed) {
+      return res.status(400).json({ message: 'Bad Request: "dataProduct" must be projects/{p}/locations/{l}/dataProducts/{id}.' });
+    }
+    // Prefer the project id form (what the client used to swap in from the
+    // project list); fall back to whatever was sent if it cannot be resolved.
+    let project = parsed.project;
+    if (isProjectNumber(project)) {
+      const identity = await resolveProjectIdentity(project, accessToken).catch(() => null);
+      project = identity?.projectId || project;
+    }
     const bearerToken = await getRequestAccessToken(accessToken);
-    const url = `https://dataplex.googleapis.com/v1/${dataProduct}/dataAssets`;
+    const url = `https://dataplex.googleapis.com/v1/projects/${project}/locations/${parsed.location}/dataProducts/${parsed.dataProductId}/dataAssets`;
 
     const response = await axios.get(url, {
       headers: { Authorization: `Bearer ${bearerToken}`, 'Content-Type': 'application/json' },
@@ -1628,6 +1974,305 @@ app.post('/api/v1/lineage-column-level', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Data Lineage REST (Knowledge Catalog) proxy routes
+//
+// Thin pass-through routes used by the "Data Lineage" tab. They call the
+// Data Lineage REST API (https://datalineage.googleapis.com/v1) directly with
+// axios instead of the gRPC client library, authenticating with either the
+// caller's forwarded OAuth token or the runtime service account
+// (see getRequestAccessToken).
+// ---------------------------------------------------------------------------
+const DATALINEAGE_BASE = 'https://datalineage.googleapis.com/v1';
+const BIGQUERY_REST_BASE = 'https://bigquery.googleapis.com/bigquery/v2';
+// projects/{p}/locations/{l}[/{collection}/{id}...]
+const LINEAGE_RESOURCE_NAME_RE = /^projects\/[^/\s]+\/locations\/[^/\s]+(\/[A-Za-z]+\/[^/\s]+)*$/;
+const LINEAGE_PARENT_RE = /^projects\/[^/\s]+\/locations\/[^/\s]+$/;
+const SAFE_ID_RE = /^[\w.:-]+$/;
+
+async function lineageRest(req, method, url, { data, params } = {}) {
+  const token = await getRequestAccessToken(req.headers.authorization?.split(' ')[1]);
+  const response = await axios({
+    method,
+    url,
+    data,
+    params,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  return response.data;
+}
+
+const LOOKER_LOCATIONS_CACHE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Best-effort discovery of the locations that hold Looker entries (and thus
+ * Looker lineage, which is written in the Looker instance's region). Scoped to
+ * the admin-configured projects when set; cached per user. Never throws.
+ * Disable with DATA_LINEAGE_DISCOVER_LOOKER_LOCATIONS=false.
+ */
+async function discoverLookerLineageLocations(req) {
+  if (process.env.DATA_LINEAGE_DISCOVER_LOOKER_LOCATIONS === 'false') return [];
+  const searchProject = process.env.GOOGLE_CLOUD_PROJECT_ID;
+  if (!searchProject) return [];
+  try {
+    const projectIds = await readConfiguredProjectIds();
+    let query = 'system=looker';
+    if (projectIds.length > 0) query += ` (projectid=(${projectIds.join('|')}))`;
+    return await cachedPerUser(req, `lineage-looker-locations:${query}`, LOOKER_LOCATIONS_CACHE_TTL_MS, async () => {
+      const token = await getRequestAccessToken(req.headers.authorization?.split(' ')[1]);
+      const url = `https://dataplex.googleapis.com/v1/projects/${searchProject}/locations/global:searchEntries`;
+      const found = new Set();
+      let pageToken;
+      let pages = 0;
+      do {
+        const body = { query, pageSize: 500 };
+        if (pageToken) body.pageToken = pageToken;
+        const { data } = await axios.post(url, body, {
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
+        (data?.results || []).forEach((r) => {
+          const loc = locationFromResourceName(r?.dataplexEntry?.name);
+          if (loc) found.add(loc);
+        });
+        pageToken = data?.nextPageToken;
+        pages += 1;
+      } while (pageToken && pages < 3);
+      return [...found];
+    });
+  } catch (error) {
+    console.warn(
+      'Looker lineage location discovery failed; continuing without it:',
+      error?.response?.data?.error?.message || error?.message,
+    );
+    return [];
+  }
+}
+
+// Axios errors carry HTTP statuses (not gRPC codes), so they need their own mapper.
+function sendGoogleRestError(res, error, message) {
+  const status = error?.response?.status || 500;
+  const googleError = error?.response?.data?.error
+    || (Array.isArray(error?.response?.data) ? error.response.data[0]?.error : undefined);
+  console.error(message, googleError || error?.message);
+  return res.status(status).json({
+    error: message,
+    status: googleError?.status,
+    details: googleError?.message || error?.message,
+  });
+}
+
+/**
+ * POST /api/v1/data-lineage/search-lineage
+ * Wraps projects.locations.searchLineageStreaming. The REST transport returns
+ * server-streamed messages as a JSON array; they are flattened into a single
+ * { links, unreachable, truncated } response.
+ */
+app.post('/api/v1/data-lineage/search-lineage', async (req, res) => {
+  const { parent, locations, rootCriteria, direction, filters, limits } = req.body || {};
+  if (!parent || !LINEAGE_PARENT_RE.test(parent)) {
+    return res.status(400).json({ error: 'Bad Request: a valid "parent" (projects/{p}/locations/{l}) is required.' });
+  }
+  if (!rootCriteria?.entities?.entities?.length) {
+    return res.status(400).json({ error: 'Bad Request: "rootCriteria.entities.entities" is required.' });
+  }
+  if (!['UPSTREAM', 'DOWNSTREAM'].includes(direction)) {
+    return res.status(400).json({ error: 'Bad Request: "direction" must be UPSTREAM or DOWNSTREAM.' });
+  }
+  try {
+    const location = parent.split('/')[3];
+    // Cross-location lineage (e.g. BigQuery "us" -> Looker "us-central1") is only
+    // returned for locations listed here, so add configured + discovered ones.
+    const body = {
+      locations: resolveLineageLocations({
+        parentLocation: location,
+        requested: Array.isArray(locations) ? locations : [],
+        configured: parseLocationList(process.env.DATA_LINEAGE_EXTRA_LOCATIONS),
+        discovered: await discoverLookerLineageLocations(req),
+      }),
+      rootCriteria,
+      direction,
+    };
+    if (filters && Object.keys(filters).length) body.filters = filters;
+    if (limits && Object.keys(limits).length) body.limits = limits;
+
+    const data = await lineageRest(req, 'post', `${DATALINEAGE_BASE}/${parent}:searchLineageStreaming`, { data: body });
+    const chunks = Array.isArray(data) ? data : [data];
+    const links = [];
+    const unreachable = new Set();
+    chunks.forEach((chunk) => {
+      (chunk?.links || []).forEach((l) => links.push(l));
+      (chunk?.unreachable || []).forEach((u) => unreachable.add(u));
+    });
+    const maxResults = limits?.maxResults || 1000;
+    res.json({
+      links,
+      unreachable: [...unreachable],
+      truncated: links.length >= maxResults,
+      searchedLocations: body.locations,
+    });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while searching data lineage.');
+  }
+});
+
+/**
+ * POST /api/v1/data-lineage/search-links
+ * Wraps projects.locations.searchLinks (single hop) and drains pagination.
+ */
+app.post('/api/v1/data-lineage/search-links', async (req, res) => {
+  const { parent, source, target, pageSize = 100, maxPages = 10 } = req.body || {};
+  if (!parent || !LINEAGE_PARENT_RE.test(parent)) {
+    return res.status(400).json({ error: 'Bad Request: a valid "parent" is required.' });
+  }
+  if (!source?.fullyQualifiedName && !target?.fullyQualifiedName) {
+    return res.status(400).json({ error: 'Bad Request: "source" or "target" entity reference is required.' });
+  }
+  try {
+    const links = [];
+    let pageToken;
+    let pages = 0;
+    do {
+      const body = { pageSize: Math.min(Number(pageSize) || 100, 100) };
+      if (source?.fullyQualifiedName) body.source = source;
+      else body.target = target;
+      if (pageToken) body.pageToken = pageToken;
+      const data = await lineageRest(req, 'post', `${DATALINEAGE_BASE}/${parent}:searchLinks`, { data: body });
+      (data?.links || []).forEach((l) => links.push(l));
+      pageToken = data?.nextPageToken;
+      pages += 1;
+    } while (pageToken && pages < Math.min(Number(maxPages) || 10, 50));
+    res.json({ links, truncated: Boolean(pageToken) });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while searching lineage links.');
+  }
+});
+
+/**
+ * POST /api/v1/data-lineage/link-processes
+ * Wraps projects.locations.batchSearchLinkProcesses; chunks links by 100.
+ */
+app.post('/api/v1/data-lineage/link-processes', async (req, res) => {
+  const { parent, links } = req.body || {};
+  if (!parent || !LINEAGE_PARENT_RE.test(parent)) {
+    return res.status(400).json({ error: 'Bad Request: a valid "parent" is required.' });
+  }
+  if (!Array.isArray(links) || links.length === 0) {
+    return res.json({ processLinks: [] });
+  }
+  try {
+    const processLinks = [];
+    for (let i = 0; i < links.length; i += 100) {
+      const chunk = links.slice(i, i + 100);
+      let pageToken;
+      let pages = 0;
+      do {
+        const body = { links: chunk, pageSize: 100 };
+        if (pageToken) body.pageToken = pageToken;
+        const data = await lineageRest(req, 'post', `${DATALINEAGE_BASE}/${parent}:batchSearchLinkProcesses`, { data: body });
+        (data?.processLinks || []).forEach((p) => processLinks.push(p));
+        pageToken = data?.nextPageToken;
+        pages += 1;
+      } while (pageToken && pages < 10);
+    }
+    res.json({ processLinks });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching lineage processes.');
+  }
+});
+
+/** GET /api/v1/data-lineage/process?name=projects/.../processes/... */
+app.get('/api/v1/data-lineage/process', async (req, res) => {
+  const { name } = req.query;
+  if (!name || !LINEAGE_RESOURCE_NAME_RE.test(name) || !name.includes('/processes/')) {
+    return res.status(400).json({ error: 'Bad Request: a valid process "name" is required.' });
+  }
+  try {
+    const data = await lineageRest(req, 'get', `${DATALINEAGE_BASE}/${name}`);
+    res.json(data);
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching the lineage process.');
+  }
+});
+
+/** GET /api/v1/data-lineage/runs?process=...&pageToken=&pageSize= */
+app.get('/api/v1/data-lineage/runs', async (req, res) => {
+  const { process, pageToken, pageSize = 25 } = req.query;
+  if (!process || !LINEAGE_RESOURCE_NAME_RE.test(process) || !process.includes('/processes/')) {
+    return res.status(400).json({ error: 'Bad Request: a valid "process" is required.' });
+  }
+  try {
+    const params = { pageSize: Math.min(Number(pageSize) || 25, 100) };
+    if (pageToken) params.pageToken = pageToken;
+    const data = await lineageRest(req, 'get', `${DATALINEAGE_BASE}/${process}/runs`, { params });
+    res.json({ runs: data?.runs || [], nextPageToken: data?.nextPageToken });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching lineage runs.');
+  }
+});
+
+/** GET /api/v1/data-lineage/lineage-events?run=...&pageToken= */
+app.get('/api/v1/data-lineage/lineage-events', async (req, res) => {
+  const { run, pageToken, pageSize = 50 } = req.query;
+  if (!run || !LINEAGE_RESOURCE_NAME_RE.test(run) || !run.includes('/runs/')) {
+    return res.status(400).json({ error: 'Bad Request: a valid "run" is required.' });
+  }
+  try {
+    const params = { pageSize: Math.min(Number(pageSize) || 50, 100) };
+    if (pageToken) params.pageToken = pageToken;
+    const data = await lineageRest(req, 'get', `${DATALINEAGE_BASE}/${run}/lineageEvents`, { params });
+    res.json({ lineageEvents: data?.lineageEvents || [], nextPageToken: data?.nextPageToken });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching lineage events.');
+  }
+});
+
+/**
+ * GET /api/v1/data-lineage/bigquery-job?projectId=&jobId=&location=
+ * Fetches a BigQuery job (jobs.get) and returns a trimmed summary used by the
+ * process "Query runs" panel (SQL text + statistics).
+ */
+app.get('/api/v1/data-lineage/bigquery-job', async (req, res) => {
+  const { projectId, jobId, location } = req.query;
+  if (!projectId || !jobId || !SAFE_ID_RE.test(projectId) || !SAFE_ID_RE.test(jobId) || (location && !SAFE_ID_RE.test(location))) {
+    return res.status(400).json({ error: 'Bad Request: valid "projectId" and "jobId" are required.' });
+  }
+  try {
+    const params = location ? { location } : undefined;
+    const job = await lineageRest(
+      req, 'get',
+      `${BIGQUERY_REST_BASE}/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(jobId)}`,
+      { params }
+    );
+    const stats = job?.statistics || {};
+    const query = job?.configuration?.query || {};
+    res.json({
+      id: job?.id,
+      jobId: job?.jobReference?.jobId,
+      projectId: job?.jobReference?.projectId,
+      location: job?.jobReference?.location,
+      userEmail: job?.user_email,
+      state: job?.status?.state,
+      errorResult: job?.status?.errorResult,
+      query: query.query,
+      statementType: stats?.query?.statementType,
+      destinationTable: query.destinationTable,
+      referencedTables: stats?.query?.referencedTables || [],
+      creationTime: stats.creationTime,
+      startTime: stats.startTime,
+      endTime: stats.endTime,
+      totalBytesProcessed: stats.totalBytesProcessed || stats?.query?.totalBytesProcessed,
+      totalSlotMs: stats.totalSlotMs || stats?.query?.totalSlotMs,
+      cacheHit: stats?.query?.cacheHit,
+      finalExecutionDurationMs: stats.finalExecutionDurationMs,
+    });
+  } catch (error) {
+    return sendGoogleRestError(res, error, 'An error occurred while fetching the BigQuery job.');
+  }
+});
+
 app.get('/api/v1/projects', async (req, res) => {
   try {
     console.log('Listing all accessible GCP projects.');
@@ -1810,6 +2455,7 @@ app.get('/api/v1/app-configs', async (req, res) => {
             projectId: project.projectId || configuredProjectIds[i],
             projectNumber,
           });
+          rememberProjectIdentity({ projectId: project.projectId || configuredProjectIds[i], projectNumber, displayName: project.displayName });
         } else {
           // Flag rather than silently returning a short list: the client must
           // know not to filter on an incomplete set.
@@ -1983,14 +2629,24 @@ app.get('/api/v1/get-projects', async (req, res) => {
     // HTTP 200 with a partial or empty array is indistinguishable from "this org
     // has no projects", and the client uses this list to decide what to show.
     // A failure must surface as a failure.
-    const [ projectList, currentProject ] = await Promise.all([
-      resourceManagerClientv1.searchProjects({ pageSize: 1000 }),
-      resourceManagerClientv1.getProject({ name: `projects/${projectId}` }),
-    ]);
-    const rest = projectList[0] ? projectList[0].filter(pr => pr.projectId !== projectId) : [];
-    const projects = currentProject && currentProject[0] ? [ currentProject[0], ...rest ] : rest;
+    //
+    // Cached per user for 10 minutes (with in-flight de-duplication): for large
+    // orgs this walk takes tens of seconds, and the result rarely changes.
+    // Failures are never cached. ?fresh=1 bypasses the cache.
+    const payload = await cachedPerUser(req, 'get-projects', GET_PROJECTS_CACHE_TTL_MS, async () => {
+      const [ projectList, currentProject ] = await Promise.all([
+        resourceManagerClientv1.searchProjects({ pageSize: 1000 }),
+        resourceManagerClientv1.getProject({ name: `projects/${projectId}` }),
+      ]);
+      const rest = projectList[0] ? projectList[0].filter(pr => pr.projectId !== projectId) : [];
+      const projects = currentProject && currentProject[0] ? [ currentProject[0], ...rest ] : rest;
+      const mapped = projects.map(({ projectId, name, displayName }) => ({ projectId, name, displayName }));
+      // Seed the identity cache from the full list for free.
+      mapped.forEach((p) => rememberProjectIdentity({ projectId: p.projectId, projectNumber: (p.name || '').split('/')[1], displayName: p.displayName }));
+      return mapped;
+    });
 
-    res.json(projects.map(({ projectId, name, displayName }) => ({ projectId, name, displayName })));
+    res.json(payload);
 
   } catch (error) {
     console.error('Error listing projects:', error);
@@ -2532,9 +3188,11 @@ app.get('/', (req, res) => {
     res.redirect('/home'); // Redirects to the /home route
 });
 
-// For any other routes, serve the React index.html
+// For any other routes, serve the React index.html - never cached, so a reload
+// after a redeploy always picks up the new build's asset URLs.
 app.get('/*\w', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  setNoStoreHeaders(res);
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'), { cacheControl: false, lastModified: false });
 });
 
 // Start the server

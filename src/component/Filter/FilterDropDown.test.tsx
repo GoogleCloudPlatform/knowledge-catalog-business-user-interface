@@ -2170,13 +2170,31 @@ describe('FilterDropdown', () => {
         const productNames = [
           'Analytics Hub', 'BigQuery', 'Cloud BigTable', 'Cloud Pub/Sub',
           'Cloud Spanner', 'Cloud SQL', 'Dataform', 'Knowledge Catalog',
-          'Dataproc Metastore', 'Vertex AI', 'Others'
+          'Dataproc Metastore', 'Vertex AI', 'Looker', 'Others'
         ];
 
         productNames.forEach(name => {
           const icon = screen.getByAltText(name);
           expect(icon).toBeInTheDocument();
         });
+      }
+    });
+
+    it('selects the Looker product filter and reports it to onFilterChange', () => {
+      renderFilterDropdown();
+
+      const productsAccordion = screen.getByText('Products').closest('[role="button"]');
+      if (productsAccordion) {
+        fireEvent.click(productsAccordion);
+
+        const checkbox = screen.getByLabelText('Looker');
+        fireEvent.click(checkbox);
+
+        expect(mockOnFilterChange).toHaveBeenCalledWith(
+          expect.arrayContaining([
+            expect.objectContaining({ name: 'Looker', type: 'system' })
+          ])
+        );
       }
     });
 

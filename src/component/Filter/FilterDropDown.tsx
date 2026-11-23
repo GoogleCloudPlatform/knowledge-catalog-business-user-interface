@@ -27,6 +27,7 @@ import CloudStorageIcon from '../../assets/svg/CloudStorage.svg';
 import DataplexIcon from '../../assets/svg/Dataplex.svg';
 import DataprocIcon from '../../assets/svg/Dataproc.svg';
 import VertexIcon from '../../assets/svg/vertex.svg';
+import LookerIcon from '../../assets/svg/looker-icon.svg';
 import FilterAspectsIcon from '../../assets/svg/filter-aspects-icon.svg';
 import FilterAssetIcon from '../../assets/svg/filter-asset-icon.svg';
 import FilterProductIcon from '../../assets/svg/filter-product-icon.svg';
@@ -122,6 +123,8 @@ const getProductIcon = (productName: string) => {
       return DataprocIcon;
     case 'Vertex AI':
       return VertexIcon;
+    case 'Looker':
+      return LookerIcon;
     default:
       return OthersIcon;
   }
@@ -323,6 +326,10 @@ const FilterDropdown: React.FC<FilterProps> = ({ filters , onFilterChange, isGlo
       },
       {
         "name": "Vertex AI",
+        "type": "system"
+      },
+      {
+        "name": "Looker",
         "type": "system"
       },
       {

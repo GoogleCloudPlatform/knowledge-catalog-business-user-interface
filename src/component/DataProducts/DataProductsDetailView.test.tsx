@@ -8,7 +8,7 @@ import '@testing-library/jest-dom';
 import { BrowserRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
-import { fetchDataProductsList } from '../../features/dataProducts/dataProductsSlice';
+import { ensureDataProductsLoaded, fetchDataProductsList } from '../../features/dataProducts/dataProductsSlice';
 
 // Mock react-router-dom
 const mockNavigate = vi.fn();
@@ -36,6 +36,7 @@ vi.mock('../../features/dataProducts/dataProductsSlice', async (importOriginal) 
   return {
     ...actual,
     fetchDataProductsList: vi.fn(() => ({ type: 'dataProducts/fetchDataProductsList' })),
+    ensureDataProductsLoaded: vi.fn((args: any) => ({ type: 'dataProducts/ensureDataProductsLoaded', payload: args })),
     fetchDataProductsAssetsList: vi.fn(() => ({ type: 'dataProducts/fetchDataProductsAssetsList' })),
     setDataProductsDetailTabValue: vi.fn((val: number) => ({ type: 'dataProducts/setDataProductsDetailTabValue', payload: val })),
   };
@@ -885,10 +886,9 @@ describe('DataProductsDetailView', () => {
       expect(mockDispatch).toHaveBeenCalled();
     });
 
-    it('does NOT dispatch fetchDataProductsList while the project mapping is not ready, even if items are empty and status is idle', () => {
-      // Gated on isProjectMappingReady rather than isBootstrapping: a failed
-      // /get-projects satisfies isBootstrapping but leaves the id->number
-      // mapping empty, so the list fetch must wait for the mapping itself.
+    it('loads the list immediately, even while the project mapping is not ready', () => {
+      // The list no longer depends on /get-projects: the backend tags every
+      // product with its project id and number.
       const emptyState = {
         ...defaultStoreState,
         dataProducts: {
@@ -901,29 +901,13 @@ describe('DataProductsDetailView', () => {
       renderWithProviders(<DataProductsDetailView />, emptyState, {
         ...defaultBootstrapStatus,
         isProjectMappingReady: false,
+        isBootstrapping: true,
       });
 
-      expect(fetchDataProductsList).not.toHaveBeenCalled();
-    });
-
-    it('dispatches fetchDataProductsList once the project mapping is ready, items are empty and status is idle', () => {
-      const emptyState = {
-        ...defaultStoreState,
-        dataProducts: {
-          ...defaultStoreState.dataProducts,
-          dataProductsItems: [],
-          status: 'idle'
-        }
-      };
-
-      renderWithProviders(<DataProductsDetailView />, emptyState, {
-        ...defaultBootstrapStatus,
-        isProjectMappingReady: true,
-      });
-
-      expect(fetchDataProductsList).toHaveBeenCalledWith(
+      expect(ensureDataProductsLoaded).toHaveBeenCalledWith(
         expect.objectContaining({ id_token: mockAuthContext.user.token })
       );
+      expect(fetchDataProductsList).not.toHaveBeenCalled();
     });
   });
 

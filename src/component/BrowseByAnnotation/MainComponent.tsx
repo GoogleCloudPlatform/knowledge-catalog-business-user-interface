@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Typography,
@@ -12,7 +12,8 @@ import { ArrowBack, KeyboardArrowUp, KeyboardArrowDown, Close, FormatListBullete
 import IconButton from '@mui/material/IconButton';
 import { useNavigate } from 'react-router-dom';
 import type { AppDispatch, RootState } from '../../app/store';
-import { browseResourcesByAspects, setItems, setItemsStatus } from '../../features/resources/resourcesSlice';
+import { browseResourcesByAspects, fetchEntryAspects, getAspectName, setItems, setItemsStatus } from '../../features/resources/resourcesSlice';
+import { extractAspectFieldValue } from '../../utils/aspectValueUtils';
 import { useDispatch, useSelector } from 'react-redux';
 import { useAppBootstrapStatus } from '../../hooks/useAppBootstrap';
 import ResourcePreview from '../Common/ResourcePreview';
@@ -127,6 +128,84 @@ const MainComponent: React.FC<MainComponentProps> = ({
   // Access Redux cache
   const aspectBrowseCache = useSelector((state: RootState) => state.resources.aspectBrowseCache);
 
+  // "Aspect Value" column data (Linked Assets table/card view) - fetched
+  // separately from `resources` because searchEntries (which populates
+  // `resources`) never returns real aspect values, only a presence-filtered
+  // entry list. See fetchEntryAspects in resourcesSlice.ts.
+  //
+  // entryAspectsByName is a PERSISTENT cache of each entry's full raw aspects
+  // map, keyed by entry name - not reset when the selected sub-type changes,
+  // since an entry's aspects are a fact about the entry, not about which
+  // sub-type found it. Switching between sibling sub-types of the same aspect
+  // (often the same or overlapping entries) reads this cache instead of
+  // re-fetching, as long as those entries are already in it.
+  // Falls back to {} - this slice's state is rehydrated from localStorage
+  // (see app/store.ts), so a browser with state persisted before this field
+  // existed would otherwise read `undefined` here and crash the `in` checks
+  // below.
+  const entryAspectsByName = useSelector((state: RootState) => state.resources.entryAspectsByName) ?? {};
+  const appConfig = useSelector((state: any) => state.user?.userData?.appConfig);
+  const projectsList = useSelector((state: any) => state.projects?.items ?? []);
+
+  // "Latest ref" pattern: these let the fetch-triggering effect below READ
+  // the current cache/callback without being re-triggered just because they
+  // changed for a reason unrelated to the user's actual selection (e.g. the
+  // background per-sub-type count prefetch in BrowseByAnnotation.tsx writing
+  // to aspectBrowseCache/subTypesWithCache, or an unmemoized callback prop) -
+  // see the dependency array below for where this matters.
+  const aspectBrowseCacheRef = useRef(aspectBrowseCache);
+  aspectBrowseCacheRef.current = aspectBrowseCache;
+  const subTypesWithCacheRef = useRef(subTypesWithCache);
+  subTypesWithCacheRef.current = subTypesWithCache;
+  const onDeepLinkCacheBypassedRef = useRef(onDeepLinkCacheBypassed);
+  onDeepLinkCacheBypassedRef.current = onDeepLinkCacheBypassed;
+  const entryAspectsByNameRef = useRef(entryAspectsByName);
+  entryAspectsByNameRef.current = entryAspectsByName;
+
+  // Tracks entry names with a fetchEntryAspects call currently in flight, so
+  // rapidly switching sub-types doesn't dispatch duplicate fetches for the
+  // same still-missing entries.
+  const pendingEntryAspectsRef = useRef<Set<string>>(new Set());
+
+  // Stable identity (deps are only dispatch/id_token) so it can be called
+  // from - and listed as a dependency of - the effect below without causing
+  // it to re-fire just because entryAspectsByName changed.
+  const ensureEntryAspectsFetched = React.useCallback((entryNames: string[]) => {
+    const missing = entryNames.filter(
+      (n) => !(n in entryAspectsByNameRef.current) && !pendingEntryAspectsRef.current.has(n)
+    );
+    if (missing.length === 0) return;
+
+    missing.forEach((n) => pendingEntryAspectsRef.current.add(n));
+    dispatch(fetchEntryAspects({ entryNames: missing, id_token })).then(() => {
+      missing.forEach((n) => pendingEntryAspectsRef.current.delete(n));
+    });
+  }, [dispatch, id_token]);
+
+  // The aspect type id the currently selected card resolves to - same
+  // resolution browseResourcesByAspects itself uses to build its search
+  // query, exported from resourcesSlice.ts for reuse here.
+  const aspectTypeId = React.useMemo(() => {
+    if (!selectedCard?.title) return '';
+    return getAspectName(selectedCard.title, appConfig, projectsList).split('.').pop() ?? '';
+  }, [selectedCard?.title, appConfig, projectsList]);
+
+  // Derives the displayed value for the CURRENTLY selected sub-type/field
+  // from the persistent raw-aspects cache - purely a client-side computation,
+  // no network call, so switching sub-types is instant once their entries'
+  // aspects are already cached.
+  const aspectValuesByEntry = React.useMemo(() => {
+    if (!selectedSubItem?.title || !aspectTypeId) return {};
+    const map: Record<string, unknown> = {};
+    (resources as any[] || []).forEach((r) => {
+      const entryName = r?.dataplexEntry?.name;
+      if (entryName && entryName in entryAspectsByName) {
+        map[entryName] = extractAspectFieldValue(entryAspectsByName[entryName] as any, aspectTypeId, selectedSubItem.title);
+      }
+    });
+    return map;
+  }, [resources, entryAspectsByName, aspectTypeId, selectedSubItem?.title]);
+
   // Cache key generator helper
   const generateCacheKey = (aspectTitle: string, subTypeName: string) => {
     return `${aspectTitle}__${subTypeName}`;
@@ -140,12 +219,15 @@ const MainComponent: React.FC<MainComponentProps> = ({
     Boolean(selectedCard?.title && selectedSubItem?.title) &&
     accessDeniedItemId === generateCacheKey(selectedCard.title, selectedSubItem.title);
 
+  const selectedCardTitle = selectedCard?.title;
+  const selectedSubItemTitle = selectedSubItem?.title;
+
   // Fetch resources when sub-item is selected
   useEffect(() => {
-    if (selectedCard && selectedSubItem) {
+    if (selectedCardTitle && selectedSubItemTitle) {
       // Check if data is already cached
-      const cacheKey = generateCacheKey(selectedCard.title, selectedSubItem.title);
-      const cachedData = aspectBrowseCache[cacheKey];
+      const cacheKey = generateCacheKey(selectedCardTitle, selectedSubItemTitle);
+      const cachedData = aspectBrowseCacheRef.current[cacheKey];
       // A copy-link/reload landing on this exact sub-item should always hit the
       // API once, even if it was already cached by another aspect's background
       // prefetch — otherwise the deep link silently serves stale data.
@@ -158,11 +240,12 @@ const MainComponent: React.FC<MainComponentProps> = ({
         return;
       }
 
-      if (cachedData && subTypesWithCache[cacheKey] && !bypassCache) {
+      if (cachedData && subTypesWithCacheRef.current[cacheKey] && !bypassCache) {
         // Use cached data - set directly without API call
         dispatch(setItems(cachedData.data));
         dispatch(setItemsStatus('succeeded'));
         // Don't clear preview when using cache for better UX
+        ensureEntryAspectsFetched((cachedData.data || []).map((r: any) => r?.dataplexEntry?.name).filter(Boolean));
       } else if (!areProjectsReady) {
         // Wait for get-projects before firing browseResourcesByAspects — without
         // it the aspect path resolves incorrectly instead of erroring, so this
@@ -174,14 +257,32 @@ const MainComponent: React.FC<MainComponentProps> = ({
         dispatch({ type: 'resources/setItemsPreviousPageRequest', payload: null });
         dispatch({ type: 'resources/setItemsPageRequest', payload: null });
         dispatch({ type: 'resources/setItemsStoreData', payload: [] });
-        dispatch(browseResourcesByAspects({term : '', id_token: id_token, annotationName : selectedCard.title, subAnnotationName: selectedSubItem.title || null}));
+        dispatch(browseResourcesByAspects({term : '', id_token: id_token, annotationName : selectedCardTitle, subAnnotationName: selectedSubItemTitle || null}))
+          .unwrap()
+          .then((payload: any) => {
+            ensureEntryAspectsFetched((payload?.data ?? []).map((r: any) => r?.dataplexEntry?.name).filter(Boolean));
+          })
+          .catch(() => {
+            // Already surfaced via browseResourcesByAspects.rejected (failed status /
+            // access-denied panel) - nothing further to do for the aspect column.
+          });
         setIsPreviewOpen(false);
         if (bypassCache) {
-          onDeepLinkCacheBypassed?.();
+          onDeepLinkCacheBypassedRef.current?.();
         }
       }
     }
-  }, [selectedCard, selectedSubItem, dispatch, id_token, aspectBrowseCache, subTypesWithCache, accessDeniedItemId, deepLinkBypassCacheKey, onDeepLinkCacheBypassed, areProjectsReady]);
+    // Only the user's actual selection (and genuine readiness/permission
+    // changes) should re-trigger this fetch - NOT an unrelated re-render
+    // (e.g. toggling the sidebar, or a background prefetch writing to
+    // aspectBrowseCache/subTypesWithCache elsewhere). selectedCard/
+    // selectedSubItem are deliberately read as their stable `.title` strings
+    // above rather than depended on as objects: everything this effect needs
+    // from them is their title, and the objects themselves aren't guaranteed
+    // referentially stable across unrelated parent re-renders (e.g.
+    // `selectedItem` in BrowseByAnnotation.tsx is recomputed via `.find()` on
+    // every render).
+  }, [selectedCardTitle, selectedSubItemTitle, dispatch, id_token, accessDeniedItemId, deepLinkBypassCacheKey, areProjectsReady, ensureEntryAspectsFetched]);
 
   // Reset description expanded state when selected card changes
   useEffect(() => {
@@ -543,6 +644,17 @@ const MainComponent: React.FC<MainComponentProps> = ({
                 resourcesStatus={resourcesStatus}
                 isSidebarOpen={isSidebarOpen}
                 onSidebarToggle={onSidebarToggle}
+                aspectValueColumn={selectedSubItem?.title ? {
+                  label: selectedSubItem.title,
+                  // Derived client-side from the persistent raw-aspects cache
+                  // (see aspectValuesByEntry above) - always consistent with
+                  // the current selection, no race to guard against. A row
+                  // not yet in this map still correctly shows the loader
+                  // (SearchTableView/SearchEntriesCard key off presence).
+                  valuesByEntry: aspectValuesByEntry,
+                } : undefined}
+                aspectFieldType={selectedSubItem?.type}
+                aspectEnumValues={selectedSubItem?.enumValues}
               />
             )}
           </Box>

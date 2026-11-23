@@ -9,7 +9,8 @@ import { setGlobalAuthFunctions, setAuthNotificationShown } from '../services/au
 import { performSilentAuth } from '../services/silentAuthService';
 import { AUTH_CONFIG } from '../constants/auth';
 import { resetProjects } from '../features/projects/projectsSlice';
-import { resetSelectedDataProduct, resetDataProductsUIState } from '../features/dataProducts/dataProductsSlice';
+import { resetSelectedDataProduct, resetDataProductsUIState, clearDataProducts } from '../features/dataProducts/dataProductsSlice';
+import { clearDataProductsCache } from '../utils/dataProductsCache';
 import { clearGlossaries } from '../features/glossaries/glossariesSlice';
 import { resetBrowseUIState, clearAspectBrowseCache } from '../features/resources/resourcesSlice';
 import { useAppDispatch, useAppSelector } from '../app/store';
@@ -99,6 +100,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     dispatch(clearAspectBrowseCache());
     dispatch(resetDataProductsUIState());
     dispatch(resetSelectedDataProduct()); // Reset DP detail status so self-hydration fires on next deep-link login
+    // Drop the user's data products list (and invalidate in-flight fetches) so
+    // the next user in this tab never sees it, plus the persisted copy.
+    dispatch(clearDataProducts());
+    clearDataProductsCache();
     clearUserState(); // Clear user state from IndexedDB
     clearPersistedState(); // Clear persisted Redux state (search, resources, entry)
     showInfo('You have been signed out.', 3000);
